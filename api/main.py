@@ -3371,10 +3371,12 @@ def _freshness_loop() -> None:
 @app.on_event("startup")
 def _start_prewarm() -> None:
     import threading
-    # DISABLE_PREWARM=1 이면 무거운 백그라운드 예열(브리프·apt·풀·주변·문서) 끔 → 저사양/배포환경 OOM 방지.
-    #  끄더라도 캐시는 조회 시 on-demand로 Supabase api_cache에 적재되어 기능엔 지장 없음.
-    if os.environ.get("DISABLE_PREWARM", "0") in ("1", "true", "True"):
-        print("[prewarm] DISABLE_PREWARM=1 → 백그라운드 예열 비활성(freshness 감지는 유지)", flush=True)
+    # CLOUD_READER=1(클라우드 얇은 리더) = 로컬 워머가 Supabase에 채운 캐시만 읽는 인스턴스 → 무거운 예열/워밍 전부 끔.
+    _cloud = os.environ.get("CLOUD_READER", "0") in ("1", "true", "True")
+    # DISABLE_PREWARM=1 또는 CLOUD_READER=1 이면 무거운 백그라운드 예열(브리프·apt·풀·주변·문서) 끔 → OOM/크래시루프 방지.
+    #  끄더라도 캐시는 조회 시 on-demand로 Supabase api_cache에서 로딩되어 기능엔 지장 없음.
+    if _cloud or os.environ.get("DISABLE_PREWARM", "0") in ("1", "true", "True"):
+        print(f"[prewarm] 백그라운드 예열 비활성(CLOUD_READER={_cloud}) → on-demand Supabase 로딩, freshness 유지", flush=True)
     else:
         threading.Thread(target=_prewarm_loop, daemon=True).start()         # brief → DB
         threading.Thread(target=_prewarm_apt_loop, daemon=True).start()     # apt_info → DB (병렬)
@@ -3391,7 +3393,9 @@ def _start_prewarm() -> None:
     threading.Thread(target=_baedang_warm, daemon=True).start()  # 배당요구신청 건수 색인 미리 데움(다가구·근린주택)
     threading.Thread(target=_dagagu_warm, daemon=True).start()    # 다가구 우량 색인 미리 데움
     threading.Thread(target=_compete_warm, daemon=True).start()   # 경쟁분산 색인(전 유형) 미리 데움
-    threading.Thread(target=_landuse_warm, daemon=True).start()  # 원천 누락 용도지역 V-World 보완(순차, ~수분)
+    if not _cloud:
+        # V-World를 수분간 순차 호출 → 클라우드(얇은 리더)선 스킵(로컬 워머가 Supabase landuse_cache에 채움).
+        threading.Thread(target=_landuse_warm, daemon=True).start()  # 원천 누락 용도지역 V-World 보완(순차, ~수분)
     try:
         _kb_apply_token()   # Supabase 공유 토큰(api_cache kb:auth) 로드 — 시작 시 1회, 가벼움(브라우저 없음)
     except Exception:
