@@ -1123,7 +1123,7 @@ async function doSearch(){
   else{
     const rows=d.items.map((L,i)=>{
       const href="/static/auction.html?item_key="+encodeURIComponent(L.item_key);
-      const t=L.thumb_url?`<img class="thumb" src="${L.thumb_url}" onerror="this.outerHTML='<div class=ph>🏢</div>'">`:`<div class="ph">🏢</div>`;
+      const t=L.thumb_url?`<img class="thumb" loading="lazy" decoding="async" src="${L.thumb_url}" onerror="this.outerHTML='<div class=ph>🏢</div>'">`:`<div class="ph">🏢</div>`;
       const objno=(L.obj_no&&String(L.obj_no)!=="1")?`<div class="casesub">물번 ${L.obj_no}</div>`:"";
       const salePct=pct(L.sale_price,L.appraisal_price);
       // 낙찰 확정(매각·잔금납부·배당종결). '재매각'=과거 낙찰 무산 → 제외.
