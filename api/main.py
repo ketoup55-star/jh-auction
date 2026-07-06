@@ -1867,12 +1867,18 @@ def _enrich_list(items: list) -> None:
             return default
     # 캐시 읽기(brief/빌라시세/아파트시세/판정)를 '로컬 캐시만'(remote=False) 병렬로 → Supabase 왕복 0 → ~0.003초.
     #  로컬에 없는 시세는 프론트 fillEstimates가 async로 채움(예열된 것은 즉시 표시).
-    with _cf.ThreadPoolExecutor(max_workers=4) as ex:
+    # 숙박시설: 여관·생활형숙박시설 세부용도 표시용 brief를 Supabase에서 타깃 로딩(페이지당 소수라 저비용,
+    #  로컬 예열 꺼져있거나 클라우드(무예열)서도 목록에 세부용도가 뜨게 함). 이미 캐시된 건 miss 없어 스킵.
+    _sukbak_keys = [it.get("item_key") for it in items
+                    if "숙박" in (it.get("usage") or "") and it.get("item_key")]
+    with _cf.ThreadPoolExecutor(max_workers=5) as ex:
         f_brief = ex.submit(_safe, lambda: _load_briefs_from_db(keys, remote=False), None)
+        f_sukbak = ex.submit(_safe, lambda: _load_briefs_from_db(_sukbak_keys, remote=True) if _sukbak_keys else None, None)
         f_villa = ex.submit(_safe, lambda: auction_villa_ests(kjoin, compute=False), {})  # 빌라는 메모리캐시 없어 remote=True(keep-alive로 빠름·캐시도 채움)
         f_apt = ex.submit(_safe, lambda: auction_apt_ests(kjoin, compute=False, remote=False), {})
         f_grade = ex.submit(_safe, _grade_buckets, {})   # 캐시 즉시반환(워밍이 갱신)
         f_brief.result()
+        f_sukbak.result()
         villa = f_villa.result() or {}
         apt = f_apt.result() or {}
         grade_rev = {k: g for g, s in (f_grade.result() or {}).items() for k in s}
@@ -1885,6 +1891,9 @@ def _enrich_list(items: list) -> None:
         b = _brief_cache.get(k)
         if isinstance(b, dict) and b.get("available"):
             it["brief"] = b
+            # 숙박시설 → 건축물대장 세부용도(여관·생활형숙박시설 등)로 표시 정밀화. usage_name(필터·그룹)은 유지.
+            if b.get("usage_detail") and "숙박" in (it.get("usage") or ""):
+                it["usage_disp"] = b["usage_detail"]
         if (isinstance(b, dict) and b.get("violation")) or k in _VIOLATION_KEYS:
             it["violation"] = True               # 위반건축물(건축물대장 스탬프 — 전수스캔셋 또는 brief)
         # 다세대·도시형 4층↑ 승강기없음/미상 → 목록 칩(매수검토 사유 표시)
@@ -2098,6 +2107,14 @@ def auction_detail(item_key: str, user: dict = Depends(require_national_user)) -
         raise HTTPException(503, "DB 혼잡 — 잠시 후 다시 시도")
     if d is None:
         raise HTTPException(404, f"물건을 찾을 수 없습니다: {item_key}")
+    # 숙박시설 → 건축물대장 세부용도(여관·생활형숙박시설 등)를 상세 용도 표시에 반영(숙박만 brief 조회 — 다른 유형 지연 없음)
+    try:
+        if "숙박" in (d.get("usage") or ""):
+            _b = _get_brief(item_key)
+            if isinstance(_b, dict) and _b.get("usage_detail"):
+                d["usage_disp"] = _b["usage_detail"]
+    except Exception:
+        pass
     return d
 
 
@@ -2785,7 +2802,7 @@ def _compute_brief(item_key: str) -> dict:
                 b = kapt.brief(lawd, name)
                 if b and (b.get("build_year") or b.get("households")):
                     out = {"available": True, "unit_label": "세대", **b}
-        if not out.get("available") and re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택", usage):
+        if not out.get("available") and re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|숙박", usage):
             by = un = ul = ev = None
             used_api = used_doc = False
             # ① 건축물대장 API 우선(표제부 — 정확. 트래픽 증가됨). 결과는 DB 저장돼 1회만.
@@ -2821,18 +2838,21 @@ def _compute_brief(item_key: str) -> dict:
                     ev = doc.get("elevator")
             used_doc = bool(doc.get("build_year") or doc.get("units")
                             or doc.get("elevator") is not None or vio)
+            # 숙박 세부용도(여관·생활숙박 등): 전유부 문서 우선(그 호실 용도) → 표제부 API 기타용도 폴백.
+            _sub = doc.get("sukbak_sub") or (bi.get("sukbak_sub") if bi else None)
             # 단독주택(다가구 아닌 단독)인데 가구수 못 구하면 '단독'으로 표기(빈칸/오추출 방지)
             hh_disp = str(un) if un else None
             hh_label = ul or "세대"
             if not un and ("단독주택" in purpose or "단독주택" in usage) and "다가구" not in (purpose + usage):
                 hh_disp, hh_label = "단독", ""
-            if by or un or (ev is not None) or hh_disp or vio:
+            if by or un or (ev is not None) or hh_disp or vio or _sub:
                 out = {"available": True, "build_year": by,
                        "households": hh_disp,
                        "unit_label": hh_label,
                        "elevator": (("1" if ev else "0") if ev is not None else None),
                        "floors": (bi.get("floors") if bi else None),    # 지상 층수(다가구 3요건)
                        "purpose": (purpose or None),                     # 주용도(상가주택·위반 판별)
+                       "usage_detail": _sub,                             # 숙박 세부용도(여관·생활형숙박시설 등) → 목록/상세 표시
                        "violation": vio,                                  # 위반건축물(건축물대장 스탬프)
                        "source": ("api+doc" if (used_api and used_doc) else
                                   "api" if used_api else "doc")}
@@ -2958,6 +2978,16 @@ def _prewarm_briefs() -> None:
                 if len(items) < 200:
                     break
                 off += 200
+        # 숙박시설(상가 그룹) — 여관/생활형숙박시설 세부용도 표기용 brief(문서 우선=무쿼터, 없으면 표제부 API 1회)
+        off = 0
+        while True:
+            items = auction_db.list_auctions(limit=200, offset=off, group=["상가"], usages=["숙박시설"])
+            if not items:
+                break
+            keys += [it.get("item_key") for it in items if it.get("item_key")]
+            if len(items) < 200:
+                break
+            off += 200
         _load_briefs_from_db(keys)                 # ① DB에 이미 있으면 로딩(계산 생략)
         todo = [k for k in keys if k not in _brief_cache]
         for i in range(0, len(todo), 40):          # ② 고속 병렬 계산 → DB 저장

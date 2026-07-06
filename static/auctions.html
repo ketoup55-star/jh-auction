@@ -1127,7 +1127,7 @@ async function doSearch(){
       const isReauc=/재매각|재진행/.test(L.result||"") && L.sale_price;
       const baseAmt=hasWin?L.sale_price
                   :(isSold?'':(isReauc?L.sale_price:(L.min_price||'')));
-      let uCell=L.usage||"-";
+      let uCell=L.usage_disp||L.usage||"-";   // 숙박=건축물대장 세부용도(여관·생활형숙박시설) 우선
       if(L.group==="차량외"){ const s=splitVehicle(L.usage); if(s.brand) uCell=`<div>${s.model||"-"}</div><div class="kv">${s.brand}</div>`; }
       const dd=ddayOf(L.sell_date);
       const rr=splitResult(L.result||L.status||"-"); const rc=resColor(L.result);

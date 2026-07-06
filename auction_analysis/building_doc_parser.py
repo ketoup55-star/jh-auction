@@ -13,6 +13,30 @@ import re
 
 _DATE = r"(\d{4})[.\-]\s*\d{1,2}[.\-]\s*\d{1,2}"
 
+# 숙박시설 세부용도(건축물대장 주용도/기타용도/전유부 용도) → 목록·상세 표시 라벨. 우선순위 순(먼저 매칭이 이김).
+#  ⚠️'생활숙박'을 '숙박'보다 먼저 둬야 생숙이 '숙박시설'로 뭉개지지 않음. '여관' 등은 건축물대장 전유부 용도에 (여관)식으로 기재됨.
+_SUKBAK_SUB = [
+    (re.compile(r"생활\s*(형\s*)?숙박"), "생활형숙박시설"),
+    (re.compile(r"여인숙"), "여인숙"),
+    (re.compile(r"여관"), "여관"),
+    (re.compile(r"관광\s*호텔|호텔"), "호텔"),
+    (re.compile(r"모텔"), "모텔"),
+    (re.compile(r"콘도\s*(미니엄)?"), "콘도미니엄"),
+    (re.compile(r"펜션"), "펜션"),
+    (re.compile(r"민박"), "민박"),
+]
+
+
+def sukbak_subtype(*texts) -> "str | None":
+    """건축물대장 용도 텍스트(주용도·기타용도·전유부 용도)에서 숙박 세부유형 라벨 추출. 없으면 None(=일반 '숙박시설')."""
+    joined = " ".join(str(t) for t in texts if t)
+    if not joined:
+        return None
+    for pat, label in _SUKBAK_SUB:
+        if pat.search(joined):
+            return label
+    return None
+
 
 def _year(s: str):
     m = re.search(r"(19|20)\d{2}", s or "")
@@ -21,11 +45,13 @@ def _year(s: str):
 
 def parse_bldg_doc(text: str) -> dict:
     """건축물대장 PDF 텍스트 → {build_year, units, unit_label, elevator}. 빈 값은 None."""
-    out: dict = {"build_year": None, "units": None, "unit_label": None, "elevator": None, "violation": False}
+    out: dict = {"build_year": None, "units": None, "unit_label": None, "elevator": None,
+                 "violation": False, "sukbak_sub": None}
     if not text:
         return out
     t = re.sub(r"\s+", "", text)
     out["violation"] = "위반건축물" in t          # 건축물대장 갑 상단 '위반건축물' 스탬프(표제부 API엔 없는 정보)
+    out["sukbak_sub"] = sukbak_subtype(t)         # 전유부/표제부 용도의 숙박 세부유형(여관·생활숙박 등) — 무쿼터
 
     # 호수/가구수/세대수 (예: "1호/0가구/0세대")
     m = re.search(r"(\d+)호/(\d+)가구/(\d+)세대", t)
@@ -103,4 +129,5 @@ def merge_doc_brief(bldg: dict | None, appr: dict | None) -> dict:
         "elevator": bldg.get("elevator") if bldg.get("elevator") is not None
         else appr.get("elevator"),
         "violation": bool(bldg.get("violation")) or bool(appr.get("violation")),
+        "sukbak_sub": bldg.get("sukbak_sub") or appr.get("sukbak_sub"),   # 숙박 세부용도(여관·생활숙박 등)
     }

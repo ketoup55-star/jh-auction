@@ -91,6 +91,11 @@ class BuildingSource:
             units, label = ho, "호"
         else:
             units, label = 0, "세대"
+        # 숙박 세부용도(여관·생활숙박 등): 생숙은 주용도(mainPurpsCdNm)가 아니라 기타용도(etcPurps)에만 기재되는
+        #  경우가 많아, 전체 동(item)의 주용도+기타용도를 합쳐 스캔(가장 우선순위 높은 라벨).
+        from .building_doc_parser import sukbak_subtype
+        _alltext = " ".join(((i.findtext("mainPurpsCdNm") or "") + " " + (i.findtext("etcPurps") or ""))
+                            for i in items)
         out = {
             "build_year": used[:4] if len(used) >= 4 else "",
             "units": units,
@@ -98,6 +103,7 @@ class BuildingSource:
             "elevator": _num(g(it, "rideUseElvtCnt")) + _num(g(it, "emgenUseElvtCnt")),
             "purpose": g(it, "mainPurpsCdNm"),
             "floors": _num(g(it, "grndFlrCnt")),
+            "sukbak_sub": sukbak_subtype(_alltext),
         }
         self._cache[address] = out
         return out
