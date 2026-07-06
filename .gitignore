@@ -1,0 +1,38 @@
+# ===== 비밀키 (절대 커밋 금지) =====
+.env
+.env.*
+
+# ===== 로컬 SQLite 전부 + 부속 WAL/SHM (GitHub 100MB 초과·보안) — 클라우드는 Supabase =====
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+
+# ===== 로컬 JSON 캐시 (런타임 재생성, 수백 MB) =====
+*_cache.json
+cache_*.json
+brief_cache.json
+similar_cache.json
+geocode_cache.json
+landuse_cache.json
+cache_apt_info.json
+
+# ===== 파이썬 =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# ===== 로그·임시 =====
+*.log
+_server_*.log
+*.tmp
+
+# ===== 로컬 전용 실행 스크립트/디버그 =====
+run_server_*.bat
+_dbg_*.py
+_warmup.py

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>모의입찰목록 — JH옥션스쿨</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--line:#dfe3ea;--label:#eef2fb;--labeltx:#2c5db0;--text:#1c1c1a;--muted:#6b6a64;--primary:#1f4fa3;--danger:#c0392b;--hotred:#e8202a;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+  a{color:inherit;text-decoration:none;}
+  .sitehead{position:sticky;top:0;z-index:50;}
+  .top{background:var(--card);border-bottom:1px solid var(--line);}
+  .topin{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px;}
+  .brand{flex:1;text-align:center;font-size:24px;font-weight:700;letter-spacing:-.5px;color:var(--primary);}
+  .brand span{color:#3a7bd5;}
+  .util{display:flex;gap:12px;font-size:12px;color:var(--muted);align-items:center;}
+  .util a{color:var(--muted);cursor:pointer;}
+  .minicase{display:flex;align-items:center;gap:6px;}
+  .minicase .t{font-weight:600;color:var(--primary);font-size:13px;white-space:nowrap;}
+  .minicase .ty{color:var(--muted);font-size:13px;white-space:nowrap;}
+  .minicase select,.minicase input{height:30px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;}
+  .minicase input{width:150px;}
+  .minicase .csearch{height:30px;width:34px;border:1px solid var(--primary);background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;}
+  .minicase .csearch:hover{background:#163c80;}
+  .nav{background:var(--card);border-bottom:2px solid var(--primary);}
+  .navin{max-width:1180px;margin:0 auto;padding:0 16px;display:flex;gap:4px;flex-wrap:wrap;}
+  .nav a{padding:14px 18px;font-size:15px;font-weight:600;color:#333;}.nav a:hover,.nav a.on{color:var(--primary);}
+  .wrap{max-width:1180px;margin:18px auto;padding:0 16px;display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:start;}
+  .side{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .side .me{padding:14px;border-bottom:1px solid var(--line);}
+  .side .me .nm{font-size:16px;font-weight:700;}.side .me .em{font-size:12px;color:var(--muted);margin-top:2px;}
+  .side nav a{display:flex;justify-content:space-between;padding:12px 14px;font-size:13px;border-bottom:1px solid var(--line);}
+  .side nav a:last-child{border-bottom:none;}.side nav a:hover{background:#f7f9fc;}
+  .side nav a.on{background:var(--primary);color:#fff;font-weight:700;}
+  .main{min-width:0;}
+  .phead{display:flex;justify-content:space-between;align-items:center;margin:2px 2px 14px;}
+  .phead h1{font-size:22px;font-weight:700;margin:0;}.crumb{font-size:12px;color:var(--muted);}.crumb b{color:var(--primary);}
+  .ftbl{width:100%;border-collapse:collapse;font-size:13px;border:1px solid var(--line);background:var(--card);margin-bottom:12px;}
+  .ftbl th,.ftbl td{border:1px solid var(--line);padding:9px 10px;}
+  .ftbl th{background:var(--label);color:var(--labeltx);font-weight:600;width:96px;white-space:nowrap;text-align:center;}
+  .ftbl input{height:30px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;background:#fff;width:100%;}
+  .tot{font-size:13px;color:var(--muted);margin:4px 2px 10px;}.tot b{color:var(--hotred);font-size:15px;}
+  .gtbl{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .gtbl th{background:var(--label);color:var(--labeltx);font-size:12px;padding:10px 6px;border-bottom:1px solid var(--line);}
+  .gtbl td{padding:10px 8px;border-bottom:1px solid var(--line);font-size:12px;vertical-align:top;}
+  .num{text-align:right;font-variant-numeric:tabular-nums;}.cc{text-align:center;}.low{color:var(--hotred);font-weight:600;}
+  .mbamt{color:var(--primary);font-weight:700;font-size:13px;}
+  .ubadge{display:inline-block;font-size:11px;color:var(--labeltx);background:var(--label);border-radius:5px;padding:1px 7px;margin-top:3px;}
+  .rr{font-weight:700;}.rr.hi{color:var(--hotred);}.rr.lo{color:#1f7a3d;}
+  .del{color:var(--danger);border:none;background:none;cursor:pointer;font-size:12px;}
+  .notice{background:#fff7e6;border:1px solid #f0d9a8;border-radius:10px;padding:26px;color:#9a6b0b;font-size:13px;line-height:1.7;text-align:center;}
+  @media(max-width:900px){ .wrap{grid-template-columns:1fr;} }
+  /* 부동산DB '전국' 스티커 — 점멸 + hover 시 좌우 기울기(프리미엄 스티커와 동일 형식) */
+  @keyframes natlBlink{0%,100%{opacity:1}50%{opacity:.35}}
+  @keyframes natlWobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg)}55%{transform:rotate(9deg)}80%{transform:rotate(-4deg)}}
+  .natllink{position:relative;}
+  .natl-badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.02em;color:#fff;
+    background:linear-gradient(180deg,#3f7ce2,#1f4fa3);border:1px solid #1a4590;border-radius:5px;
+    padding:1px 7px;line-height:16px;white-space:nowrap;
+    animation:natlBlink 1.5s ease-in-out infinite;transform-origin:center;
+    position:absolute;top:3px;right:-15px;box-shadow:0 1px 5px rgba(20,60,120,.45);z-index:3;}
+  .natllink:hover>.natl-badge{animation:natlWobble .55s ease-in-out;}
+  @media(prefers-reduced-motion:reduce){.natl-badge{animation:none!important;}}
+</style>
+</head>
+<body>
+<div class="sitehead">
+  <div class="top"><div class="topin">
+    <div class="minicase">
+      <span class="t">사건검색</span>
+      <select id="caseYear"><option value="">전체</option></select>
+      <span class="ty">타경</span>
+      <input type="text" id="caseNoIn" placeholder="타경 번호" onkeydown="if(event.key===&#39;Enter&#39;)caseSearch()">
+      <button class="csearch" onclick="caseSearch()" aria-label="검색">&#128269;</button>
+    </div>
+    <a class="brand" href="/">JH<span>옥션스쿨</span></a>
+    <div class="util" id="util"><a href="/static/login.html">로그인</a></div>
+  </div></div>
+  <div class="nav"><div class="navin">
+    <a href="/static/auctions.html">경매검색</a><a href="/static/board.html?b=yejung">예정</a>
+    <a href="/static/gongmae.html">공매</a><a href="/static/board.html?b=video">강의</a>
+    <a href="/static/board.html?b=community">커뮤니티</a><a href="/static/board.html?b=data">경매자료실</a><a class="natllink" href="/static/kbdb.html">부동산DB<span class="natl-badge">전국</span></a>
+    <a href="/static/board.html?b=support">고객센터</a><a href="/static/mypage.html" class="on">마이페이지</a>
+  </div></div>
+</div>
+
+<div class="wrap">
+  <aside class="side">
+    <div class="me"><div class="nm" id="s_nm">-</div><div class="em" id="s_em"></div></div>
+    <nav>
+      <a href="/static/mypage.html">관심경매물건 <span>›</span></a>
+      <a href="/static/mypage_gongmae.html">관심공매물건 <span>›</span></a>
+      <a class="on" href="/static/mypage_mockbid.html">모의입찰목록 <span>›</span></a>
+      <a href="/static/mypage_calendar.html">개인입찰달력 <span>›</span></a>
+      <a href="#" onclick="soon(event)">나의상담목록 <span>›</span></a>
+      <a href="#" onclick="soon(event)">회원정보수정 <span>›</span></a>
+      <a href="#" onclick="soon(event)">스피드포인트 <span>›</span></a>
+      <a href="#" onclick="soon(event)">결제내역 <span>›</span></a>
+      <a href="/static/payment.html">기간연장/요금결제 <span>›</span></a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="phead"><h1>모의입찰목록</h1>
+      <div class="crumb">🏠 › 마이페이지 › <b>모의입찰목록</b></div></div>
+
+    <table class="ftbl">
+      <tr><th>물건 검색</th><td><input type="text" id="f_kw" placeholder="사건번호·소재지·용도 검색" oninput="render()"></td></tr>
+    </table>
+
+    <div class="tot">총 <b id="tot">0</b>건</div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+let BIDS=[];
+function won(n){ n=Math.round(+n||0); if(!n)return"-"; const e=Math.floor(n/1e8),m=Math.floor((n%1e8)/1e4); let s=""; if(e)s+=e+"억 "; if(m)s+=m.toLocaleString()+"만"; if(!s)s=n.toLocaleString(); return s.trim()+"원"; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function dt(s){ return String(s||"").replace("T"," ").slice(0,16); }
+function usg(u){ return String(u||"").split(" ").pop(); }
+async function logout(){ await fetch("/auth/logout",{method:"POST"}); location.href="/"; }
+function soon(e){ if(e) e.preventDefault(); alert("준비 중인 메뉴입니다."); }
+(function(){ var s=document.getElementById("caseYear"); if(!s)return;
+  var n=new Date().getFullYear(); for(var y=n;y>=2008;y--){var o=document.createElement("option");o.value=y;o.textContent=y;s.appendChild(o);} })();
+function caseSearch(){ var y=document.getElementById("caseYear").value, no=document.getElementById("caseNoIn").value.trim();
+  var p=new URLSearchParams(); if(y)p.set("year",y); if(no)p.set("keyword",no);
+  location.href="/static/auctions.html"+(p.toString()?"?"+p.toString():""); }
+
+async function load(){
+  const me=await fetch("/auth/me");
+  if(me.status===401){ location.href="/static/login.html?next=/static/mypage_mockbid.html"; return; }
+  const u=await me.json();
+  document.getElementById("s_nm").textContent=u.name||u.email||"-";
+  document.getElementById("s_em").textContent=u.email||"";
+  document.getElementById("util").innerHTML=`<span style="color:var(--primary);font-weight:600">${esc(u.name||u.email)}님</span> <a onclick="logout()">로그아웃</a> <a href="/static/mypage.html">정보수정</a> <a href="/static/mypage.html">마이페이지</a> <a href="/static/payment.html" class="pay">요금결제</a>`;
+  const d=await (await fetch("/mock_bids")).json();
+  BIDS=d.items||[]; render();
+}
+function render(){
+  const kw=document.getElementById("f_kw").value.trim();
+  const rows=BIDS.filter(b=> !kw || ((b.case_label||"")+(b.case_no||"")+(b.address||"")+(b.usage||"")).includes(kw));
+  document.getElementById("tot").textContent=rows.length;
+  const box=document.getElementById("list");
+  if(!rows.length){ box.innerHTML='<div class="notice">등록한 모의입찰이 없습니다.<br>물건 상세의 <b>🧮 모의입찰</b>에서 입찰가를 입력해 등록하세요.</div>'; return; }
+  box.innerHTML=`<table class="gtbl"><thead><tr>
+    <th style="width:118px">사건번호</th><th>소재지</th><th style="width:74px">용도</th>
+    <th style="width:104px">감정가<br>최저가</th><th style="width:104px">내 모의입찰가</th>
+    <th style="width:78px">최저가<br>대비</th><th style="width:88px">매각기일</th>
+    <th style="width:100px">등록일</th><th style="width:52px">삭제</th></tr></thead><tbody>`+
+    rows.map(b=>{
+      const ik=esc(b.item_key);
+      const ratio=(b.min_price&&b.bid_amount)?Math.round(100*b.bid_amount/b.min_price):null;
+      const rcls=ratio==null?"":(ratio>=100?"hi":"lo");
+      return `<tr>
+        <td class="cc">${esc(b.case_label||b.case_no||"-")}</td>
+        <td><b style="cursor:pointer;color:var(--primary)" onclick="openItem('${ik}')">${esc(b.address||"-")}</b>
+            ${b.court?`<div style="color:var(--muted);margin-top:2px">${esc(b.court)}</div>`:""}</td>
+        <td class="cc"><span class="ubadge">${esc(usg(b.usage)||"-")}</span></td>
+        <td class="num">${won(b.appraisal_price)}<br><span class="low">${won(b.min_price)}</span></td>
+        <td class="num mbamt">${won(b.bid_amount)}</td>
+        <td class="cc"><span class="rr ${rcls}">${ratio!=null?ratio+"%":"-"}</span></td>
+        <td class="cc">${esc((b.sell_date||"").slice(0,10)||"-")}</td>
+        <td class="cc">${esc(dt(b.created_at))}</td>
+        <td class="cc"><button class="del" onclick="removeBid('${ik}')">삭제</button></td>
+      </tr>`;
+    }).join("")+`</tbody></table>`;
+}
+function openItem(ik){ location.href="/static/auction.html?item_key="+encodeURIComponent(ik); }
+async function removeBid(ik){
+  if(!confirm("이 모의입찰을 삭제할까요?")) return;
+  try{ await fetch("/mock_bid?item_key="+encodeURIComponent(ik),{method:"DELETE"}); }catch(e){}
+  BIDS=BIDS.filter(x=>x.item_key!==ik); render();
+}
+load();
+</script>
+<style>
+#aibot-btn{position:fixed;right:22px;bottom:22px;width:60px;height:60px;border-radius:50%;background:#1a73e8;color:#fff;border:none;font-size:22px;font-weight:800;letter-spacing:1px;cursor:pointer;box-shadow:0 6px 20px -4px rgba(26,115,232,.6);z-index:9998;display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:aibotTilt 4.5s ease-in-out infinite,aibotGlow 2.2s ease-in-out infinite;transform-origin:center bottom;}
+@keyframes aibotTilt{0%,84%,100%{transform:rotate(0)}88%{transform:rotate(-13deg)}92%{transform:rotate(13deg)}96%{transform:rotate(-6deg)}}
+@keyframes aibotJump{0%,100%{transform:translateY(0)}45%{transform:translateY(-16px)}}
+@keyframes aibotGlow{0%,100%{box-shadow:0 4px 13px -2px rgba(26,115,232,.5),0 0 10px 1px rgba(26,115,232,.35)}50%{box-shadow:0 4px 17px -2px rgba(26,115,232,.62),0 0 23px 5px rgba(26,115,232,.62)}}
+#aibot-btn:hover{animation:aibotJump .55s ease,aibotGlow 2.2s ease-in-out infinite;}
+#aibot-panel{position:fixed;right:22px;bottom:92px;width:360px;max-width:calc(100vw - 32px);height:520px;max-height:calc(100vh - 130px);background:#fff;border-radius:16px;box-shadow:0 16px 50px -12px rgba(0,0,0,.4);z-index:9998;display:none;flex-direction:column;overflow:hidden;border:1px solid #e3e8ef;}
+#aibot-panel.on{display:flex;}
+.aibot-head{background:#1f4fa3;color:#fff;padding:14px 16px;font-weight:700;display:flex;justify-content:space-between;align-items:center;}
+.aibot-head button{background:none;border:none;color:#fff;font-size:18px;cursor:pointer;}
+#aibot-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#f6f8fb;}
+.aibot-msg{max-width:82%;padding:10px 13px;border-radius:12px;font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;}
+.aibot-msg.u{align-self:flex-end;background:#1f4fa3;color:#fff;border-bottom-right-radius:4px;}
+.aibot-msg.a{align-self:flex-start;background:#fff;color:#1c1c1a;border:1px solid #e3e8ef;border-bottom-left-radius:4px;}
+.aibot-input{display:flex;gap:8px;padding:12px;border-top:1px solid #eef1f5;background:#fff;}
+.aibot-input input{flex:1;height:40px;border:1px solid #d5dce6;border-radius:10px;padding:0 12px;font-size:14px;outline:none;}
+.aibot-input input:focus{border-color:#1f4fa3;}
+.aibot-input button{height:40px;padding:0 16px;background:#1f4fa3;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;}
+.aibot-cards{display:flex;flex-direction:column;gap:10px;align-self:flex-start;width:100%;max-width:290px;}
+.aibot-card{display:block;background:#fff;border:1px solid #e3e8ef;border-radius:12px;overflow:hidden;text-decoration:none;color:#1c1c1a;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.aibot-card:hover{border-color:#1a73e8;box-shadow:0 4px 14px rgba(26,115,232,.22);}
+.aibot-card-img{position:relative;width:100%;height:150px;background:#eef2f8;}
+.aibot-card-img img{width:100%;height:150px;object-fit:cover;display:block;}
+.aibot-card-noimg{width:100%;height:150px;display:flex;align-items:center;justify-content:center;font-size:42px;}
+.aibot-card-badge{position:absolute;top:8px;right:8px;background:#e8202a;color:#fff;font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.3);}
+.aibot-card-tag{position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.62);color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;}
+.aibot-card-body{padding:10px 12px 11px;}
+.aibot-card-case{font-size:13px;font-weight:800;color:#1f4fa3;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.aibot-card-addr{font-size:12px;color:#444;margin:3px 0 6px;line-height:1.45;}
+.aibot-card-prices{font-size:13px;color:#1c1c1a;font-weight:700;}
+.aibot-card-prices .k{color:#6b6a64;font-weight:400;font-size:11px;margin-right:1px;}
+.aibot-card-grade{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;}
+.aibot-card-grade.g-ok{background:#e7f6ec;color:#1f7a3d;}.aibot-card-grade.g-mid{background:#fff4e0;color:#9a6b0b;}.aibot-card-grade.g-no{background:#fdeaea;color:#c0392b;}
+</style>
+<button id="aibot-btn" onclick="aibotToggle()" title="AI 도우미">AI</button>
+<div id="aibot-panel">
+  <div class="aibot-head"><span>🤖 JH옥션스쿨 AI 도우미</span><button onclick="aibotToggle()">✕</button></div>
+  <div id="aibot-msgs"></div>
+  <div class="aibot-input"><input id="aibot-in" placeholder="경매·사이트 이용, 무엇이든 물어보세요" onkeydown="if(event.key===String.fromCharCode(69,110,116,101,114))aibotSend()"><button onclick="aibotSend()">전송</button></div>
+</div>
+<script>
+var aibotHist=[], aibotBusy=false, aibotSeen=[], aibotCtx={}, aibotLast=[];
+function aibotWon(n){n=Math.round(+n||0);if(!n)return"";var e=Math.floor(n/1e8),m=Math.floor((n%1e8)/1e4);var s="";if(e)s+=e+"억";if(m)s+=(e?" ":"")+m.toLocaleString()+"만";return s||n.toLocaleString();}
+function aibotCards(cards){
+  var box=document.getElementById("aibot-msgs");
+  var wrap=document.createElement("div"); wrap.className="aibot-cards";
+  wrap.innerHTML=cards.map(function(c){
+    var pf=c["예상차익"]; var badge=(pf&&pf>0)?('<span class="aibot-card-badge">+'+aibotWon(pf)+' 차익</span>'):"";
+    var gr=c["매수판정"]; var gcls=gr==="매수양호"?"g-ok":(gr==="매수금지"?"g-no":"g-mid");
+    var grade=gr?('<span class="aibot-card-grade '+gcls+'">'+gr+'</span>'):"";
+    var th=c["thumb"]; var img=th?('<img src="'+th+'" onerror="this.parentNode.innerHTML=&#39;<div class=aibot-card-noimg>&#127968;</div>&#39;">'):'<div class="aibot-card-noimg">&#127968;</div>';
+    var tag=c["유형"]?('<span class="aibot-card-tag">'+c["유형"]+'</span>'):"";
+    var appr=c["감정가"]?('<span class="k">감정</span>'+aibotWon(c["감정가"])):"";
+    var low=c["최저가"]?('<span class="k">최저</span>'+aibotWon(c["최저가"])):"";
+    return '<a class="aibot-card" href="'+(c["링크"]||"#")+'" target="_blank">'
+      +'<div class="aibot-card-img">'+img+badge+tag+'</div>'
+      +'<div class="aibot-card-body">'
+      +'<div class="aibot-card-case">'+(c["사건번호"]||"물건")+grade+'</div>'
+      +'<div class="aibot-card-addr">'+(c["소재지"]||"")+'</div>'
+      +'<div class="aibot-card-prices">'+appr+(appr&&low?' · ':'')+low+'</div>'
+      +'</div></a>';
+  }).join("");
+  box.appendChild(wrap); box.scrollTop=box.scrollHeight;
+}
+function aibotToggle(){
+  var p=document.getElementById("aibot-panel");
+  p.classList.toggle("on");
+  if(p.classList.contains("on") && !aibotHist.length) aibotPush("a","안녕하세요! JH옥션스쿨 AI 도우미입니다. 권리분석·예상낙찰가·회원등급 등 궁금한 점을 물어보세요.");
+  if(p.classList.contains("on")) document.getElementById("aibot-in").focus();
+}
+function aibotPush(role,text){
+  var box=document.getElementById("aibot-msgs");
+  var d=document.createElement("div");
+  d.className="aibot-msg "+(role==="u"?"u":"a");
+  d.textContent=text; box.appendChild(d); box.scrollTop=box.scrollHeight;
+  return d;
+}
+async function aibotSend(){
+  if(aibotBusy) return;
+  var inp=document.getElementById("aibot-in");
+  var msg=(inp.value||"").trim(); if(!msg) return;
+  inp.value=""; aibotPush("u",msg); aibotHist.push({role:"user",content:msg});
+  aibotBusy=true; var typing=aibotPush("a","…");
+  try{
+    var r=await fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store",
+      body:JSON.stringify({message:msg,history:aibotHist.slice(-20),seen:aibotSeen.slice(-40),ctx:aibotCtx,last:aibotLast})});
+    var d=await r.json();
+    typing.textContent=d.reply||"죄송합니다. 답변을 받지 못했습니다.";
+    aibotHist.push({role:"assistant",content:typing.textContent+(d.list_text||"")}); if(d.used_args&&Object.keys(d.used_args).length)aibotCtx=d.used_args; if(d.cards&&d.cards.length){aibotLast=d.cards;aibotCards(d.cards);d.cards.forEach(function(c){if(c.item_key)aibotSeen.push(c.item_key);});}
+  }catch(e){ typing.textContent="죄송합니다. 연결 오류가 발생했습니다."; }
+  aibotBusy=false;
+}
+</script>
+</body>
+</html>

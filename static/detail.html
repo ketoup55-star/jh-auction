@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>경매 물건 상세 — 권리분석 · 배당</title>
+<style>
+  :root{
+    --bg:#f7f7f5; --card:#fff; --line:#e6e4dd; --text:#1c1c1a; --muted:#6b6a64;
+    --safe:#2f7d4f; --safe-bg:#e9f4ee; --warn:#9a6b0b; --warn-bg:#fbf0d9;
+    --danger:#a32d2d; --danger-bg:#fbeaea; --info:#185fa5; --info-bg:#e6f1fb;
+    --gray-bg:#f0efe9;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif;
+       background:var(--bg);color:var(--text);line-height:1.5;}
+  .wrap{max-width:760px;margin:0 auto;padding:20px 16px 60px;}
+  .muted{color:var(--muted);}
+  .card{background:var(--card);border:0.5px solid var(--line);border-radius:12px;
+        padding:16px 18px;margin-bottom:14px;}
+  h1{font-size:20px;font-weight:600;margin:0 0 4px;}
+  h2{font-size:15px;font-weight:600;margin:0 0 12px;display:flex;align-items:center;gap:6px;}
+  .badge{font-size:12px;padding:2px 9px;border-radius:8px;font-weight:600;display:inline-block;}
+  .b-info{background:var(--info-bg);color:var(--info);}
+  .b-safe{background:var(--safe-bg);color:var(--safe);}
+  .b-warn{background:var(--warn-bg);color:var(--warn);}
+  .b-danger{background:var(--danger-bg);color:var(--danger);}
+  .b-gray{background:var(--gray-bg);color:var(--muted);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:8px 6px;border-bottom:0.5px solid var(--line);}
+  th{color:var(--muted);font-weight:500;font-size:12px;}
+  tr.baseline td{background:var(--info-bg);}
+  .num{text-align:right;font-variant-numeric:tabular-nums;}
+  .big{font-size:28px;font-weight:600;}
+  .stat{display:flex;gap:18px;flex-wrap:wrap;margin-top:6px;}
+  .stat div{font-size:13px;}
+  .stat b{font-size:15px;}
+  .warnbox{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 12px;
+           font-size:13px;margin-top:8px;}
+  input[type=range]{width:100%;}
+  .slider-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
+  .stage-tag{font-size:11px;padding:1px 7px;border-radius:6px;background:var(--gray-bg);color:var(--muted);}
+  a.back{font-size:13px;color:var(--info);text-decoration:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="javascript:history.back()">← 목록으로</a>
+  <div id="root" style="margin-top:10px;">
+    <p class="muted">불러오는 중…</p>
+  </div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const caseNo = params.get("case_no");
+
+function won(n){
+  n = Math.round(n||0);
+  if(n === 0) return "0원";
+  const eok = Math.floor(n/100000000);
+  const man = Math.floor((n%100000000)/10000);
+  let s = "";
+  if(eok) s += eok + "억 ";
+  if(man) s += man.toLocaleString() + "만";
+  if(!s) return n.toLocaleString() + "원";
+  return s.trim() + "원";
+}
+
+function riskBadge(level){
+  const m = {"안전":"b-safe","주의":"b-warn","위험":"b-danger"};
+  return `<span class="badge ${m[level]||"b-gray"}">${level}</span>`;
+}
+function statusBadge(s){
+  if(s === "인수") return `<span class="badge b-danger">인수</span>`;
+  if(s === "소멸") return `<span class="badge b-gray">소멸</span>`;
+  return `<span class="badge b-info">말소기준</span>`;
+}
+
+let DATA = null;   // /properties/{case_no} 응답
+
+async function load(){
+  if(!caseNo){ root.innerHTML = '<p class="muted">case_no 파라미터가 필요합니다. 예: ?case_no=2026타경1002</p>'; return; }
+  const res = await fetch(`/properties/${encodeURIComponent(caseNo)}`);
+  if(!res.ok){ root.innerHTML = `<p class="muted">물건을 찾을 수 없습니다 (${res.status})</p>`; return; }
+  DATA = await res.json();
+  render();
+}
+
+function render(){
+  const L = DATA.listing, A = DATA.analysis, D = DATA.distribution;
+  const minBid = L.min_bid_price, appraisal = L.appraisal_value;
+  const sliderMin = Math.round(minBid*0.6), sliderMax = appraisal;
+
+  root.innerHTML = `
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div>
+          <h1>${L.address}</h1>
+          <div class="muted" style="font-size:13px;">${L.case_no} · ${L.court}</div>
+        </div>
+        <div style="text-align:right;">
+          <span class="badge b-info">${L.type}</span> ${riskBadge(A.risk_level)}
+          <div style="margin-top:8px;">
+            <button id="favBtn" onclick="toggleFav()" style="border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 12px;font-size:13px;cursor:pointer;color:var(--muted);">♡ 관심</button>
+          </div>
+        </div>
+      </div>
+      <div class="stat">
+        <div class="muted">감정가<br><b style="color:var(--text)">${won(appraisal)}</b></div>
+        <div class="muted">최저가<br><b style="color:var(--text)">${won(minBid)}</b></div>
+        <div class="muted">할인율<br><b style="color:var(--danger)">${L.discount_rate}%↓</b></div>
+        <div class="muted">유찰<br><b style="color:var(--text)">${L.failed_count}회</b></div>
+        <div class="muted">매각기일<br><b style="color:var(--text)">${L.sale_date||"-"}</b></div>
+      </div>
+      ${A.needs_expert_review ? '<div class="warnbox">⚠ 자동분석 주의 물건 — 전문가 검토 권장</div>' : ''}
+    </div>
+
+    <div class="card">
+      <h2><i></i>권리분석</h2>
+      <table>
+        <tr><th>등기일</th><th>권리</th><th>권리자</th><th class="num">채권액</th><th>판정</th></tr>
+        ${A.rights.map(r => `
+          <tr class="${r.status==="말소기준권리"?"baseline":""}">
+            <td>${r.reg_date}</td><td>${r.type}</td><td>${r.holder||"-"}</td>
+            <td class="num">${r.amount?won(r.amount):"-"}</td><td>${statusBadge(r.status)}</td>
+          </tr>`).join("")}
+      </table>
+      ${A.tenants.length ? `
+        <h2 style="margin-top:16px;">임차인</h2>
+        <table>
+          <tr><th>임차인</th><th>대항력</th><th class="num">인수보증금</th><th>비고</th></tr>
+          ${A.tenants.map(t => `
+            <tr><td>${t.name||"임차인"}</td>
+              <td>${t.has_opposing_power?'<span class="badge b-danger">있음</span>':'<span class="badge b-gray">없음</span>'}</td>
+              <td class="num">${won(t.buyer_assumes_deposit)}</td>
+              <td class="muted" style="font-size:12px;">${t.reason}</td></tr>`).join("")}
+        </table>` : ''}
+      ${A.warnings.length ? A.warnings.map(w=>`<div class="warnbox">⚠ ${w}</div>`).join("") : ''}
+    </div>
+
+    <div class="card">
+      <h2>낙찰자 인수 예상액 <span class="muted" style="font-weight:400;font-size:12px;">매각가에 따라 변동</span></h2>
+      <div class="slider-row">
+        <span class="muted" style="font-size:13px;">가정 매각가</span>
+        <span id="priceOut" style="font-weight:600;">${won(D.assumed_sale_price)}</span>
+      </div>
+      <input type="range" id="price" min="${sliderMin}" max="${sliderMax}" step="1000000" value="${D.assumed_sale_price}">
+      <div class="slider-row" style="margin-top:14px;">
+        <span class="muted" style="font-size:13px;">낙찰자 총 인수액</span>
+        <span id="assumeOut" class="big" style="color:${D.buyer_assumed_total>0?'var(--danger)':'var(--safe)'};">${won(D.buyer_assumed_total)}</span>
+      </div>
+      <div id="distBox" style="margin-top:10px;">${distHtml(D)}</div>
+    </div>
+  `;
+
+  const slider = document.getElementById("price");
+  slider.addEventListener("input", onSlide);
+  loadFavStatus();
+}
+
+let isFav = false, loggedIn = false;
+function renderFavBtn(){
+  const b = document.getElementById("favBtn");
+  if(!b) return;
+  b.innerHTML = isFav ? "♥ 관심중" : "♡ 관심";
+  b.style.color = isFav ? "var(--danger)" : "var(--muted)";
+  b.style.borderColor = isFav ? "var(--danger)" : "var(--line)";
+}
+async function loadFavStatus(){
+  const r = await fetch("/favorites/"+encodeURIComponent(caseNo)+"/status");
+  const d = await r.json();
+  loggedIn = d.logged_in; isFav = d.favorite;
+  renderFavBtn();
+}
+async function toggleFav(){
+  if(!loggedIn){
+    location.href = "/static/login.html?next=" + encodeURIComponent(location.pathname+location.search);
+    return;
+  }
+  const url = "/favorites/"+encodeURIComponent(caseNo);
+  const r = await fetch(url, {method: isFav ? "DELETE" : "POST"});
+  if(r.ok){ isFav = !isFav; renderFavBtn(); }
+}
+
+function distHtml(D){
+  return `
+    <table>
+      <tr><th>단계</th><th>채권</th><th>권리자</th><th class="num">배당액</th></tr>
+      ${D.payouts.map(p=>`
+        <tr><td><span class="stage-tag">${p.stage}</span></td>
+          <td>${p.label}</td><td>${p.holder||"-"}</td>
+          <td class="num">${won(p.paid)}</td></tr>`).join("")}
+      ${D.tenant_recoveries.map(t=>`
+        <tr><td colspan="2" class="muted">임차인 ${t.name} 회수</td>
+          <td class="muted">미배당 인수</td>
+          <td class="num">${won(t.received)} / <b style="color:${t.buyer_assumes>0?'var(--danger)':'var(--muted)'}">${won(t.buyer_assumes)}</b></td></tr>`).join("")}
+      <tr><td colspan="3" class="muted">배당 후 잔여</td><td class="num">${won(D.leftover)}</td></tr>
+    </table>`;
+}
+
+let timer = null;
+function onSlide(e){
+  const v = +e.target.value;
+  document.getElementById("priceOut").textContent = won(v);
+  clearTimeout(timer);
+  timer = setTimeout(()=>recalc(v), 120);
+}
+
+async function recalc(salePrice){
+  const res = await fetch(`/properties/${encodeURIComponent(caseNo)}/distribution?sale_price=${salePrice}`);
+  if(!res.ok) return;
+  const D = await res.json();
+  const out = document.getElementById("assumeOut");
+  out.textContent = won(D.buyer_assumed_total);
+  out.style.color = D.buyer_assumed_total>0 ? "var(--danger)" : "var(--safe)";
+  document.getElementById("distBox").innerHTML = distHtml(D);
+}
+
+const root = document.getElementById("root");
+load();
+</script>
+</body>
+</html>

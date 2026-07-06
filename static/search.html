@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>경매 종합검색</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#fff; --line:#dfe3ea; --label:#eef2fb; --labeltx:#2c5db0;
+    --text:#1c1c1a; --muted:#6b6a64; --primary:#2c5db0; --primary-bg:#eaf1fb;
+    --danger:#a32d2d; --safe:#2f7d4f; --safe-bg:#e9f4ee; --warn:#9a6b0b; --warn-bg:#fbf0d9;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+  .wrap{max-width:780px;margin:0 auto;padding:18px 14px 60px;}
+  h1{font-size:19px;font-weight:600;margin:0 0 14px;}
+  .form{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .row{display:flex;border-bottom:1px solid var(--line);}
+  .row:last-child{border-bottom:none;}
+  .lab{flex:0 0 92px;background:var(--label);color:var(--labeltx);font-weight:600;
+       padding:9px 10px;display:flex;align-items:center;border-right:1px solid var(--line);font-size:12px;}
+  .val{flex:1;padding:8px 10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;}
+  .val.col{flex-direction:column;align-items:stretch;gap:8px;}
+  select,input[type=text],input[type=number],input[type=date]{
+    height:30px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;background:#fff;color:var(--text);}
+  input[type=text]{flex:1;min-width:120px;}
+  .sep{color:var(--muted);}
+  label.ck{display:inline-flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap;cursor:pointer;}
+  label.ck.dis{color:#b7b7b2;cursor:not-allowed;}
+  .grp{display:flex;flex-wrap:wrap;gap:10px 14px;padding:6px 0;border-bottom:1px dashed var(--line);}
+  .grp:last-child{border-bottom:none;}
+  .grp .gname{flex:0 0 100%;font-size:11px;color:var(--muted);margin-bottom:2px;}
+  .note{font-size:11px;color:var(--muted);margin-top:4px;}
+  .btns{display:flex;justify-content:center;gap:8px;margin:16px 0;}
+  button{height:38px;padding:0 22px;border-radius:8px;border:1px solid var(--primary);font-size:14px;font-weight:600;cursor:pointer;}
+  .b-primary{background:var(--primary);color:#fff;}
+  .b-ghost{background:#fff;color:var(--primary);}
+  .results{margin-top:18px;}
+  .restitle{font-size:16px;font-weight:600;margin:0 2px 10px;border-left:4px solid var(--primary);padding-left:8px;}
+  .restitle b{color:var(--primary);}
+  .statbox{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
+  .statbox .sh{font-size:12px;font-weight:600;color:var(--primary);margin:0 0 7px;}
+  .statgrid{display:flex;flex-wrap:wrap;gap:6px 18px;margin-bottom:10px;}
+  .stat{font-size:12px;color:var(--muted);}
+  .stat b{color:var(--text);}
+  .stat.on{color:var(--danger);font-weight:600;}
+  .stat.on b{color:var(--danger);}
+  .rescount{font-size:12px;color:var(--muted);margin:6px 2px 8px;}
+  .rescount b{color:var(--text);}
+  .ritem{display:flex;gap:10px;text-decoration:none;color:inherit;background:var(--card);border:1px solid var(--line);
+         border-radius:10px;padding:10px 12px;margin-bottom:8px;}
+  .ritem:hover{border-color:var(--primary);}
+  .thumb{flex:0 0 64px;height:56px;background:var(--label);border-radius:6px;display:flex;align-items:center;justify-content:center;color:#aab4c8;font-size:20px;}
+  .rbody{flex:1;min-width:0;}
+  .rhead{display:flex;justify-content:space-between;gap:8px;margin-bottom:3px;}
+  .rcase{font-size:11px;color:var(--muted);}
+  .raddr{font-size:13px;font-weight:600;margin:1px 0 2px;}
+  .rarea{font-size:11px;color:var(--muted);}
+  .rmeta{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px;font-size:12px;}
+  .rprice{color:var(--muted);}
+  .rprice b{color:var(--text);}
+  .badge{font-size:11px;padding:2px 8px;border-radius:7px;font-weight:600;white-space:nowrap;}
+  .b-info{background:var(--primary-bg);color:var(--primary);}
+  .b-safe{background:var(--safe-bg);color:var(--safe);}
+  .b-warn{background:var(--warn-bg);color:var(--warn);}
+  .b-danger{background:#fbeaea;color:var(--danger);}
+  .rkv{font-size:12px;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>경매 종합검색</h1>
+  <div class="form">
+
+    <div class="row">
+      <div class="lab">법원</div>
+      <div class="val"><select id="court"><option value="">본원전체</option></select></div>
+      <div class="lab">경매종류</div>
+      <div class="val">
+        <label class="ck"><input type="radio" name="atype" value="" checked> 전체</label>
+        <label class="ck"><input type="radio" name="atype" value="임의경매"> 임의경매</label>
+        <label class="ck"><input type="radio" name="atype" value="강제경매"> 강제경매</label>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="lab">소재지</div>
+      <div class="val">
+        <select id="region">
+          <option value="">전체</option>
+          <option value="서울특별시">서울특별시</option>
+          <option value="과밀억제권역등">과밀억제권역 등</option>
+          <option value="광역시등">광역시 등</option>
+          <option value="그밖의지역">그 밖의 지역</option>
+        </select>
+      </div>
+      <div class="lab">명칭검색</div>
+      <div class="val"><input type="text" id="keyword" placeholder="소재지 또는 건물명칭 입력"></div>
+    </div>
+
+    <div class="row">
+      <div class="lab">매각기일</div>
+      <div class="val">
+        <input type="date" id="saleFrom"> <span class="sep">~</span> <input type="date" id="saleTo">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="lab">현황용도</div>
+      <div class="val col">
+        <div class="grp">
+          <span class="gname">주거용 (수집 대상)</span>
+          <label class="ck"><input type="checkbox" class="rtype" value="아파트"> 아파트</label>
+          <label class="ck"><input type="checkbox" class="rtype" value="빌라"> 다세대(빌라)</label>
+          <label class="ck"><input type="checkbox" class="rtype" value="도시형생활주택"> 도시형생활주택</label>
+          <label class="ck"><input type="checkbox" class="rtype" value="상가주택"> 상가주택</label>
+          <label class="ck"><input type="checkbox" class="rtype" value="다가구주택"> 다가구(원룸등)</label>
+        </div>
+        <div class="grp">
+          <span class="gname">상업·토지·차량 (현재 미수집)</span>
+          <label class="ck dis"><input type="checkbox" disabled> 오피스텔</label>
+          <label class="ck dis"><input type="checkbox" disabled> 근린상가</label>
+          <label class="ck dis"><input type="checkbox" disabled> 토지</label>
+          <label class="ck dis"><input type="checkbox" disabled> 공장</label>
+          <label class="ck dis"><input type="checkbox" disabled> 차량</label>
+        </div>
+        <div class="note">현재 주거 5종만 수집합니다. 위험물건(선순위 가등기 등)은 자동 제외됩니다.</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="lab">감정가</div>
+      <div class="val"><select id="apMin" class="price"></select> <span class="sep">~</span> <select id="apMax" class="price"></select></div>
+      <div class="lab">최저가</div>
+      <div class="val"><select id="lpMin" class="price"></select> <span class="sep">~</span> <select id="lpMax" class="price"></select></div>
+    </div>
+
+    <div class="row">
+      <div class="lab">건물면적</div>
+      <div class="val"><input type="number" id="baMin" style="width:80px" placeholder="최소"> ㎡ <span class="sep">~</span> <input type="number" id="baMax" style="width:80px" placeholder="최대"> ㎡</div>
+      <div class="lab">유찰수</div>
+      <div class="val"><select id="fMin"></select> <span class="sep">~</span> <select id="fMax"></select></div>
+    </div>
+
+    <div class="row">
+      <div class="lab">정렬순서</div>
+      <div class="val">
+        <select id="sort">
+          <option value="매각기일">매각기일 빠른순</option>
+          <option value="감정가높은">감정가 높은순</option>
+          <option value="감정가낮은">감정가 낮은순</option>
+          <option value="최저가낮은">최저가 낮은순</option>
+          <option value="유찰많은">유찰 많은순</option>
+        </select>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="btns">
+    <button class="b-primary" onclick="doSearch()">검색하기</button>
+    <button class="b-ghost" onclick="resetForm()">검색 초기화</button>
+  </div>
+
+  <div class="results">
+    <div class="restitle" id="restitle"></div>
+    <div class="statbox" id="statbox"></div>
+    <div class="rescount" id="rescount"></div>
+    <div id="list"></div>
+  </div>
+</div>
+
+<script>
+function won(n){
+  n=Math.round(n||0); if(n===0)return"0";
+  const eok=Math.floor(n/100000000), man=Math.floor((n%100000000)/10000);
+  let s=""; if(eok)s+=eok+"억 "; if(man)s+=man.toLocaleString()+"만"; if(!s)s=n.toLocaleString();
+  return s.trim()+"원";
+}
+function fillPrice(sel,label){
+  sel.innerHTML='<option value="">'+label+'</option>';
+  for(let e=1;e<=30;e++){const v=e*100000000;sel.innerHTML+=`<option value="${v}">${e}억</option>`;}
+}
+function fillFailed(sel,label){
+  sel.innerHTML='<option value="">'+label+'</option>';
+  for(let i=0;i<=10;i++) sel.innerHTML+=`<option value="${i}">${i}회</option>`;
+}
+["apMin","lpMin"].forEach(id=>fillPrice(document.getElementById(id),"최소"));
+["apMax","lpMax"].forEach(id=>fillPrice(document.getElementById(id),"최대"));
+fillFailed(document.getElementById("fMin"),"최소");
+fillFailed(document.getElementById("fMax"),"최대");
+
+function val(id){return document.getElementById(id).value;}
+function buildQuery(){
+  const p=new URLSearchParams();
+  document.querySelectorAll(".rtype:checked").forEach(c=>p.append("type",c.value));
+  if(val("region"))p.set("region",val("region"));
+  if(val("court"))p.set("court",val("court"));
+  if(val("keyword"))p.set("keyword",val("keyword"));
+  const at=document.querySelector('input[name=atype]:checked').value; if(at)p.set("auction_type",at);
+  if(val("saleFrom"))p.set("sale_from",val("saleFrom"));
+  if(val("saleTo"))p.set("sale_to",val("saleTo"));
+  if(val("apMin"))p.set("appraisal_min",val("apMin"));
+  if(val("apMax"))p.set("appraisal_max",val("apMax"));
+  if(val("lpMin"))p.set("min_price",val("lpMin"));
+  if(val("lpMax"))p.set("max_price",val("lpMax"));
+  if(val("baMin"))p.set("building_area_min",val("baMin"));
+  if(val("baMax"))p.set("building_area_max",val("baMax"));
+  if(val("fMin"))p.set("failed_min",val("fMin"));
+  if(val("fMax"))p.set("failed_max",val("fMax"));
+  p.set("sort",val("sort"));
+  return p;
+}
+function pyeong(m2){return m2 ? (m2/3.3058).toFixed(2) : "0";}
+function resultBadge(L){
+  if(L.status==="유찰") return `<span class="badge b-warn">유찰 ${L.failed_count}회 (${L.bid_ratio}%)</span>`;
+  if(L.status==="재진행") return `<span class="badge b-info">재진행 (${L.bid_ratio}%)</span>`;
+  if(L.status==="신건") return `<span class="badge b-safe">신건 (${L.bid_ratio}%)</span>`;
+  return `<span class="badge b-info">${L.status} (${L.bid_ratio}%)</span>`;
+}
+function renderStats(s){
+  const sc=s.status_counts, tc=s.type_counts;
+  const statHtml=Object.entries(sc).map(([k,v],i)=>
+    `<span class="stat ${k==="전체"?"on":""}">${k}<b>(${v.toLocaleString()})</b></span>`).join("");
+  const typeHtml=Object.entries(tc).map(([k,v])=>
+    `<span class="stat">${k}<b>(${v.toLocaleString()})</b></span>`).join("") || '<span class="stat">-</span>';
+  document.getElementById("statbox").innerHTML=
+    `<div class="sh">물건통계</div><div class="statgrid">${statHtml}</div>`+
+    `<div class="sh">용도통계</div><div class="statgrid">${typeHtml}</div>`;
+}
+async function doSearch(){
+  const res=await fetch("/properties?"+buildQuery().toString());
+  const d=await res.json();
+  document.getElementById("restitle").innerHTML=`검색결과 : 본원 전체 / 지원 전체 &nbsp; 총 <b>${d.count.toLocaleString()}</b>건`;
+  renderStats(d.stats);
+  document.getElementById("rescount").innerHTML=`${d.items.length}건 표시`;
+  document.getElementById("list").innerHTML=d.items.map(L=>`
+    <a class="ritem" href="/static/detail.html?case_no=${encodeURIComponent(L.case_no)}">
+      <div class="thumb">🏢</div>
+      <div class="rbody">
+        <div class="rhead">
+          <span class="rcase">${L.court} · ${L.case_no} · ${L.auction_type}</span>
+          <span style="display:flex;gap:8px;align-items:center;">
+            ${resultBadge(L)}
+            <span class="fav" title="관심물건" onclick="toggleCardFav(event,'${L.case_no}')" style="cursor:pointer;font-size:16px;color:${favSet.has(L.case_no)?'var(--danger)':'#c3c8d0'};">${favSet.has(L.case_no)?'♥':'♡'}</span>
+          </span>
+        </div>
+        <div class="raddr">${L.address}</div>
+        <div class="rarea">대지권 ${L.land_area}㎡(${pyeong(L.land_area)}평) · 전용 ${L.building_area}㎡(${pyeong(L.building_area)}평) · <span class="badge b-info" style="font-size:10px;padding:1px 6px">${L.type}</span></div>
+        <div class="rmeta">
+          <span class="rprice">감정가 ${won(L.appraisal_value)}</span>
+          <span class="rprice">최저가 <b style="color:var(--danger)">${won(L.min_bid_price)}</b></span>
+          <span class="rprice">매각 ${L.sale_date||"-"}</span>
+          <span class="rprice">조회 ${L.view_count.toLocaleString()}</span>
+        </div>
+      </div>
+    </a>`).join("") || '<div class="rkv">조건에 맞는 물건이 없습니다.</div>';
+}
+function resetForm(){
+  document.querySelectorAll(".rtype").forEach(c=>c.checked=false);
+  ["region","court","keyword","saleFrom","saleTo","apMin","apMax","lpMin","lpMax","baMin","baMax","fMin","fMax"].forEach(id=>document.getElementById(id).value="");
+  document.querySelector('input[name=atype][value=""]').checked=true;
+  document.getElementById("sort").value="매각기일";
+  doSearch();
+}
+function applyUrlParams(){
+  const q=new URLSearchParams(location.search);
+  const region=q.get("region");
+  if(region) document.getElementById("region").value=region;
+  q.getAll("type").forEach(t=>{
+    const cb=document.querySelector(`.rtype[value="${t}"]`);
+    if(cb) cb.checked=true;
+  });
+  if(q.get("keyword")) document.getElementById("keyword").value=q.get("keyword");
+}
+let loggedIn=false; const favSet=new Set();
+async function loadAuthFavs(){
+  try{
+    const me=await fetch("/auth/me");
+    loggedIn=me.ok;
+    if(loggedIn){
+      const f=await (await fetch("/favorites")).json();
+      f.items.forEach(i=>favSet.add(i.case_no));
+    }
+  }catch(e){}
+}
+async function toggleCardFav(ev, caseNo){
+  ev.preventDefault(); ev.stopPropagation();
+  if(!loggedIn){ location.href="/static/login.html?next="+encodeURIComponent(location.pathname+location.search); return; }
+  const has=favSet.has(caseNo);
+  const r=await fetch("/favorites/"+encodeURIComponent(caseNo), {method:has?"DELETE":"POST"});
+  if(r.ok){ has?favSet.delete(caseNo):favSet.add(caseNo); doSearch(); }
+}
+async function init(){
+  const d=await (await fetch("/properties?limit=500")).json();
+  const courts=[...new Set(d.items.map(i=>i.court))].sort();
+  const sel=document.getElementById("court");
+  courts.forEach(c=>sel.innerHTML+=`<option value="${c}">${c}</option>`);
+  await loadAuthFavs();
+  applyUrlParams();    // 홈 간편검색에서 넘어온 조건 자동 적용
+  doSearch();
+}
+init();
+</script>
+</body>
+</html>

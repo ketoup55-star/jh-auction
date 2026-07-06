@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "auction-api",
+      "runtimeExecutable": "C:\\Users\\red85\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "api.main:app", "--port", "4011"],
+      "port": 4011,
+      "autoPort": false
+    },
+    {
+      "name": "auction-preview",
+      "runtimeExecutable": "C:\\Users\\red85\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+      "runtimeArgs": ["-m", "uvicorn", "api.main:app", "--port", "4012"],
+      "port": 4012,
+      "autoPort": false
+    }
+  ]
+}

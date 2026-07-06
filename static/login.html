@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>로그인 · 회원가입 — JH옥션스쿨</title>
+<style>
+  :root{--bg:#eef1f5;--card:#fff;--line:#dfe3ea;--text:#1c1c1a;--muted:#6b6a64;
+        --primary:#1f4fa3;--primary2:#2c5db0;--danger:#c0392b;--label:#eef2fb;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);}
+  .wrap{max-width:400px;margin:48px auto;padding:0 16px;}
+  .brand{text-align:center;font-size:26px;font-weight:700;color:var(--primary);margin-bottom:22px;}
+  .brand span{color:#3a7bd5;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:22px;}
+  .tabs{display:flex;margin-bottom:18px;border-bottom:1px solid var(--line);}
+  .tabs button{flex:1;background:none;border:none;padding:11px;font-size:15px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;}
+  .tabs button.on{color:var(--primary);border-bottom-color:var(--primary);}
+  label{display:block;font-size:13px;color:var(--muted);margin:12px 0 5px;}
+  input{width:100%;height:40px;border:1px solid var(--line);border-radius:8px;padding:0 11px;font-size:14px;}
+  input:focus{outline:none;border-color:var(--primary);}
+  .go{width:100%;height:44px;margin-top:18px;border:none;border-radius:8px;background:var(--primary);color:#fff;font-size:16px;font-weight:700;cursor:pointer;}
+  .go:hover{background:#163c80;}
+  .msg{margin-top:12px;font-size:13px;min-height:18px;text-align:center;}
+  .msg.err{color:var(--danger);}
+  .msg.ok{color:var(--primary);}
+  .home{display:block;text-align:center;margin-top:16px;font-size:13px;color:var(--muted);text-decoration:none;}
+  .kakao{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:46px;
+         background:#FEE500;color:#191600;border-radius:8px;font-size:15px;font-weight:700;
+         text-decoration:none;border:none;cursor:pointer;}
+  .kakao:hover{background:#f4dc00;}
+  .kakao .b{font-size:18px;}
+  .or{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:16px 0;}
+  .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line);}
+  .req{color:var(--danger);font-size:11px;font-weight:600;}
+  .phrow{display:flex;gap:6px;align-items:stretch;}
+  .phrow input{flex:1;min-width:0;}
+  .otpbtn{flex:0 0 auto;white-space:nowrap;padding:0 12px;height:42px;border:1px solid var(--primary);
+          background:#fff;color:var(--primary);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;}
+  .otpbtn:hover:not(:disabled){background:#eef3fb;}
+  .otpbtn:disabled{opacity:.5;cursor:default;border-color:var(--line);color:var(--muted);}
+  .otpnote{font-size:12px;margin:6px 0 2px;min-height:16px;}
+  .otpnote.ok{color:var(--primary);font-weight:600;}
+  .otpnote.dev{color:#b06a00;background:#fff7e6;border:1px dashed #e0b050;border-radius:6px;padding:5px 8px;}
+  .otpnote.err{color:var(--danger);}
+  .phok input{background:#f0f7f0;border-color:#3a9d3a;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="brand">JH<span>옥션스쿨</span></div>
+  <div class="card">
+    <a class="kakao" href="/auth/kakao/login"><span class="b">💬</span> 카카오로 시작하기</a>
+    <div class="or">또는 이메일로</div>
+    <div class="tabs">
+      <button id="tabLogin" class="on" onclick="switchTab('login')">로그인</button>
+      <button id="tabSignup" onclick="switchTab('signup')">회원가입</button>
+    </div>
+
+    <div id="formLogin">
+      <label>이메일</label><input type="email" id="li_email" placeholder="you@example.com">
+      <label>비밀번호</label><input type="password" id="li_pw" placeholder="비밀번호">
+      <button class="go" onclick="doLogin()">로그인</button>
+    </div>
+
+    <div id="formSignup" style="display:none;">
+      <label>이름</label><input type="text" id="su_name" placeholder="이름">
+      <label>이메일</label><input type="email" id="su_email" placeholder="you@example.com">
+      <label>비밀번호 (6자 이상)</label><input type="password" id="su_pw" placeholder="비밀번호">
+      <label>연락처 <span class="req">* 휴대폰 본인인증</span></label>
+      <div class="phrow">
+        <input type="tel" id="su_phone" placeholder="010-1234-5678" inputmode="numeric" oninput="onPhoneChange()">
+        <button type="button" class="otpbtn" id="otpSendBtn" onclick="sendOtp()">인증번호 받기</button>
+      </div>
+      <div id="otpBox" style="display:none;">
+        <div class="phrow">
+          <input type="text" id="su_otp" placeholder="인증번호 6자리" inputmode="numeric" maxlength="6">
+          <button type="button" class="otpbtn" id="otpVerifyBtn" onclick="verifyOtp()">확인</button>
+        </div>
+        <div class="otpnote" id="otpNote"></div>
+      </div>
+      <button class="go" onclick="doSignup()">회원가입</button>
+    </div>
+
+    <div class="msg" id="msg"></div>
+  </div>
+  <a class="home" href="/">← 홈으로</a>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const next = params.get("next") || "/";
+function switchTab(t){
+  const login = t==="login";
+  document.getElementById("tabLogin").classList.toggle("on", login);
+  document.getElementById("tabSignup").classList.toggle("on", !login);
+  document.getElementById("formLogin").style.display = login ? "" : "none";
+  document.getElementById("formSignup").style.display = login ? "none" : "";
+  msg.textContent = "";
+}
+const msg = document.getElementById("msg");
+function showErr(t){ msg.textContent=t; msg.className="msg err"; }
+function showOk(t){ msg.textContent=t; msg.className="msg ok"; }
+
+async function post(url, body){
+  const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"},
+                             body: JSON.stringify(body)});
+  const data = await r.json().catch(()=>({}));
+  return {ok:r.ok, status:r.status, data};
+}
+async function doLogin(){
+  const email=document.getElementById("li_email").value.trim();
+  const pw=document.getElementById("li_pw").value;
+  if(!email||!pw){ showErr("이메일과 비밀번호를 입력하세요."); return; }
+  const r = await post("/auth/login", {email, password:pw});
+  if(r.ok){ showOk("로그인 성공"); location.href = next; }
+  else showErr(r.data.detail || "로그인 실패");
+}
+// ── 휴대폰 본인인증(SMS OTP) ──
+let phoneToken="";          // verify 성공 시 발급되는 1회용 토큰
+let verifiedPhone="";       // 인증 완료된 번호(정규화)
+let otpTimer=null;
+const onlyDigits=s=>(s||"").replace(/\D/g,"");
+function setNote(t, cls){ const n=document.getElementById("otpNote"); n.textContent=t; n.className="otpnote"+(cls?(" "+cls):""); }
+
+function onPhoneChange(){            // 번호 바꾸면 인증 무효화
+  if(verifiedPhone && onlyDigits(document.getElementById("su_phone").value)!==verifiedPhone){
+    phoneToken=""; verifiedPhone="";
+    document.getElementById("su_phone").parentElement.classList.remove("phok");
+    document.getElementById("su_phone").readOnly=false;
+    document.getElementById("otpSendBtn").disabled=false;
+    document.getElementById("otpSendBtn").textContent="인증번호 받기";
+  }
+}
+async function sendOtp(){
+  const phone=document.getElementById("su_phone").value.trim();
+  if(onlyDigits(phone).length<10){ setNote("올바른 휴대폰 번호를 입력하세요.","err"); return; }
+  const btn=document.getElementById("otpSendBtn");
+  btn.disabled=true;
+  const r=await post("/auth/phone/send", {phone});
+  if(!r.ok){ setNote(r.data.detail||"발송 실패","err"); btn.disabled=false; return; }
+  document.getElementById("otpBox").style.display="";
+  document.getElementById("su_otp").focus();
+  if(r.data.dev && r.data.dev_code){
+    setNote("개발모드 — 인증번호: "+r.data.dev_code+" (문자 발송 미설정)","dev");
+    document.getElementById("su_otp").value=r.data.dev_code;   // 개발 편의 자동입력
+  } else {
+    setNote("인증번호를 발송했습니다. 3분 내 입력하세요.","ok");
+  }
+  let left=(r.data.ttl||180);
+  clearInterval(otpTimer);
+  otpTimer=setInterval(()=>{
+    left--; btn.textContent="재발송 ("+left+")";
+    if(left<=0){ clearInterval(otpTimer); btn.disabled=false; btn.textContent="인증번호 재발송"; }
+  },1000);
+}
+async function verifyOtp(){
+  const phone=document.getElementById("su_phone").value.trim();
+  const code=document.getElementById("su_otp").value.trim();
+  if(code.length!==6){ setNote("인증번호 6자리를 입력하세요.","err"); return; }
+  const r=await post("/auth/phone/verify", {phone, code});
+  if(!r.ok){ setNote(r.data.detail||"인증 실패","err"); return; }
+  phoneToken=r.data.phone_token; verifiedPhone=r.data.phone;
+  clearInterval(otpTimer);
+  setNote("✓ 휴대폰 인증 완료","ok");
+  document.getElementById("su_phone").readOnly=true;
+  document.getElementById("su_phone").parentElement.classList.add("phok");
+  document.getElementById("otpSendBtn").disabled=true;
+  document.getElementById("otpSendBtn").textContent="인증완료";
+  document.getElementById("su_otp").readOnly=true;
+  document.getElementById("otpVerifyBtn").disabled=true;
+}
+async function doSignup(){
+  const name=document.getElementById("su_name").value.trim();
+  const email=document.getElementById("su_email").value.trim();
+  const pw=document.getElementById("su_pw").value;
+  const phone=document.getElementById("su_phone").value.trim();
+  if(!name){ showErr("이름을 입력하세요."); return; }
+  if(!email||!pw){ showErr("이메일과 비밀번호를 입력하세요."); return; }
+  if(!phoneToken || onlyDigits(phone)!==verifiedPhone){ showErr("휴대폰 본인인증을 완료해주세요."); return; }
+  const r = await post("/auth/signup", {email, password:pw, name, phone, phone_token:phoneToken});
+  if(r.ok){ showOk("가입 완료"); location.href = next; }
+  else showErr(r.data.detail || "회원가입 실패");
+}
+if(params.get("tab")==="signup") switchTab("signup");
+const err=params.get("error");
+if(err==="kakao_setup") showErr("카카오 로그인 설정이 필요합니다(관리자에게 KAKAO_REST_KEY 설정 요청).");
+else if(err==="kakao") showErr("카카오 로그인에 실패했습니다. 다시 시도해주세요.");
+</script>
+</body>
+</html>

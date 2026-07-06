@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>관리자 — JH옥션스쿨</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--line:#dfe3ea;--text:#1c1c1a;--muted:#6b6a64;
+        --primary:#1f4fa3;--safe:#1a7f4b;--danger:#c0392b;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
+  .bar{background:var(--card);border-bottom:2px solid var(--primary);}
+  .barin{max-width:900px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;}
+  .brand{font-size:20px;font-weight:700;color:var(--primary);}.brand span{color:#3a7bd5;}
+  .wrap{max-width:900px;margin:20px auto;padding:0 16px;}
+  h1{font-size:20px;margin:0 0 4px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:16px;}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:16px;}
+  .card h2{font-size:15px;margin:0 0 12px;}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text);}
+  .btn:hover{border-color:#9fb6e0;}
+  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;}
+  .grid{width:100%;border-collapse:collapse;font-size:13px;}
+  .grid th,.grid td{border:1px solid var(--line);padding:9px 11px;text-align:left;}
+  .grid th{background:#f7f9fc;color:var(--primary);width:160px;}
+  .grid td.n{text-align:right;font-weight:700;font-variant-numeric:tabular-nums;}
+  .run{display:inline-block;background:#eafaf1;border:1px solid #b6e6cb;color:var(--safe);border-radius:6px;padding:2px 8px;font-size:11.5px;font-weight:700;margin-left:6px;}
+  .msg{font-size:13px;margin-top:10px;min-height:18px;}
+  .err{color:var(--danger);}.ok{color:var(--safe);}
+  .hint{color:var(--muted);font-size:12px;margin-top:8px;line-height:1.6;}
+  .tabs{display:flex;gap:6px;margin-bottom:16px;border-bottom:2px solid var(--line);}
+  .tab{border:none;background:none;padding:10px 16px;font-size:14px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;}
+  .tab.on{color:var(--primary);border-bottom-color:var(--primary);}
+  .mtbl{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .mtbl{table-layout:fixed;}
+  .mtbl th,.mtbl td{border:1px solid var(--line);padding:6px 7px;text-align:left;vertical-align:middle;word-break:break-word;overflow-wrap:anywhere;}
+  .mtbl td:nth-child(3),.mtbl th:nth-child(3){word-break:break-all;}
+  .mtbl col.c-id{width:38px;}.mtbl col.c-name{width:64px;}.mtbl col.c-email{width:auto;}.mtbl col.c-phone{width:84px;}.mtbl col.c-grade{width:78px;}.mtbl col.c-role{width:54px;}.mtbl col.c-mil{width:58px;}.mtbl col.c-join{width:82px;}.mtbl col.c-mng{width:190px;}
+  .mtbl td .btn.mini{padding:4px 6px;font-size:11px;}
+  .mtbl td .inp.mini{width:100%!important;min-width:0;}
+  .mtbl th{background:#f7f9fc;color:var(--primary);font-weight:600;}
+  .mtbl td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;}
+  .mtbl tr:hover{background:#fafbfe;}
+  .badge{display:inline-block;border-radius:5px;padding:1px 7px;font-size:11px;font-weight:700;}
+  .badge.admin{background:#fdecea;color:var(--danger);}
+  .badge.paid{background:#eafaf1;color:var(--safe);}
+  .badge.free{background:#eef2f7;color:var(--muted);}
+  .badge.used{background:#eef2f7;color:var(--muted);}
+  .badge.live{background:#eafaf1;color:var(--safe);}
+  .inp{border:1px solid var(--line);border-radius:7px;padding:7px 9px;font-size:13px;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:12px;color:var(--muted);font-weight:600;}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;}
+  .mini{padding:5px 10px;font-size:12px;}
+  .scroll{overflow:auto;max-height:480px;border:1px solid var(--line);border-radius:8px;}
+  code.cc{background:#0d1117;color:#7ee787;padding:2px 7px;border-radius:5px;font-size:12px;}
+</style>
+</head>
+<body>
+<div class="bar"><div class="barin">
+  <a class="brand" href="/">JH<span>옥션스쿨</span> 관리자</a>
+  <div id="who" class="sub"></div>
+</div></div>
+<div class="wrap">
+  <div id="gate"></div>
+  <div id="panel" style="display:none">
+    <div class="tabs">
+      <button class="tab on" data-tab="prewarm" onclick="showTab('prewarm')">데이터 예열</button>
+      <button class="tab" data-tab="members" onclick="showTab('members')">회원관리</button>
+      <button class="tab" data-tab="grades" onclick="showTab('grades')">등급관리</button>
+      <button class="tab" data-tab="boards" onclick="showTab('boards')">게시판관리</button>
+      <button class="tab" data-tab="coupons" onclick="showTab('coupons')">쿠폰</button>
+      <button class="tab" data-tab="kakao" onclick="showTab('kakao')">카카오 발송</button>
+      <button class="tab" data-tab="aikb" onclick="showTab('aikb')">AI 학습자료</button>
+    </div>
+
+    <section data-sec="prewarm">
+    <h1>데이터 예열(DB 적재)</h1>
+    <div class="sub">건축물대장/실거래/감정평가서 API·문서를 미리 계산해 Supabase(api_cache)에 저장합니다. 한 번 적재되면 이후엔 DB에서 즉시 조회됩니다.</div>
+
+    <div class="card">
+      <h2>수동 예열 실행 <span id="liverun"></span></h2>
+      <div class="btns">
+        <button class="btn primary" onclick="run('')">전체 예열</button>
+        <button class="btn" onclick="run('docs')">문서(준공·권리·감정·명세)</button>
+        <button class="btn" onclick="run('villa_est')">빌라 시세</button>
+        <button class="btn" onclick="run('apt')">아파트 시세</button>
+        <button class="btn" onclick="run('car')">차량 시세</button>
+        <button class="btn" onclick="run('nearby')">주변 유사거래</button>
+      </div>
+      <div id="msg" class="msg"></div>
+      <div class="hint">※ 버튼·새벽 자동예열 모두 <b>같은 통합 스크립트</b>(별도 프로세스)로 돕니다 — 라이브는 그대로 사용 가능. 무거운 항목(문서·주변실거래)은 시간이 걸립니다.</div>
+      <pre id="log" style="margin-top:10px;background:#0d1117;color:#c9d1d9;border-radius:8px;padding:10px;font-size:11.5px;line-height:1.5;max-height:170px;overflow:auto;white-space:pre-wrap;display:none;"></pre>
+    </div>
+
+    <div class="card">
+      <h2>적재 현황</h2>
+      <table class="grid"><tbody id="statbody"></tbody></table>
+      <div class="hint">5초마다 자동 갱신.</div>
+    </div>
+    </section>
+
+    <section data-sec="members" style="display:none">
+      <h1>회원관리</h1>
+      <div class="sub">회원 조회 · 마일리지 적립/차감 · 쿠폰 발급.</div>
+      <div class="card">
+        <div class="row" style="margin-bottom:12px;">
+          <input id="msearch" class="inp" placeholder="이름 / 이메일 / 연락처 검색" style="min-width:240px;" onkeydown="if(event.key==='Enter')loadMembers()">
+          <button class="btn primary" onclick="loadMembers()">검색</button>
+          <span id="mmsg" class="msg" style="margin:0;align-self:center;"></span>
+        </div>
+        <div class="scroll">
+          <table class="mtbl">
+            <colgroup><col class="c-id"><col class="c-name"><col class="c-email"><col class="c-phone"><col class="c-grade"><col class="c-role"><col class="c-mil"><col class="c-join"><col class="c-mng"></colgroup>
+            <thead><tr><th>ID</th><th>이름</th><th>이메일</th><th>연락처</th><th>등급</th><th>권한</th><th>마일리지</th><th>가입일</th><th>관리</th></tr></thead>
+            <tbody id="mbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section data-sec="grades" style="display:none">
+      <h1>등급관리</h1>
+      <div class="sub">회원 등급을 생성·관리합니다. <b>강의 이용</b>에 체크된 등급의 회원만 <b>강의</b> 게시판을 열람할 수 있습니다.</div>
+      <div class="card">
+        <h2>등급 추가</h2>
+        <div class="row">
+          <div class="field"><label>등급명</label><input id="gName" class="inp" placeholder="예: 정회원 / VIP" style="min-width:160px;"></div>
+          <div class="field"><label>순위(높을수록 상위)</label><input id="gRank" class="inp" type="number" value="0" style="width:130px;"></div>
+          <div class="field"><label>배지색(선택)</label><input id="gColor" class="inp" type="color" value="#1f4fa3" style="width:64px;padding:3px;"></div>
+          <div class="field"><label>&nbsp;</label><label style="flex-direction:row;align-items:center;gap:6px;font-size:13px;color:var(--text)"><input id="gLecture" type="checkbox"> 강의 이용 가능</label></div>
+          <div class="field"><label>코멘트(선택)</label><input id="gComment" class="inp" placeholder="예: 결제 회원 전용" style="min-width:200px;"></div>
+          <button class="btn primary" onclick="createGrade()">등급 추가</button>
+        </div>
+        <div id="gmsg" class="msg"></div>
+      </div>
+      <div class="card">
+        <h2>등급 목록 <button class="btn mini" onclick="loadGrades()" style="float:right;">새로고침</button></h2>
+        <div class="scroll">
+          <table class="mtbl">
+            <thead><tr><th>등급명</th><th>순위</th><th>강의 이용</th><th>배지</th><th>코멘트</th><th>회원수</th><th>관리</th></tr></thead>
+            <tbody id="gbody"></tbody>
+          </table>
+        </div>
+        <div class="hint">강의 이용 체크/순위는 즉시 저장됩니다. 삭제 시 그 등급 회원은 '무료'로 변경됩니다. ('무료' 등급은 삭제 불가)</div>
+      </div>
+    </section>
+
+    <section data-sec="boards" style="display:none">
+      <h1>게시판관리</h1>
+      <div class="sub">각 게시판의 <b>읽기·쓰기·댓글</b> 권한을 설정합니다. "등급 회원"은 등급관리에서 <b>강의(등급전용) 이용</b>에 체크된 등급 회원입니다.</div>
+      <div class="card">
+        <div class="scroll">
+          <table class="mtbl">
+            <thead><tr><th>게시판</th><th>메뉴명</th><th>읽기 권한</th><th>쓰기 권한</th><th>댓글 권한</th><th>글수</th><th></th></tr></thead>
+            <tbody id="bbody"></tbody>
+          </table>
+        </div>
+        <div id="bmsg" class="msg"></div>
+        <div class="hint">읽기=목록·글 열람 / 쓰기=글 등록 / 댓글=댓글 작성. 관리자는 항상 모든 게시판을 읽고 쓸 수 있습니다. 메뉴명을 바꾸면 게시판 상단 제목이 바뀝니다(상단 메뉴 표기는 별도).</div>
+      </div>
+    </section>
+
+    <section data-sec="coupons" style="display:none">
+      <h1>쿠폰</h1>
+      <div class="sub">마일리지 적립용 쿠폰을 발급합니다. 회원 지정 시 그 회원 전용, 미지정 시 아무나 쓸 수 있는 코드입니다.</div>
+      <div class="card">
+        <h2>쿠폰 발급</h2>
+        <div class="row">
+          <div class="field"><label>쿠폰명</label><input id="cName" class="inp" placeholder="예: 신규가입 축하" style="min-width:180px;"></div>
+          <div class="field"><label>마일리지 금액</label><input id="cAmount" class="inp" type="number" min="1" placeholder="5000" style="width:120px;"></div>
+          <div class="field"><label>대상 회원ID(선택)</label><input id="cUser" class="inp" type="number" placeholder="비우면 범용" style="width:130px;"></div>
+          <div class="field"><label>발급 장수</label><input id="cCount" class="inp" type="number" min="1" value="1" style="width:90px;"></div>
+          <div class="field"><label>유효기간(선택)</label><input id="cExp" class="inp" type="date" style="width:160px;"></div>
+          <button class="btn primary" onclick="issueCoupon()">발급</button>
+        </div>
+        <div id="cmsg" class="msg"></div>
+        <div class="hint">대상 회원ID는 회원관리 탭에서 확인하거나, 회원 행의 "쿠폰발급" 버튼으로 자동 입력됩니다.</div>
+      </div>
+      <div class="card">
+        <h2>발급 내역 <button class="btn mini" onclick="loadCoupons()" style="float:right;">새로고침</button></h2>
+        <div class="scroll">
+          <table class="mtbl">
+            <thead><tr><th>코드</th><th>쿠폰명</th><th>마일리지</th><th>대상</th><th>상태</th><th>유효기간</th><th>발급일</th><th></th></tr></thead>
+            <tbody id="cbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section data-sec="kakao" style="display:none">
+      <h1>카카오톡 자동발송</h1>
+      <div class="sub">뉴스·매각예정·매각완료를 지정한 방에 <b>정기</b>(매일 지정 시각) 또는 <b>즉시</b> 발송합니다. 카카오톡 PC버전에 로그인된 이 PC(로컬 4011)에서만 동작하며, 발송 순간 몇 초간 마우스/키보드가 자동 조작되니 PC를 건드리지 마세요.</div>
+      <div id="kbCards" class="sub" style="margin-top:6px;">불러오는 중…</div>
+
+      <div class="card" style="margin-top:18px;">
+        <h2>수동 발송(임의 메시지)</h2>
+        <div class="field" style="margin-bottom:10px;">
+          <label>방 이름 (여러 방은 콤마로 구분 — 카카오톡에 보이는 이름과 정확히 일치)</label>
+          <input id="kChat" class="inp" placeholder="예: 나와의 채팅   또는   공지방A,공지방B" style="max-width:520px;">
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <label>메시지</label>
+          <textarea id="kMsg" class="inp" rows="5" placeholder="보낼 내용" style="max-width:520px;resize:vertical;font-family:inherit;"></textarea>
+        </div>
+        <div class="btns">
+          <button class="btn primary" onclick="sendKakao(true)">즉시 전송</button>
+          <button class="btn" onclick="sendKakao(false)">입력만(수동 Enter)</button>
+        </div>
+        <div id="kmsg" class="msg"></div>
+        <div class="hint">※ 방 이름이 정확히 일치해야 하며, 없는 방이면 오류가 납니다. 전송 순간 클립보드 내용이 바뀔 수 있습니다.</div>
+      </div>
+    </section>
+    <section data-sec="aikb" style="display:none">
+      <h1>AI 학습자료</h1>
+      <div class="sub">우측 하단 AI 챗봇이 답변에 활용할 자료를 등록합니다. PDF(스캔본은 자동 OCR)·텍스트(.txt) 지원. 여러 개 등록하면 챗봇이 종합해서 답합니다.</div>
+      <div class="card">
+        <h2>자료 추가</h2>
+        <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center">
+          <input id="aikbTitle" class="inp" placeholder="자료 제목 (예: 대출규제, 경매절차, 세금)" style="min-width:220px">
+          <input type="file" id="aikbFile" accept=".pdf,.txt" class="inp">
+          <button class="btn primary" onclick="uploadAiKb()">업로드 · 학습</button>
+          <span id="aikbMsg" class="sub" style="margin:0"></span>
+        </div>
+        <div class="hint">※ 스캔 PDF는 GPT Vision으로 읽어 시간이 좀 걸립니다(카카오 설정에 GPT 키 필요).</div>
+      </div>
+      <div class="card">
+        <h2>등록된 자료 <span id="aikbTotal" style="font-size:13px;color:var(--muted);font-weight:400"></span></h2>
+        <div id="aikbList" class="sub">불러오는 중…</div>
+      </div>
+    </section>
+  </div>
+</div>
+<script>
+const KINDS=[["brief","준공·세대·승강기"],["apt","아파트정보·실거래"],["nearby","주변 유사 실거래"],
+             ["analysis","권리분석(등기)"],["appraisal","물건현황(감정평가)"],["docsummary","명세서요약"],["vehicle","차량"]];
+async function init(){
+  let me;
+  try{ const r=await fetch("/admin/me"); if(!r.ok) throw r.status; me=await r.json(); }
+  catch(s){
+    document.getElementById("gate").innerHTML=
+      `<div class="card"><b>${s===403?"관리자 권한이 없습니다.":"로그인이 필요합니다."}</b>`+
+      `<div class="hint">관리자 계정으로 <a href="/static/login.html">로그인</a> 후 다시 접속하세요.</div></div>`;
+    return;
+  }
+  document.getElementById("who").textContent=`${me.name||me.email} (관리자)`;
+  document.getElementById("panel").style.display="";
+  fetchGrades();                       // 회원 등급 드롭다운용 미리 로드
+  refresh(); setInterval(refresh, 5000);
+}
+const LABELS={'':'전체','docs':'문서','villa_est':'빌라 시세','apt':'아파트 시세','car':'차량 시세','nearby':'주변 유사거래'};
+async function run(only){
+  const m=document.getElementById("msg"); m.textContent="요청 중…"; m.className="msg";
+  try{
+    const r=await fetch("/admin/prewarm?only="+encodeURIComponent(only),{method:"POST"});
+    const d=await r.json();
+    if(d.started){ m.textContent=`예열 시작: ${LABELS[only]||only}`; m.className="msg ok"; }
+    else{ m.textContent=`시작 안 됨: ${d.reason||"이미 실행 중"}`; m.className="msg err"; }
+    refresh();
+  }catch(e){ m.textContent="실패: "+e; m.className="msg err"; }
+}
+async function refresh(){
+  try{
+    const d=await (await fetch("/admin/prewarm/status")).json();
+    document.getElementById("liverun").innerHTML = d.running? `<span class="run">예열 실행 중</span>`:"";
+    document.getElementById("statbody").innerHTML = KINDS.map(([k,label])=>
+      `<tr><th>${label}</th><td class="n">${(d.counts[k]??0).toLocaleString()}건</td></tr>`
+    ).join("") + `<tr><th>합계</th><td class="n">${(d.total||0).toLocaleString()}건</td></tr>`;
+    const log=document.getElementById("log");
+    if(d.log && d.log.length){ log.style.display=""; log.textContent=d.log.join("\n"); log.scrollTop=log.scrollHeight; }
+    else log.style.display="none";
+  }catch(e){}
+}
+
+// ── 탭 ──
+function showTab(t){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on', b.dataset.tab===t));
+  document.querySelectorAll('[data-sec]').forEach(s=>s.style.display = s.dataset.sec===t ? '' : 'none');
+  if(t==='members' && !document.getElementById('mbody').children.length) loadMembers();
+  if(t==='grades' && !document.getElementById('gbody').children.length) loadGrades();
+  if(t==='boards' && !document.getElementById('bbody').children.length) loadBoards();
+  if(t==='coupons' && !document.getElementById('cbody').children.length) loadCoupons();
+  if(t==='kakao') loadKakaoConfig();
+  if(t==='aikb') loadAiKb();
+}
+function esc(s){ return (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function won(n){ return (n||0).toLocaleString(); }
+
+// ── 회원관리 ──
+async function loadMembers(){
+  if(!GRADES.length) await fetchGrades();        // 등급 드롭다운 옵션 보장
+  const q=document.getElementById('msearch').value.trim();
+  const mm=document.getElementById('mmsg'); mm.textContent='불러오는 중…'; mm.className='msg';
+  try{
+    const d=await (await fetch('/admin/users?q='+encodeURIComponent(q))).json();
+    const list=d.users||[];
+    document.getElementById('mbody').innerHTML = list.map(u=>{
+      const roleB = u.role==='admin' ? '<span class="badge admin">관리자</span>' : '회원';
+      const opts = gradeOptions(u.grade);
+      const gradeSel = `<select class="inp mini" onchange="changeGrade(${u.id},this.value)" style="padding:4px 6px">${opts}</select>`;
+      return `<tr>
+        <td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.phone)}</td>
+        <td>${gradeSel}</td><td>${roleB}</td>
+        <td class="n" id="mil-${u.id}">${won(u.mileage)}</td>
+        <td>${esc((u.created_at||'').slice(0,10))}</td>
+        <td style="white-space:nowrap">
+          <input class="inp mini" id="amt-${u.id}" type="number" placeholder="±금액" style="width:84px;">
+          <button class="btn mini" onclick="adjustMileage(${u.id},1)">적립</button>
+          <button class="btn mini" onclick="adjustMileage(${u.id},-1)">차감</button>
+          <button class="btn mini" onclick="prefillCoupon(${u.id})">쿠폰발급</button>
+        </td></tr>`;
+    }).join('') || '<tr><td colspan="9" style="text-align:center;color:#888;padding:14px">회원이 없습니다.</td></tr>';
+    mm.textContent = `${list.length}명`; mm.className='msg ok';
+  }catch(e){ mm.textContent='실패: '+e; mm.className='msg err'; }
+}
+async function adjustMileage(uid, sign){
+  const el=document.getElementById('amt-'+uid);
+  const v=Math.abs(parseInt(el.value,10));
+  if(!v){ alert('금액을 입력하세요.'); return; }
+  const reason = prompt(sign>0?'적립 사유(선택)':'차감 사유(선택)','') || '';
+  try{
+    const r=await fetch('/admin/users/mileage',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({user_id:uid, amount:sign*v, reason})});
+    const d=await r.json();
+    if(!r.ok){ alert(d.detail||'실패'); return; }
+    document.getElementById('mil-'+uid).textContent = won(d.user.mileage);
+    el.value='';
+  }catch(e){ alert('실패: '+e); }
+}
+function prefillCoupon(uid){
+  showTab('coupons');
+  document.getElementById('cUser').value = uid;
+  document.getElementById('cName').focus();
+}
+
+// ── 쿠폰 ──
+async function issueCoupon(){
+  const name=document.getElementById('cName').value.trim();
+  const amount=parseInt(document.getElementById('cAmount').value,10);
+  const uid=document.getElementById('cUser').value.trim();
+  const count=parseInt(document.getElementById('cCount').value,10)||1;
+  const exp=document.getElementById('cExp').value||null;
+  const cm=document.getElementById('cmsg');
+  if(!amount||amount<=0){ cm.textContent='마일리지 금액을 입력하세요.'; cm.className='msg err'; return; }
+  cm.textContent='발급 중…'; cm.className='msg';
+  try{
+    const r=await fetch('/admin/coupons',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:name||'쿠폰', amount, user_id: uid?parseInt(uid,10):null, count, expires_at:exp})});
+    const d=await r.json();
+    if(!r.ok){ cm.textContent=d.detail||'실패'; cm.className='msg err'; return; }
+    const codes=(d.coupons||[]).map(c=>c.code).join(', ');
+    cm.innerHTML=`발급 완료 (${d.coupons.length}장): <code class="cc">${esc(codes)}</code>`; cm.className='msg ok';
+    loadCoupons();
+  }catch(e){ cm.textContent='실패: '+e; cm.className='msg err'; }
+}
+async function loadCoupons(){
+  try{
+    const d=await (await fetch('/admin/coupons')).json();
+    document.getElementById('cbody').innerHTML = (d.coupons||[]).map(c=>{
+      const target = c.user_id ? `${esc(c.user_name||'')} (#${c.user_id})` : '<span class="badge live">범용</span>';
+      const status = c.used ? '<span class="badge used">사용됨</span>' : '<span class="badge live">미사용</span>';
+      const del = c.used ? '' : `<button class="btn mini" onclick="deleteCoupon(${c.id})">회수</button>`;
+      return `<tr>
+        <td><code class="cc">${esc(c.code)}</code></td><td>${esc(c.name)}</td>
+        <td class="n">${won(c.amount)}</td><td>${target}</td><td>${status}</td>
+        <td>${esc(c.expires_at||'무기한')}</td><td>${esc((c.created_at||'').slice(0,10))}</td><td>${del}</td></tr>`;
+    }).join('') || '<tr><td colspan="8" style="text-align:center;color:#888;padding:14px">발급된 쿠폰이 없습니다.</td></tr>';
+  }catch(e){}
+}
+async function deleteCoupon(id){
+  if(!confirm('이 쿠폰을 회수(삭제)할까요?')) return;
+  try{
+    const r=await fetch('/admin/coupons/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+    if(r.ok) loadCoupons(); else alert((await r.json()).detail||'실패');
+  }catch(e){ alert('실패: '+e); }
+}
+
+// ── 등급관리 ──
+let GRADES=[];
+async function fetchGrades(){
+  try{ const d=await (await fetch('/admin/grades')).json(); GRADES=d.grades||[]; }catch(e){ GRADES=[]; }
+}
+function gradeOptions(cur){
+  let names=GRADES.map(g=>g.name);
+  if(cur && !names.includes(cur)) names=[cur,...names];   // 목록에 없는 기존 등급도 표시
+  return names.map(n=>`<option value="${esc(n)}"${n===cur?' selected':''}>${esc(n)}</option>`).join('');
+}
+async function loadGrades(){
+  await fetchGrades();
+  document.getElementById('gbody').innerHTML = GRADES.map(g=>{
+    const lec = `<input type="checkbox" ${g.lecture?'checked':''} onchange="saveGrade(${g.id},{lecture:this.checked})">`;
+    const badge = `<span class="badge" id="gb${g.id}" style="background:${esc(g.color||'#eef2f7')};color:#fff">${esc(g.name)}</span>`;
+    const delBtn = g.name==='무료' ? '' : `<button class="btn mini" onclick="deleteGrade(${g.id},'${esc(g.name)}')">삭제</button>`;
+    const nameCell = g.name==='무료'
+      ? `<td>${esc(g.name)} <span style="color:#aaa;font-size:11px">(기본)</span></td>`
+      : `<td><input class="inp mini" value="${esc(g.name)}" style="width:100px" onchange="renameGrade(${g.id},this)" title="등급명 수정"></td>`;
+    return `<tr>
+      ${nameCell}
+      <td><input class="inp mini" type="number" value="${g.rank}" style="width:70px" onchange="saveGrade(${g.id},{rank:parseInt(this.value,10)})"></td>
+      <td style="text-align:center">${lec}</td>
+      <td>${badge} <input type="color" value="${esc(g.color||'#1f4fa3')}" title="배지색 변경(즉시 저장)"
+        onchange="saveGrade(${g.id},{color:this.value});var b=document.getElementById('gb${g.id}');if(b)b.style.background=this.value;"
+        style="width:34px;height:24px;padding:1px;vertical-align:middle;margin-left:6px;border:1px solid var(--line);border-radius:4px;cursor:pointer;"></td>
+      <td><input class="inp mini" value="${esc(g.comment||'')}" placeholder="코멘트" style="width:200px" onchange="saveGrade(${g.id},{comment:this.value})" title="등급별 코멘트"></td>
+      <td class="n">${won(g.users||0)}</td>
+      <td>${delBtn}</td></tr>`;
+  }).join('') || '<tr><td colspan="7" style="text-align:center;color:#888;padding:14px">등급이 없습니다.</td></tr>';
+}
+async function createGrade(){
+  const name=document.getElementById('gName').value.trim();
+  const rank=parseInt(document.getElementById('gRank').value,10)||0;
+  const lecture=document.getElementById('gLecture').checked;
+  const color=document.getElementById('gColor').value;
+  const comment=document.getElementById('gComment').value;
+  const m=document.getElementById('gmsg');
+  if(!name){ m.textContent='등급명을 입력하세요.'; m.className='msg err'; return; }
+  try{
+    const r=await fetch('/admin/grades',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name,rank,lecture,color,comment})});
+    const d=await r.json();
+    if(!r.ok){ m.textContent=d.detail||'실패'; m.className='msg err'; return; }
+    m.textContent=`'${name}' 등급이 추가되었습니다.`; m.className='msg ok';
+    document.getElementById('gName').value=''; document.getElementById('gComment').value=''; loadGrades();
+  }catch(e){ m.textContent='실패: '+e; m.className='msg err'; }
+}
+async function renameGrade(gid, el){
+  const name=(el.value||'').trim();
+  if(!name){ alert('등급명을 입력하세요.'); loadGrades(); return; }
+  try{
+    const r=await fetch('/admin/grades/'+gid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    if(!r.ok){ alert((await r.json()).detail||'등급명 변경 실패'); }
+    await fetchGrades(); loadGrades();   // 배지·회원 드롭다운 갱신(해당 등급 회원도 일괄 변경됨)
+  }catch(e){ alert('실패: '+e); loadGrades(); }
+}
+async function saveGrade(gid, patch){
+  try{
+    const r=await fetch('/admin/grades/'+gid,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});
+    if(!r.ok){ alert((await r.json()).detail||'저장 실패'); loadGrades(); return; }
+    await fetchGrades();   // 드롭다운 최신화
+  }catch(e){ alert('실패: '+e); }
+}
+async function deleteGrade(gid, name){
+  if(!confirm(`'${name}' 등급을 삭제할까요?\n이 등급 회원은 '무료'로 변경됩니다.`)) return;
+  try{
+    const r=await fetch('/admin/grades/'+gid,{method:'DELETE'});
+    const d=await r.json();
+    if(!r.ok){ alert(d.detail||'실패'); return; }
+    loadGrades();
+    if(d.downgraded) alert(`삭제됨. ${d.downgraded}명이 '무료'로 변경되었습니다.`);
+  }catch(e){ alert('실패: '+e); }
+}
+async function changeGrade(uid, grade){
+  try{
+    const r=await fetch('/admin/users/grade',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({user_id:uid, grade})});
+    if(!r.ok){ alert((await r.json()).detail||'실패'); loadMembers(); }
+  }catch(e){ alert('실패: '+e); }
+}
+
+// ── 게시판관리 ──
+const READ_OPTS=[['all','전체공개'],['user','로그인 회원'],['grade','등급 회원']];
+const WRITE_OPTS=[['admin','관리자'],['user','로그인 회원'],['grade','등급 회원']];
+const CMT_OPTS=[['user','로그인 회원'],['grade','등급 회원'],['off','사용 안 함']];
+function selOf(opts,cur){ return opts.map(([v,t])=>`<option value="${v}"${v===cur?' selected':''}>${t}</option>`).join(''); }
+async function loadBoards(){
+  const bm=document.getElementById('bmsg'); bm.textContent='';
+  try{
+    const d=await (await fetch('/admin/boards')).json();
+    document.getElementById('bbody').innerHTML=(d.boards||[]).map(b=>`
+      <tr>
+        <td>${esc(b.board)}</td>
+        <td><input class="inp mini" id="bt-${b.board}" value="${esc(b.title)}" style="width:110px"></td>
+        <td><select class="inp mini" id="br-${b.board}">${selOf(READ_OPTS,b.read_perm)}</select></td>
+        <td><select class="inp mini" id="bw-${b.board}">${selOf(WRITE_OPTS,b.write_perm)}</select></td>
+        <td><select class="inp mini" id="bc-${b.board}">${selOf(CMT_OPTS,b.comment_perm)}</select></td>
+        <td class="n">${won(b.posts)}</td>
+        <td><button class="btn mini primary" onclick="saveBoard('${b.board}')">저장</button></td>
+      </tr>`).join('');
+  }catch(e){ bm.textContent='실패: '+e; bm.className='msg err'; }
+}
+async function saveBoard(b){
+  const body={title:document.getElementById('bt-'+b).value.trim(),
+    read_perm:document.getElementById('br-'+b).value,
+    write_perm:document.getElementById('bw-'+b).value,
+    comment_perm:document.getElementById('bc-'+b).value};
+  const bm=document.getElementById('bmsg');
+  try{
+    const r=await fetch('/admin/boards/'+b,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok){ bm.textContent=d.detail||'실패'; bm.className='msg err'; return; }
+    bm.textContent=`'${b}' 게시판 권한이 저장되었습니다.`; bm.className='msg ok';
+  }catch(e){ bm.textContent='실패: '+e; bm.className='msg err'; }
+}
+
+// ── 카카오 발송 ──
+async function sendKakao(now){
+  const chat=document.getElementById('kChat').value.trim();
+  const msg=document.getElementById('kMsg').value;
+  const km=document.getElementById('kmsg');
+  if(!chat){ km.textContent='방 이름을 입력하세요.'; km.className='msg err'; return; }
+  if(!msg.trim()){ km.textContent='메시지를 입력하세요.'; km.className='msg err'; return; }
+  if(now && !confirm(`'${chat}' 방에 즉시 전송할까요?\n전송 중 몇 초간 PC(마우스·키보드)를 건드리지 마세요.`)) return;
+  km.textContent = now?'전송 중… (PC 조작 금지)':'입력 중…'; km.className='msg';
+  try{
+    const r=await fetch('/admin/kakao_send',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({chat_name:chat, message:msg, send_now:now})});
+    const d=await r.json();
+    if(!r.ok){ km.textContent=d.detail||'실패'; km.className='msg err'; return; }
+    km.textContent = d.sent ? `전송 완료 → ${esc(d.chat)}` : `입력 완료(카카오톡에서 Enter) → ${esc(d.chat)}`;
+    km.className='msg ok';
+    if(d.sent) document.getElementById('kMsg').value='';
+  }catch(e){ km.textContent='실패: '+e; km.className='msg err'; }
+}
+
+// ── 카카오 자동발송(뉴스/매각예정/매각완료) ──
+const KB_META={
+  news:{icon:'📰',name:'뉴스',desc:'오늘의 부동산 뉴스(이미 보낸 기사 제외). 주말·연휴 중복발송 방지. 기본 13:00.'},
+  upcoming:{icon:'🏠',name:'매각 예정',desc:'다음 매각기일 추천물건 — 매수양호·차익 큰 순, 아파트/다세대·빌라/도시형 각 2건, 예상낙찰가(없으면 최저가) 기준 단기매도 수익. 시세 없으면 제외. 주말·연휴 자동 스킵·중복방지. 기본 10:00.'},
+  sold:{icon:'✅',name:'매각 완료',desc:'직전 매각일 물건 — 실제 낙찰가 기준 단기매도 수익, 유형별 각 2건. 주말·연휴 중복발송 방지. 기본 06:00.'},
+};
+function _kbCard(k){ return document.querySelector('.kbcard[data-k="'+k+'"]'); }
+function _kbToast(k,msg){ const c=_kbCard(k), s=c&&c.querySelector('.kb-status'); if(s) s.textContent=msg; }
+async function loadKakaoConfig(){
+  const box=document.getElementById('kbCards'); box.innerHTML='불러오는 중…';
+  try{
+    const d=await (await fetch('/admin/kakao/config')).json();
+    const cfg=d.config||{};
+    box.innerHTML=['news','upcoming','sold'].map(k=>{
+      const m=KB_META[k], c=cfg[k]||{};
+      const hist=(k==='news') ? ('보낸 기사 '+(c.sent_count||0)+'건')
+                              : (c.sent_date? ('마지막 발송분: '+esc(c.sent_date)) : '발송 이력 없음');
+      const last=c.last? (' · 최근 '+esc(c.last)) : '';
+      const keyRow=(k==='news')?(
+        '<div style="margin-top:10px;">'
+        +'<label style="display:block;font-size:12px;color:var(--muted,#78808c);">OpenAI API 키'
+          +(c.has_openai_key?' <b style="color:#1a7f37;">● 저장됨</b>':' <b style="color:#c1121f;">○ 미설정</b>')+'</label>'
+        +'<input class="inp kb-key" type="text" autocomplete="off" spellcheck="false" value="'+esc(c.openai_key||'')+'" placeholder="sk-... 입력" style="width:360px;">'
+        +'<div class="hint" style="margin-top:3px;">각 기사 본문을 요약해 발송(gpt-4o-mini). 키 없으면 제목+링크만 나갑니다.</div>'
+        +'</div>'):'';
+      return '<div class="kbcard" data-k="'+k+'" style="border:1px solid var(--line,#e2e6ec);border-radius:12px;padding:16px;margin:0 0 14px;background:var(--card,#fff);">'
+        +'<div style="font-weight:800;font-size:16px;">'+m.icon+' '+m.name+' 카카오 발송</div>'
+        +'<div class="sub" style="margin:2px 0 12px;">'+m.desc+'</div>'
+        +'<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'
+          +'<div><label style="display:block;font-size:12px;color:var(--muted,#78808c);">방 이름(콤마로 여러 방)</label>'
+            +'<input class="inp kb-room" value="'+esc(c.room||'')+'" placeholder="예: 공지방A,공지방B" style="width:300px;"></div>'
+          +'<div><label style="display:block;font-size:12px;color:var(--muted,#78808c);">발송 시각</label>'
+            +'<input class="inp kb-time" type="time" value="'+esc(c.time||'')+'" style="width:130px;"></div>'
+          +'<label style="display:flex;align-items:center;gap:6px;padding-bottom:8px;"><input type="checkbox" class="kb-on" '+(c.on?'checked':'')+'> 자동발송</label>'
+          +'<button class="btn" style="margin-bottom:2px;" onclick="saveKakaoCfg(\''+k+'\')">설정 저장</button>'
+        +'</div>'
+        +keyRow
+        +'<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
+          +'<button class="btn" onclick="previewKakao(\''+k+'\')">미리보기</button>'
+          +'<button class="btn primary" onclick="sendNowKakao(\''+k+'\')">지금 발송</button>'
+          +'<span class="kb-status" style="color:var(--muted,#78808c);font-size:13px;">'+hist+last+'</span>'
+        +'</div>'
+        +'<pre class="kb-prev" style="display:none;white-space:pre-wrap;background:#f6f8fa;border-radius:8px;padding:12px;margin-top:10px;max-height:360px;overflow:auto;font-size:13px;line-height:1.5;"></pre>'
+      +'</div>';
+    }).join('');
+  }catch(e){ box.innerHTML='설정을 불러오지 못했습니다: '+esc(String(e)); }
+}
+async function saveKakaoCfg(k){
+  const card=_kbCard(k), body={};
+  body[k]={ room:card.querySelector('.kb-room').value.trim(),
+            time:card.querySelector('.kb-time').value.trim(),
+            on:card.querySelector('.kb-on').checked };
+  if(k==='news'){ const kv=card.querySelector('.kb-key'); if(kv && kv.value.trim()) body[k].openai_key=kv.value.trim(); }
+  try{
+    const r=await fetch('/admin/kakao/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok||!d.ok) throw new Error(d.detail||'저장 실패');
+    _kbToast(k,'✅ 설정 저장됨');
+  }catch(e){ _kbToast(k,'저장 실패: '+String(e.message||e)); }
+}
+async function previewKakao(k){
+  const card=_kbCard(k), pre=card.querySelector('.kb-prev');
+  pre.style.display='block'; pre.textContent='미리보기 생성 중…(수 초 소요)';
+  try{
+    const r=await fetch('/admin/kakao/preview?kind='+k);
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||'실패');
+    pre.textContent = d.text || '(발송할 내용이 없습니다)';
+  }catch(e){ pre.textContent='미리보기 실패: '+String(e.message||e); }
+}
+async function sendNowKakao(k){
+  if(!confirm(KB_META[k].name+'을(를) 지금 발송할까요?\n카카오톡 창이 자동 조작됩니다. PC를 건드리지 마세요.')) return;
+  _kbToast(k,'발송 중…(카카오톡 자동조작, PC 조작 금지)');
+  try{
+    const r=await fetch('/admin/kakao/send_now?kind='+k,{method:'POST'});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.detail||'실패');
+    if(d.started){ _kbToast(k,'📤 '+(d.msg||'발송 시작')); _pollKakaoResult(k,0); }
+    else{ _kbToast(k,(d.ok?'✅ ':'⚠ ')+(d.msg||'')); }
+  }catch(e){ _kbToast(k,'발송 실패: '+String(e.message||e)); }
+}
+async function _pollKakaoResult(k,tries){
+  if(tries>50) return;                       // 최대 ~2.5분 폴링
+  try{
+    const d=await (await fetch('/admin/kakao/config')).json();
+    const lr=((d.config||{})[k]||{}).last_result;
+    if(lr){ _kbToast(k,(lr.ok?'✅ ':'⚠ ')+(lr.msg||'')+' ('+esc(lr.at||'')+')'); return; }   // 재렌더 안 함(입력칸 덮어쓰기 방지)
+  }catch(e){}
+  setTimeout(()=>_pollKakaoResult(k,tries+1), 3000);   // 진행 중 → 3초 후 재확인
+}
+// ── AI 학습자료 ──
+async function loadAiKb(){
+  const box=document.getElementById("aikbList");
+  box.textContent="불러오는 중…";
+  try{
+    const d=await (await fetch("/admin/ai_kb/list")).json();
+    document.getElementById("aikbTotal").textContent="· 총 "+(d.total_chars||0).toLocaleString()+"자";
+    if(!d.items||!d.items.length){ box.innerHTML='<span class="sub" style="margin:0">아직 등록된 자료가 없습니다.</span>'; return; }
+    box.innerHTML=d.items.map(x=>
+      '<div class="setitem" style="align-items:flex-start">'+
+        '<div style="flex:1;min-width:0">'+
+          '<b>'+esc(x.title)+'</b> <span class="sub" style="margin:0">('+(x.chars||0).toLocaleString()+'자)</span>'+
+          '<div class="sub" style="margin:4px 0 0;color:#999;white-space:normal">'+esc(x.preview||'')+'…</div>'+
+        '</div>'+
+        '<span class="x" title="삭제" onclick="deleteAiKb(\''+esc(x.slug)+'\',\''+esc(x.title)+'\')">✕</span>'+
+      '</div>').join("");
+  }catch(e){ box.textContent="목록 로드 실패: "+e; }
+}
+async function uploadAiKb(){
+  const title=document.getElementById("aikbTitle").value.trim();
+  const file=document.getElementById("aikbFile").files[0];
+  const msg=document.getElementById("aikbMsg");
+  if(!title){ msg.textContent="제목을 입력하세요."; return; }
+  if(!file){ msg.textContent="파일을 선택하세요."; return; }
+  msg.textContent="업로드·학습 중… (스캔 PDF는 시간이 걸릴 수 있어요)";
+  const fd=new FormData(); fd.append("title",title); fd.append("file",file);
+  try{
+    const r=await fetch("/admin/ai_kb/upload",{method:"POST",body:fd});
+    const d=await r.json();
+    if(!r.ok){ msg.textContent=d.detail||"업로드 실패"; return; }
+    msg.textContent="✓ 완료 — "+(d.chars||0).toLocaleString()+"자 학습됨";
+    document.getElementById("aikbTitle").value=""; document.getElementById("aikbFile").value="";
+    loadAiKb();
+  }catch(e){ msg.textContent="오류: "+e; }
+}
+async function deleteAiKb(slug,title){
+  if(!confirm("'"+title+"' 자료를 삭제할까요? 챗봇이 더 이상 참고하지 않습니다.")) return;
+  try{ await fetch("/admin/ai_kb/"+encodeURIComponent(slug),{method:"DELETE"}); loadAiKb(); }catch(e){}
+}
+init();
+</script>
+</body>
+</html>

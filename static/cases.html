@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>매각사례</title>
+<style>
+  *{box-sizing:border-box;}
+  body{font-family:'Malgun Gothic','맑은 고딕',system-ui,sans-serif;margin:0;background:#fff;color:#222;}
+  .hd{background:#2c5db0;color:#fff;padding:13px 18px;font-size:15px;font-weight:700;}
+  .sub{padding:9px 18px;background:#eef3fa;font-size:13px;color:#334;border-bottom:1px solid #d6e0ef;}
+  .sub b{color:#1c4587;}
+  .wrap{padding:0 0 40px;overflow-x:auto;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:980px;}
+  th{background:#f0f4fa;color:#46546b;font-weight:600;padding:9px 7px;border-bottom:2px solid #cdd8ea;position:sticky;top:0;white-space:nowrap;}
+  td{padding:10px 7px;border-bottom:1px solid #eee;vertical-align:top;}
+  tr:hover td{background:#f8fafd;}
+  .num{text-align:right;white-space:nowrap;}
+  .ctr{text-align:center;white-space:nowrap;}
+  .sale{color:#c0392b;font-weight:700;}
+  .min{color:#1565c0;font-weight:700;}
+  .sec{color:#888;font-size:11px;}
+  .tags{color:#c0392b;font-size:11px;margin-top:2px;}
+  .empty{padding:60px 20px;text-align:center;color:#999;font-size:14px;}
+</style></head><body>
+<div class="hd" id="hd">매각사례</div>
+<div class="sub" id="sub">불러오는 중…</div>
+<div class="wrap" id="body"></div>
+<script>
+const P=new URLSearchParams(location.search), ik=P.get('item_key'), mode=P.get('mode')||'bunji';
+function won(v){ v=+v||0; if(!v) return '-'; const eok=Math.floor(v/100000000), man=Math.round((v%100000000)/10000); let s=''; if(eok)s+=eok+'억 '; if(man)s+=man.toLocaleString()+'만'; return (s||'0')+'원'; }
+function pct(a,b){ a=+a||0; b=+b||0; return b?Math.round(a/b*100)+'%':'-'; }
+function caseNo(it){ const p=(it.item_key||'').split('|'); let s=(p.length>=3)?(p[1]+'타경'+p[2]):(it.case_no||'-'); if(p[3]&&p[3]!=='1') s+=' 물번'+p[3]; return s; }
+function area(it){ const m=(it.area_text||'').match(/전용\s*([0-9.]+)/); const ld=(it.land_area!=null&&+it.land_area>0)?('대지 '+(+it.land_area).toFixed(0)+'㎡ '):''; return ld+(m?('전용 '+m[1]+'㎡'):(it.area_text||'')); }
+(async()=>{
+  if(!ik){ document.getElementById('sub').textContent=''; document.getElementById('body').innerHTML='<div class=empty>잘못된 접근입니다.</div>'; return; }
+  let d; try{ d=await (await fetch('/auction/sold_cases?item_key='+encodeURIComponent(ik)+'&mode='+encodeURIComponent(mode))).json(); }
+  catch(e){ document.getElementById('body').innerHTML='<div class=empty>불러오기 실패</div>'; return; }
+  document.getElementById('hd').textContent = (mode==='nearby')?'인근 매각물건 (반경 1km)':'해당 번지·건물 매각사례';
+  document.getElementById('sub').innerHTML = (d.subject?d.subject.address:'') + ' &nbsp;·&nbsp; 총 <b>'+(d.count||0)+'</b>건';
+  if(!d.available || !d.cases || !d.cases.length){ document.getElementById('body').innerHTML='<div class=empty>'+(d.reason||'매각사례가 없습니다.')+'</div>'; return; }
+  const dcol = (mode==='nearby');
+  let h='<table><thead><tr><th>사건번호</th><th style="text-align:left">소재지</th>'+(dcol?'<th>거리</th>':'')+'<th>용도</th><th class=num>감정가</th><th class=num>최저가</th><th class=num>매각가</th><th>매각기일<br>입찰인원</th><th>결과<br>최저가율·매각가율</th><th>조회</th></tr></thead><tbody>';
+  d.cases.forEach(it=>{
+    h+='<tr class="crow" data-ik="'+(it.item_key||'')+'"><td class=ctr>'+caseNo(it)+'<div class=sec>'+(it.court_name||'')+'</div></td>'
+     +'<td>'+(it.address||'')+'<div class=sec>'+area(it)+'</div>'+(it.tags?('<div class=tags>'+it.tags+'</div>'):'')+'</td>'
+     +(dcol?('<td class=ctr>'+(it.dist_m!=null?it.dist_m+'m':'-')+'</td>'):'')
+     +'<td class=ctr>'+(it.usage_name||'')+'</td>'
+     +'<td class=num>'+won(it.appraisal_price)+'</td>'
+     +'<td class="num min">'+won(it.min_price)+'</td>'
+     +'<td class="num sale">'+won(it.sale_price)+'</td>'
+     +'<td class=ctr>'+((it.sell_date||'').slice(0,10))+'<div class=sec>'+((it.bid_count!=null&&it.bid_count!=='')?('입찰 '+it.bid_count+'명'):'')+'</div></td>'
+     +'<td class=ctr>'+(it.result||'')+'<div class=sec>'+pct(it.min_price,it.appraisal_price)+' · <b style="color:#c0392b">'+pct(it.sale_price,it.appraisal_price)+'</b></div></td>'
+     +'<td class=ctr>'+(it.hit_count||0)+'</td></tr>';
+  });
+  h+='</tbody></table>';
+  document.getElementById('body').innerHTML=h;
+  document.querySelectorAll('tr.crow').forEach(tr=>{ if(!tr.dataset.ik) return;   // 행 클릭 → 그 물건 상세 새 창
+    tr.style.cursor='pointer'; tr.title='상세 보기 (새 창)';
+    tr.onclick=()=>window.open('/static/auction.html?item_key='+encodeURIComponent(tr.dataset.ik),'_blank','noopener'); });
+})();
+</script>
+</body></html>

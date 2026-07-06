@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JH옥션스쿨 — 법원경매 정보 · 권리분석 · 배당</title>
+<style>
+  :root{
+    --bg:#eef1f5; --card:#fff; --line:#dfe3ea; --label:#eef2fb;
+    --text:#1c1c1a; --muted:#6b6a64; --primary:#1f4fa3; --primary2:#2c5db0;
+    --primary-bg:#eaf1fb; --accent:#3a7bd5; --danger:#c0392b;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);font-size:14px;}
+  a{color:inherit;text-decoration:none;}
+  .sitehead{position:sticky;top:0;z-index:50;}
+  .top{background:var(--card);border-bottom:1px solid var(--line);}
+  .topin{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px;}
+  .minicase{display:flex;align-items:center;gap:6px;}
+  .minicase .t{font-weight:600;color:var(--primary);font-size:13px;white-space:nowrap;}
+  .minicase .ty{color:var(--muted);font-size:13px;white-space:nowrap;}
+  .minicase select,.minicase input{height:30px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;}
+  .minicase input{width:150px;}
+  .minicase .csearch{height:30px;width:34px;border:1px solid var(--primary);background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;}
+  .minicase .csearch:hover{background:#163c80;}
+  .brand{flex:1;text-align:center;font-size:24px;font-weight:700;letter-spacing:-0.5px;color:var(--primary);}
+  .brand span{color:var(--accent);}
+  .util{display:flex;gap:12px;font-size:12px;color:var(--muted);}
+  .util .pay{color:var(--danger);font-weight:600;}
+  .nav{background:var(--card);border-bottom:2px solid var(--primary);}
+  .navin{max-width:1180px;margin:0 auto;padding:0 16px;display:flex;gap:4px;flex-wrap:wrap;}
+  .nav a{padding:14px 18px;font-size:15px;font-weight:600;color:#333;}
+  .nav a:hover,.nav a.on{color:var(--primary);}
+  .wrap{max-width:1180px;margin:18px auto;padding:0 16px;}
+  .grid{max-width:400px;margin:0 0 0 28px;}
+  @media(max-width:1080px){ .grid{grid-template-columns:300px 1fr;} #userBox{display:none;} }
+  /* 로그인 사용자 박스 */
+  .ubox{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px;font-size:13px;align-self:start;}
+  .ubox .hello{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:700;color:var(--primary);margin-bottom:12px;}
+  .ubox .hello span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;}
+  .ubox .lo{font-size:11px;border:1px solid var(--line);border-radius:6px;padding:4px 9px;color:var(--muted);background:#fff;cursor:pointer;text-decoration:none;white-space:nowrap;flex:0 0 auto;}
+  .ubox .krow{display:flex;justify-content:space-between;padding:8px 0;border-top:1px dashed var(--line);}
+  .ubox .krow .k{color:var(--muted);}.ubox .krow .v{font-weight:700;color:var(--text);}
+  .ubox .fav{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-top:1px solid var(--line);margin-top:4px;}
+  .ubox .fav .k{color:var(--muted);}.ubox .fav a{color:var(--primary);font-weight:700;font-size:17px;text-decoration:none;}
+  .ubox .links{display:flex;gap:14px;border-top:1px solid var(--line);padding-top:11px;margin-top:4px;font-size:12px;}
+  .ubox .links a{color:var(--muted);text-decoration:none;}.ubox .links a:hover{color:var(--primary);}
+  .ubox .biglogin{display:block;width:100%;text-align:center;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:11px;font-weight:700;font-size:15px;text-decoration:none;margin-top:4px;cursor:pointer;}
+  .ubox .biglogin:hover{background:#163c80;}
+  .ubox .kakaobtn{display:flex;align-items:center;justify-content:center;gap:7px;width:100%;height:42px;margin-top:9px;background:#FEE500;color:#191600;border-radius:8px;font-weight:700;font-size:14px;text-decoration:none;}
+  .ubox .kakaobtn:hover{background:#f4dc00;}
+  .ubox .sub{font-size:12px;color:var(--muted);margin-bottom:12px;}
+  .ubox .loginhd{font-size:18px;font-weight:700;color:var(--primary);margin-bottom:12px;letter-spacing:.5px;}
+  .ubox input.li{width:100%;height:40px;border:1px solid var(--line);border-radius:8px;padding:0 11px;font-size:14px;margin-bottom:8px;}
+  .ubox input.li:focus{outline:none;border-color:var(--primary);}
+  .ubox .rmb{display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);margin:2px 0 10px;cursor:pointer;}
+  .ubox .loginlinks{text-align:center;font-size:12px;color:var(--muted);margin-top:11px;}
+  .ubox .loginlinks a{color:var(--primary);text-decoration:none;font-weight:600;}
+  .ubox .lmsg{font-size:12px;color:var(--danger);text-align:center;min-height:14px;margin-top:6px;}
+  .panel{background:var(--primary);border-radius:12px;padding:18px;color:#fff;}
+  .panel .tab{display:flex;gap:6px;margin-bottom:14px;}
+  .panel .tab span{flex:1;text-align:center;padding:8px;border-radius:8px;font-size:13px;font-weight:600;background:rgba(255,255,255,.15);}
+  .panel .tab span.on{background:#fff;color:var(--primary);}
+  .panel label{display:block;font-size:12px;margin:12px 0 5px;opacity:.9;}
+  .panel select{width:100%;height:38px;border:none;border-radius:8px;padding:0 10px;font-size:13px;color:var(--text);margin-bottom:4px;}
+  .panel .go{width:100%;height:44px;margin-top:16px;border:none;border-radius:8px;background:#15397a;color:#fff;font-size:16px;font-weight:700;cursor:pointer;}
+  .panel .go:hover{background:#0f2c61;}
+  .hero{background:linear-gradient(0deg,var(--primary-bg),var(--primary-bg));border:1px solid var(--line);border-radius:12px;padding:26px 28px;min-height:200px;display:flex;flex-direction:column;justify-content:center;}
+  .hero h2{font-size:26px;font-weight:700;margin:0 0 8px;color:var(--primary);}
+  .hero p{font-size:15px;color:#46586f;margin:3px 0;}
+  .hero .feat{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
+  .hero .feat span{background:#fff;border:1px solid #cfe0f5;color:var(--primary2);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;}
+  .quick{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap;}
+  .quick a{flex:1;min-width:150px;background:#fff;color:var(--primary);border:1px solid #d4def0;border-radius:10px;padding:16px;display:flex;align-items:center;justify-content:center;text-align:center;gap:10px;font-size:14px;font-weight:700;}
+  .quick a:hover{background:#eef2fb;}
+  .quick .ic{font-size:20px;}
+  .bottom{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;}
+  .box{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;}
+  .box h3{font-size:16px;font-weight:600;margin:0 0 12px;}
+  .calbox{margin-top:0;}
+  /* ── 상단 히어로 영상 섹션: 영상 위에 (로그인박스 | 달력+버튼). video opacity로 투명도 조절 ── */
+  .herovid{position:relative;overflow:hidden;background:#24488c;}
+  .herovid > video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:right 30%;opacity:.5;}
+  .herovid .ov{position:relative;z-index:1;background:linear-gradient(90deg,rgba(8,22,60,.22),rgba(8,22,60,.06) 60%,rgba(8,22,60,0));padding:28px 0;}
+  .herovid .ov .in{max-width:1180px;margin:0 auto;padding:0 40px;}
+  .herorow{display:flex;gap:14px;align-items:flex-start;justify-content:flex-end;}
+  .herocol{width:226px;flex:0 0 226px;}
+  .herocol .ubox{width:100%;margin:0;}
+  .herocard{width:312px;max-width:312px;flex:0 0 auto;}
+  .herocarousel{flex:1;min-width:0;color:#fff;}
+  .hc-head{color:#cfe0ff;font-size:13.5px;margin-bottom:12px;font-weight:600;}
+  .hc-body{display:flex;align-items:center;gap:9px;}
+  .hc-arw{width:30px;height:30px;border-radius:50%;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:20px;line-height:1;cursor:pointer;flex:0 0 auto;}
+  .hc-arw:hover{background:rgba(255,255,255,.3);}
+  .hc-view{flex:1;min-width:0;overflow:hidden;padding:13px 0;margin:-13px 0;}
+  .hc-card{transform-origin:center center;will-change:transform;}
+  .hc-track{display:flex;gap:14px;transition:transform .35s ease;}
+  .hc-card{flex:0 0 calc((100% - 28px)/3);min-width:0;text-decoration:none;display:block;}
+  .hc-ph{position:relative;aspect-ratio:1/1;border-radius:10px;overflow:hidden;background:#16305f;}
+  .hc-ph img{width:100%;height:100%;object-fit:cover;display:block;}
+  .hc-badge{position:absolute;top:8px;right:8px;background:#e8202a;color:#fff;font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;white-space:nowrap;}
+  .hc-cap{position:absolute;left:0;right:0;bottom:0;padding:22px 12px 11px;background:linear-gradient(to top,rgba(0,0,0,.86),rgba(0,0,0,.5) 52%,rgba(0,0,0,0));}
+  .hc-reg{color:#fff;font-size:15px;font-weight:700;line-height:1.25;}
+  .hc-typ{color:#d6e0ee;font-size:12px;margin-top:1px;}
+  .hc-meta{color:#eef3fa;font-size:11.5px;margin-top:3px;font-weight:500;}
+  .hc-dots{display:flex;justify-content:center;gap:6px;margin-top:13px;}
+  .hc-dot{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.3);cursor:pointer;border:none;padding:0;}
+  .hc-dot.on{background:#fff;width:18px;border-radius:4px;}
+  @media(max-width:820px){ .herovid .ov .in{padding:0 18px;} .herorow{flex-direction:column;} .herocol,.herocard{width:100%;max-width:100%;flex:1 1 auto;} }
+  .calhint{font-size:12px;color:var(--muted);margin:-4px 0 12px;}
+  .cal{width:100%;border-collapse:collapse;text-align:center;table-layout:fixed;}
+  .cal th{font-size:11px;color:var(--muted);padding:4px 0;}
+  .cal td{font-size:12px;padding:5px 0;}
+  .cal td.sun{color:var(--danger);}
+  .cal td.today{background:var(--primary);color:#fff;border-radius:50%;font-weight:700;}
+  .cal td.day{cursor:pointer;border-radius:50%;}
+  .cal td.day:hover{background:#e6edf9;}
+  .cal td.day.today:hover{background:var(--primary);}
+  .news li{list-style:none;padding:9px 0;border-bottom:1px dashed var(--line);font-size:13px;display:flex;justify-content:space-between;gap:10px;}
+  .news li:last-child{border:none;}
+  .news .dt{color:var(--muted);font-size:12px;white-space:nowrap;}
+  .news ul{margin:0;padding:0;}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}.bottom{grid-template-columns:1fr}}
+  /* ───── 왜 JH옥션스쿨인가(하단 소개) ───── */
+  .why{margin-top:34px;}
+  .why-band{background:linear-gradient(135deg,#15347e,#2c5db0);color:#fff;}
+  .why-in{max-width:1180px;margin:0 auto;padding:48px 16px;}
+  .why-band .ey{font-size:13px;font-weight:700;letter-spacing:2px;color:#bcd2f5;text-transform:uppercase;}
+  .why-band h2{font-size:30px;font-weight:800;margin:10px 0 12px;line-height:1.3;letter-spacing:-.5px;}
+  .why-band p{font-size:16px;line-height:1.7;color:#dde7f7;margin:0;max-width:760px;}
+  .why-band .stat{display:flex;gap:30px;margin-top:26px;flex-wrap:wrap;}
+  .why-band .stat b{display:block;font-size:30px;font-weight:800;}
+  .why-band .stat span{font-size:13px;color:#cdddf5;}
+  .why-sec{max-width:1180px;margin:0 auto;padding:46px 16px 8px;}
+  .why-sec .hd{text-align:center;margin-bottom:30px;}
+  .why-sec .hd h2{font-size:34px;font-weight:800;margin:0 0 8px;color:var(--primary);letter-spacing:-.5px;}
+  .why-sec .hd p{font-size:15px;color:var(--muted);margin:0;}
+  .why-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  .news-wrap{display:flex;align-items:center;gap:10px;}
+  .news-arw{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--primary);font-size:20px;line-height:1;cursor:pointer;flex:0 0 auto;}
+  .news-arw:hover{background:#f4f7fc;}
+  .news-view{flex:1;min-width:0;overflow:hidden;}
+  .news-track{display:flex;transition:transform .35s ease;}
+  .news-slide{flex:0 0 100%;display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  .news-card{display:block;text-decoration:none;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden;transition:.15s;}
+  .news-card:hover{border-color:var(--primary2);box-shadow:0 2px 12px rgba(20,40,80,.08);}
+  .news-thumb{width:100%;aspect-ratio:16/9;object-fit:cover;background:var(--label);display:block;}
+  .news-body{padding:11px 13px 13px;}
+  .news-title{font-size:14px;font-weight:600;color:var(--text);line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+  .news-src{font-size:12px;color:var(--muted);margin-top:7px;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .news-so{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+  .news-time{flex:0 0 auto;color:var(--primary2);font-weight:600;white-space:nowrap;}
+  .news-dots{display:flex;justify-content:center;gap:6px;margin-top:16px;}
+  .news-dot{width:7px;height:7px;border-radius:50%;background:#cfd6e0;cursor:pointer;border:none;padding:0;}
+  .news-dot.on{background:var(--primary);width:18px;border-radius:4px;}
+  @media(max-width:900px){ .news-slide{grid-template-columns:repeat(2,1fr);} }
+  @media(max-width:620px){ .news-slide{grid-template-columns:1fr;} }
+  .why-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:24px 22px;transition:.15s;}
+  .why-card:hover{border-color:#9fb6e0;box-shadow:0 6px 22px rgba(31,79,163,.08);transform:translateY(-2px);}
+  .why-card .ic{width:48px;height:48px;border-radius:12px;background:var(--primary-bg);display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:14px;}
+  .why-card h3{font-size:17px;font-weight:700;margin:0 0 8px;color:var(--text);}
+  .why-card p{font-size:13.5px;line-height:1.7;color:var(--muted);margin:0;}
+  .why-card h3 .em{color:var(--primary);}
+  .sitefoot{margin-top:40px;background:#222a36;color:#9aa6b6;font-size:12.5px;line-height:1.9;}
+  .sitefoot .fin{max-width:1180px;margin:0 auto;padding:26px 16px;}
+  .sitefoot b{color:#dfe6ef;}
+  @media(max-width:900px){ .why-cards{grid-template-columns:repeat(2,1fr);} }
+  @media(max-width:820px){ .why-band h2{font-size:24px;} .why-cards{grid-template-columns:1fr;} }
+  /* 부동산DB '전국' 스티커 — 점멸 + hover 시 좌우 기울기(프리미엄 스티커와 동일 형식) */
+  @keyframes natlBlink{0%,100%{opacity:1}50%{opacity:.35}}
+  @keyframes natlWobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg)}55%{transform:rotate(9deg)}80%{transform:rotate(-4deg)}}
+  .natllink{position:relative;}
+  .natl-badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.02em;color:#fff;
+    background:linear-gradient(180deg,#3f7ce2,#1f4fa3);border:1px solid #1a4590;border-radius:5px;
+    padding:1px 7px;line-height:16px;white-space:nowrap;
+    animation:natlBlink 1.5s ease-in-out infinite;transform-origin:center;
+    position:absolute;top:3px;right:-15px;box-shadow:0 1px 5px rgba(20,60,120,.45);z-index:3;}
+  .natllink:hover>.natl-badge{animation:natlWobble .55s ease-in-out;}
+  @media(prefers-reduced-motion:reduce){.natl-badge{animation:none!important;}}
+</style>
+</head>
+<body>
+
+<div class="sitehead">
+<div class="top">
+  <div class="topin">
+    <div class="minicase">
+      <span class="t">사건검색</span>
+      <select id="caseYear"><option value="">전체</option></select>
+      <span class="ty">타경</span>
+      <input type="text" id="caseNoIn" placeholder="타경 번호" onkeydown="if(event.key==='Enter')caseSearch()">
+      <button class="csearch" onclick="caseSearch()" aria-label="검색">🔍</button>
+    </div>
+    <div class="brand">JH<span>옥션스쿨</span></div>
+    <div class="util" id="util">
+      <a href="/static/login.html">로그인</a><a href="/static/login.html?tab=signup">회원가입</a><a href="#">원격지원</a><a href="/static/payment.html" class="pay">요금결제</a><a href="#">삭제요청</a>
+    </div>
+  </div>
+</div>
+
+<div class="nav">
+  <div class="navin">
+    <a href="/static/auctions.html" class="on">경매검색</a>
+    <a href="/static/board.html?b=yejung">예정</a><a href="/static/gongmae.html">공매</a>
+    <a href="/static/board.html?b=video">강의</a><a href="/static/board.html?b=community">커뮤니티</a>
+    <a href="/static/board.html?b=data">경매자료실</a><a class="natllink" href="/static/kbdb.html">부동산DB<span class="natl-badge">전국</span></a><a href="/static/board.html?b=support">고객센터</a><a href="#">마이페이지</a>
+  </div>
+</div>
+
+</div>
+
+<!-- 히어로 영상 섹션: 영상 위에 달력 + 경매물건 검색 버튼 -->
+<section class="herovid">
+  <div class="ov"><div class="in">
+    <div class="herorow">
+      <div class="herocarousel" id="heroCarousel" style="display:none">
+        <div class="hc-head">🔥 지금 주목할 물건</div>
+        <div class="hc-body">
+          <button class="hc-arw" id="hcPrev" aria-label="이전">‹</button>
+          <div class="hc-view"><div class="hc-track" id="hcTrack"></div></div>
+          <button class="hc-arw" id="hcNext" aria-label="다음">›</button>
+        </div>
+        <div class="hc-dots" id="hcDots"></div>
+      </div>
+      <div class="herocol">
+        <div class="ubox" id="userBox">
+          <div class="loginhd">LOGIN</div>
+          <input class="li" id="hp_email" type="email" placeholder="이메일" onkeydown="if(event.key==='Enter')homeLogin()">
+          <input class="li" id="hp_pw" type="password" placeholder="비밀번호" onkeydown="if(event.key==='Enter')homeLogin()">
+          <label class="rmb"><input type="checkbox" id="hp_save"> 아이디 저장</label>
+          <button class="biglogin" onclick="homeLogin()">로그인</button>
+          <div class="lmsg" id="hp_msg"></div>
+          <a class="kakaobtn" href="/auth/kakao/login"><span>💬</span> 카카오로 시작하기</a>
+          <div class="loginlinks"><a href="/static/login.html?tab=signup">회원가입</a> &nbsp;|&nbsp; <a href="/static/login.html">ID/PW 찾기</a></div>
+        </div>
+        <div class="quick"><a href="/static/auctions.html">경매물건 검색</a></div>
+      </div>
+    </div>
+  </div></div>
+</section>
+
+<!-- ───────── 왜 JH옥션스쿨인가 ───────── -->
+<section class="why">
+  <div class="why-sec">
+    <div class="hd">
+      <h2>📰 오늘의 뉴스</h2>
+      <p>경매·세금·대출·집값 관련 오늘의 주요 부동산 뉴스입니다.</p>
+    </div>
+    <div class="news-wrap">
+      <button class="news-arw" id="newsPrev" aria-label="이전">‹</button>
+      <div class="news-view"><div class="news-track" id="newsTrack"></div></div>
+      <button class="news-arw" id="newsNext" aria-label="다음">›</button>
+    </div>
+    <div class="news-dots" id="newsDots"></div>
+  </div>
+</section>
+
+<footer class="sitefoot"><div class="fin">
+  <b>JH옥션스쿨</b> · JH컴퍼니 &nbsp;|&nbsp; 경매 물건 탐색 플랫폼<br>
+  경매를 잘 모르는 초보자도 더 쉽고 더 저렴하게 주택을 매수해 자가 마련과 재테크에 닿을 수 있도록 돕습니다.<br>
+  <span style="color:#6b7686;font-size:11.5px">※ 본 사이트는 경매 정보 탐색을 돕는 서비스이며, 투자 결과를 보장하지 않습니다. 입찰·매수 결정과 책임은 이용자 본인에게 있습니다.</span>
+  <div style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,.09);color:#7e8a9c;font-size:12px;line-height:1.75;word-break:keep-all">
+    <b style="color:#aebccf;font-weight:700">주식회사 제이에이치컴퍼니</b> · 대표 노진혁 · 사업자등록번호 831-81-03792 · 통신판매업신고 제2026-경북김천-0107호<br>
+    경상북도 김천시 평화길 64, 401호 · 대표전화 010-5148-8533
+  </div>
+</div></footer>
+
+<script>
+// 로그인 상태에 따라 상단 유틸바 갱신
+(async function(){
+  try{
+    const r = await fetch("/auth/me");
+    const util = document.getElementById("util");
+    if(r.ok){
+      const u = await r.json();
+      util.innerHTML =
+        `<span style="color:var(--primary);font-weight:600">${u.name||u.email}님</span>`+
+        `<a href="/static/login.html?tab=signup" style="display:none"></a>`+
+        `<a href="#" onclick="logout();return false;">로그아웃</a>`+
+        `<a href="/static/mypage.html">정보수정</a>`+
+        `<a href="/static/mypage.html">마이페이지</a>`+
+        `<a href="/static/payment.html" class="pay">요금결제</a>`+
+        (u.role==="admin"?`<a href="/static/admin.html" style="color:#fff;background:#e23b3b;padding:2px 9px;border-radius:6px;font-weight:700;margin-left:5px;text-decoration:none">🔧 관리자</a>`:``);
+      // 좌측 회원 박스(로그인 시): 등급·포인트·관심물건
+      let favCnt=0;
+      try{ favCnt=(await (await fetch("/favorites")).json()).count||0; }catch(_){}
+      const box=document.getElementById("userBox");
+      if(box) box.innerHTML=
+        `<div class="hello"><span>${u.name||u.email} 님! 좋은 하루 되세요.</span>`+
+        `<a class="lo" href="#" onclick="logout();return false;">로그아웃</a></div>`+
+        `<div class="krow"><span class="k">내 등급</span><span class="v">${u.grade||"무료"}</span></div>`+
+        `<div class="krow"><span class="k">내 스피드포인트</span><span class="v">0 P</span></div>`+
+        `<div class="fav"><span class="k">관심저장물건</span><a href="/static/mypage.html">${favCnt}건 ›</a></div>`+
+        `<div class="links"><a href="/static/mypage.html">내 정보</a><a href="/static/mypage.html">달력보기</a><a href="/static/auctions.html">맞춤검색</a></div>`;
+    } else { prefillLogin(); }
+  }catch(e){ prefillLogin(); }
+})();
+function prefillLogin(){
+  const saved=localStorage.getItem("jh_email");
+  const el=document.getElementById("hp_email");
+  if(saved&&el){ el.value=saved; const s=document.getElementById("hp_save"); if(s)s.checked=true; }
+}
+async function homeLogin(){
+  const email=(document.getElementById("hp_email").value||"").trim();
+  const pw=document.getElementById("hp_pw").value;
+  const msg=document.getElementById("hp_msg");
+  if(!email||!pw){ msg.textContent="이메일과 비밀번호를 입력하세요."; return; }
+  const r=await fetch("/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password:pw})});
+  if(r.ok){
+    if(document.getElementById("hp_save").checked) localStorage.setItem("jh_email",email);
+    else localStorage.removeItem("jh_email");
+    location.reload();
+  } else {
+    const d=await r.json().catch(()=>({}));
+    msg.textContent=d.detail||"로그인 실패";
+  }
+}
+async function logout(){ await fetch("/auth/logout",{method:"POST"}); location.reload(); }
+// 사건검색 연도(전체·올해~2008) 채우기
+(function(){
+  const sel=document.getElementById("caseYear"); if(!sel) return;
+  const now=new Date().getFullYear();
+  for(let y=now; y>=2008; y--){ const o=document.createElement("option"); o.value=y; o.textContent=y; sel.appendChild(o); }
+})();
+function caseSearch(){
+  const y=document.getElementById("caseYear").value;
+  const no=document.getElementById("caseNoIn").value.trim();
+  const p=new URLSearchParams();
+  if(y) p.set("year", y);
+  if(no) p.set("caseno", no);   // 타경번호 → case_no 필드 검색(주소 keyword와 분리)
+  location.href="/static/auctions.html"+(p.toString()?"?"+p.toString():"");
+}
+function goSearch(){
+  const p=new URLSearchParams();
+  const kw=document.getElementById("kw").value.trim();
+  const type=document.getElementById("type").value;
+  if(kw)p.set("keyword",kw);
+  if(type)p.set("usage",type);
+  const qs=p.toString();
+  location.href="/static/auctions.html"+(qs?"?"+qs:"");
+}
+// 히어로 추천 물건 캐러셀(차익 상위 12, 3개씩 슬라이드)
+(function(){
+  var slide=0, total=0, track, dots, tries=0;
+  function fmt(n){ n=Math.round(+n||0); if(n>=1e8){ return "+"+(n/1e8).toFixed(1).replace(/\.0$/,"")+"억"; } return "+"+Math.round(n/1e4).toLocaleString()+"만"; }
+  function won2(n){ n=Math.round(+n||0); if(!n)return"-"; if(n>=1e8){ return (n/1e8).toFixed(1).replace(/\.0$/,"")+"억"; } return Math.round(n/1e4).toLocaleString()+"만"; }
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
+  function go(i){ if(!track||!track.children.length)return; slide=Math.max(0,Math.min(i,total-1)); var idx=Math.min(slide*3,track.children.length-1); var x=track.children[idx].offsetLeft-track.children[0].offsetLeft; if(x<0)x=0; track.style.transform="translateX(-"+x+"px)"; if(dots){ for(var j=0;j<dots.children.length;j++) dots.children[j].className="hc-dot"+(j===slide?" on":""); } }
+  function render(items){
+    var box=document.getElementById("heroCarousel"); if(!box)return;
+    track=document.getElementById("hcTrack"); dots=document.getElementById("hcDots");
+    for(var s=items.length-1;s>0;s--){ var r=Math.floor(Math.random()*(s+1)),tm=items[s]; items[s]=items[r]; items[r]=tm; }  // 랜덤 순서(Fisher-Yates)
+    track.innerHTML=items.map(function(p){
+      return '<a class="hc-card" href="/static/auction.html?item_key='+encodeURIComponent(p.item_key)+'">'
+        +'<div class="hc-ph"><img src="'+esc(p.thumb||"")+'" loading="lazy" onerror="this.style.display=\'none\'">'
+        +'<span class="hc-badge">'+fmt(p.profit)+' 차익</span>'
+        +'<div class="hc-cap"><div class="hc-reg">'+esc(p.region)+'</div><div class="hc-typ">'+esc(p.usage)+'</div>'
+        +'<div class="hc-meta">시세 '+won2(p.sise)+' · 예상낙찰 '+won2(p.bid)+'</div></div></div></a>';
+    }).join("");
+    total=Math.ceil(items.length/3);
+    var seq=0, paused=false;                                    // seq=시퀀스 토큰(취소용), paused=hover 정지
+    function cardsOf(s){ var a=[]; for(var k=0;k<3;k++){ var c=track.children[s*3+k]; if(c)a.push(c); } return a; }
+    function pulse(card){                                       // 천천히 확대(강조) → 빠르게 원복
+      card.style.zIndex="5";
+      var a=card.animate(
+        [{transform:"scale(1)"},
+         {transform:"scale(1.06)",offset:0.73,easing:"ease-out"},   // 73% 구간 동안 느리게 확대
+         {transform:"scale(1)",easing:"ease-in"}],                  // 나머지 27% 빠르게 원복
+        {duration:820});
+      return a.finished.catch(function(){}).then(function(){ card.style.zIndex=""; });
+    }
+    function playSlide(){                                       // 현재 슬라이드 3장 순차 강조 → 모두 끝나면 다음
+      var my=++seq, cards=cardsOf(slide), i=0;
+      (function step(){
+        if(my!==seq) return;                                   // 취소됨(수동 이동/재렌더)
+        if(paused){ setTimeout(step,180); return; }            // hover 중이면 대기
+        if(i>=cards.length){                                   // 3장 모두 완료 → 다음 슬라이드
+          setTimeout(function adv(){ if(my!==seq)return; if(paused){setTimeout(adv,180);return;} go((slide+1)%total); playSlide(); }, 260);
+          return;
+        }
+        pulse(cards[i++]).then(function(){ if(my===seq) setTimeout(step, 340); });   // 카드 사이 딜레이(강조 유지)
+      })();
+    }
+    function restart(){ ++seq; playSlide(); }                  // 수동 이동 후 시퀀스 재시작
+    dots.innerHTML="";
+    for(var i=0;i<total;i++){ var b=document.createElement("button"); b.className="hc-dot"+(i===0?" on":""); (function(x){ b.onclick=function(){go(x);restart();}; })(i); dots.appendChild(b); }
+    document.getElementById("hcPrev").onclick=function(){go((slide-1+total)%total);restart();};  // 처음에서 이전 → 끝으로
+    document.getElementById("hcNext").onclick=function(){go((slide+1)%total);restart();};
+    box.style.display="";
+    var relayout=function(){ go(slide); };
+    requestAnimationFrame(function(){ requestAnimationFrame(relayout); });   // 레이아웃 정착 후 재정렬(첫 렌더 밀림 방지)
+    window.addEventListener("resize", relayout);
+    window.addEventListener("load", relayout);
+    [].forEach.call(track.querySelectorAll("img"), function(im){ im.addEventListener("load", relayout); });
+    box.addEventListener("mouseenter", function(){ paused=true; });          // 마우스 올리면 정지
+    box.addEventListener("mouseleave", function(){ paused=false; });
+    playSlide();
+  }
+  function load(){
+    fetch("/hero_picks").then(function(r){return r.json();}).then(function(d){
+      var items=(d&&d.items)||[];
+      if(items.length){ render(items); }
+      else if(tries++<6){ setTimeout(load,4000); }
+    }).catch(function(){ if(tries++<6) setTimeout(load,4000); });
+  }
+  load();
+})();
+// 홈 부동산 뉴스 캐러셀(18건, 6개씩 슬라이드)
+(function(){
+  var slide=0, total=0, track, dots;
+  function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function cleanTitle(t){ return String(t||"").replace(/\s*[-|]\s*[^-|]{1,22}$/,"").trim(); }
+  function timeAgo(iso,hasTime){
+    if(!iso) return "";
+    var d=new Date(iso); if(isNaN(d.getTime())) return "";
+    if(hasTime===false) return (d.getMonth()+1)+"월 "+d.getDate()+"일";
+    var s=(Date.now()-d.getTime())/1000; if(s<0)s=0;
+    if(s<60) return "방금 전";
+    if(s<3600) return Math.floor(s/60)+"분 전";
+    if(s<86400) return Math.floor(s/3600)+"시간 전";
+    var days=Math.floor(s/86400);
+    return days<7 ? days+"일 전" : (d.getMonth()+1)+"월 "+d.getDate()+"일";
+  }
+  function go(i){ if(!track)return; slide=Math.max(0,Math.min(i,total-1)); track.style.transform="translateX(-"+(slide*100)+"%)"; if(dots){ for(var j=0;j<dots.children.length;j++) dots.children[j].className="news-dot"+(j===slide?" on":""); } }
+  function render(items){
+    track=document.getElementById("newsTrack"); dots=document.getElementById("newsDots"); if(!track)return;
+    total=Math.ceil(items.length/6)||1;
+    var html="";
+    for(var s=0;s<total;s++){
+      html+='<div class="news-slide">';
+      for(var k=s*6;k<s*6+6 && k<items.length;k++){
+        var p=items[k];
+        var tstr=timeAgo(p.published,p.has_time);
+        var img=p.image?('<img class="news-thumb" src="'+esc(p.image)+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility=\'hidden\'">'):'<div class="news-thumb"></div>';
+        html+='<a class="news-card" href="'+esc(p.link)+'" target="_blank" rel="noopener">'+img
+          +'<div class="news-body"><div class="news-title">'+esc(cleanTitle(p.title))+'</div>'
+          +'<div class="news-src"><span class="news-so">'+esc(p.source||"")+'</span>'
+          +(tstr?'<span class="news-time">'+esc(tstr)+'</span>':'')
+          +'</div></div></a>';
+      }
+      html+='</div>';
+    }
+    track.innerHTML=html;
+    dots.innerHTML="";
+    for(var d=0;d<total;d++){ var b=document.createElement("button"); b.className="news-dot"+(d===0?" on":""); (function(x){ b.onclick=function(){go(x);}; })(d); dots.appendChild(b); }
+    document.getElementById("newsPrev").onclick=function(){ go((slide-1+total)%total); };
+    document.getElementById("newsNext").onclick=function(){ go((slide+1)%total); };
+    var single=(total<=1), pv=document.getElementById("newsPrev"), nx=document.getElementById("newsNext");
+    if(pv)pv.style.display=single?"none":""; if(nx)nx.style.display=single?"none":"";
+    if(dots)dots.style.display=single?"none":"";
+    go(0);
+  }
+  fetch("/static/data/home_news.json").then(function(r){return r.json();}).then(function(d){
+    var items=(d&&d.items)||[]; if(items.length) render(items);
+  }).catch(function(){});
+})();
+</script>
+<style>
+#aibot-btn{position:fixed;right:22px;bottom:22px;width:60px;height:60px;border-radius:50%;background:#1a73e8;color:#fff;border:none;font-size:22px;font-weight:800;letter-spacing:1px;cursor:pointer;box-shadow:0 6px 20px -4px rgba(26,115,232,.6);z-index:9998;display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:aibotTilt 4.5s ease-in-out infinite,aibotGlow 2.2s ease-in-out infinite;transform-origin:center bottom;}
+@keyframes aibotTilt{0%,84%,100%{transform:rotate(0)}88%{transform:rotate(-13deg)}92%{transform:rotate(13deg)}96%{transform:rotate(-6deg)}}
+@keyframes aibotJump{0%,100%{transform:translateY(0)}45%{transform:translateY(-16px)}}
+@keyframes aibotGlow{0%,100%{box-shadow:0 4px 13px -2px rgba(26,115,232,.5),0 0 10px 1px rgba(26,115,232,.35)}50%{box-shadow:0 4px 17px -2px rgba(26,115,232,.62),0 0 23px 5px rgba(26,115,232,.62)}}
+#aibot-btn:hover{animation:aibotJump .55s ease,aibotGlow 2.2s ease-in-out infinite;}
+#aibot-panel{position:fixed;right:22px;bottom:92px;width:360px;max-width:calc(100vw - 32px);height:520px;max-height:calc(100vh - 130px);background:#fff;border-radius:16px;box-shadow:0 16px 50px -12px rgba(0,0,0,.4);z-index:9998;display:none;flex-direction:column;overflow:hidden;border:1px solid #e3e8ef;}
+#aibot-panel.on{display:flex;}
+.aibot-head{background:#1f4fa3;color:#fff;padding:14px 16px;font-weight:700;display:flex;justify-content:space-between;align-items:center;}
+.aibot-head button{background:none;border:none;color:#fff;font-size:18px;cursor:pointer;}
+#aibot-msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#f6f8fb;}
+.aibot-msg{max-width:82%;padding:10px 13px;border-radius:12px;font-size:14px;line-height:1.55;white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere;}
+.aibot-msg.u{align-self:flex-end;background:#1f4fa3;color:#fff;border-bottom-right-radius:4px;}
+.aibot-msg.a{align-self:flex-start;background:#fff;color:#1c1c1a;border:1px solid #e3e8ef;border-bottom-left-radius:4px;}
+.aibot-input{display:flex;gap:8px;padding:12px;border-top:1px solid #eef1f5;background:#fff;}
+.aibot-input input{flex:1;height:40px;border:1px solid #d5dce6;border-radius:10px;padding:0 12px;font-size:14px;outline:none;}
+.aibot-input input:focus{border-color:#1f4fa3;}
+.aibot-input button{height:40px;padding:0 16px;background:#1f4fa3;color:#fff;border:none;border-radius:10px;font-weight:700;cursor:pointer;}
+.aibot-cards{display:flex;flex-direction:column;gap:10px;align-self:flex-start;width:100%;max-width:290px;}
+.aibot-card{display:block;background:#fff;border:1px solid #e3e8ef;border-radius:12px;overflow:hidden;text-decoration:none;color:#1c1c1a;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.aibot-card:hover{border-color:#1a73e8;box-shadow:0 4px 14px rgba(26,115,232,.22);}
+.aibot-card-img{position:relative;width:100%;height:150px;background:#eef2f8;}
+.aibot-card-img img{width:100%;height:150px;object-fit:cover;display:block;}
+.aibot-card-noimg{width:100%;height:150px;display:flex;align-items:center;justify-content:center;font-size:42px;}
+.aibot-card-badge{position:absolute;top:8px;right:8px;background:#e8202a;color:#fff;font-size:12px;font-weight:700;padding:3px 8px;border-radius:6px;box-shadow:0 2px 6px rgba(0,0,0,.3);}
+.aibot-card-tag{position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,.62);color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;}
+.aibot-card-body{padding:10px 12px 11px;}
+.aibot-card-case{font-size:13px;font-weight:800;color:#1f4fa3;display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.aibot-card-addr{font-size:12px;color:#444;margin:3px 0 6px;line-height:1.45;}
+.aibot-card-prices{font-size:13px;color:#1c1c1a;font-weight:700;}
+.aibot-card-prices .k{color:#6b6a64;font-weight:400;font-size:11px;margin-right:1px;}
+.aibot-card-grade{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;}
+.aibot-card-grade.g-ok{background:#e7f6ec;color:#1f7a3d;}.aibot-card-grade.g-mid{background:#fff4e0;color:#9a6b0b;}.aibot-card-grade.g-no{background:#fdeaea;color:#c0392b;}
+</style>
+<button id="aibot-btn" onclick="aibotToggle()" title="AI 도우미">AI</button>
+<div id="aibot-panel">
+  <div class="aibot-head"><span>🤖 JH옥션스쿨 AI 도우미</span><button onclick="aibotToggle()">✕</button></div>
+  <div id="aibot-msgs"></div>
+  <div class="aibot-input"><input id="aibot-in" placeholder="경매·사이트 이용, 무엇이든 물어보세요" onkeydown="if(event.key===String.fromCharCode(69,110,116,101,114))aibotSend()"><button onclick="aibotSend()">전송</button></div>
+</div>
+<script>
+var aibotHist=[], aibotBusy=false, aibotSeen=[], aibotCtx={}, aibotLast=[];
+function aibotWon(n){n=Math.round(+n||0);if(!n)return"";var e=Math.floor(n/1e8),m=Math.floor((n%1e8)/1e4);var s="";if(e)s+=e+"억";if(m)s+=(e?" ":"")+m.toLocaleString()+"만";return s||n.toLocaleString();}
+function aibotCards(cards){
+  var box=document.getElementById("aibot-msgs");
+  var wrap=document.createElement("div"); wrap.className="aibot-cards";
+  wrap.innerHTML=cards.map(function(c){
+    var pf=c["예상차익"]; var badge=(pf&&pf>0)?('<span class="aibot-card-badge">+'+aibotWon(pf)+' 차익</span>'):"";
+    var gr=c["매수판정"]; var gcls=gr==="매수양호"?"g-ok":(gr==="매수금지"?"g-no":"g-mid");
+    var grade=gr?('<span class="aibot-card-grade '+gcls+'">'+gr+'</span>'):"";
+    var th=c["thumb"]; var img=th?('<img src="'+th+'" onerror="this.parentNode.innerHTML=&#39;<div class=aibot-card-noimg>&#127968;</div>&#39;">'):'<div class="aibot-card-noimg">&#127968;</div>';
+    var tag=c["유형"]?('<span class="aibot-card-tag">'+c["유형"]+'</span>'):"";
+    var appr=c["감정가"]?('<span class="k">감정</span>'+aibotWon(c["감정가"])):"";
+    var low=c["최저가"]?('<span class="k">최저</span>'+aibotWon(c["최저가"])):"";
+    return '<a class="aibot-card" href="'+(c["링크"]||"#")+'" target="_blank">'
+      +'<div class="aibot-card-img">'+img+badge+tag+'</div>'
+      +'<div class="aibot-card-body">'
+      +'<div class="aibot-card-case">'+(c["사건번호"]||"물건")+grade+'</div>'
+      +'<div class="aibot-card-addr">'+(c["소재지"]||"")+'</div>'
+      +'<div class="aibot-card-prices">'+appr+(appr&&low?' · ':'')+low+'</div>'
+      +'</div></a>';
+  }).join("");
+  box.appendChild(wrap); box.scrollTop=box.scrollHeight;
+}
+function aibotToggle(){
+  var p=document.getElementById("aibot-panel");
+  p.classList.toggle("on");
+  if(p.classList.contains("on") && !aibotHist.length) aibotPush("a","안녕하세요! JH옥션스쿨 AI 도우미입니다. 권리분석·예상낙찰가·회원등급 등 궁금한 점을 물어보세요.");
+  if(p.classList.contains("on")) document.getElementById("aibot-in").focus();
+}
+function aibotPush(role,text){
+  var box=document.getElementById("aibot-msgs");
+  var d=document.createElement("div");
+  d.className="aibot-msg "+(role==="u"?"u":"a");
+  d.textContent=text; box.appendChild(d); box.scrollTop=box.scrollHeight;
+  return d;
+}
+async function aibotSend(){
+  if(aibotBusy) return;
+  var inp=document.getElementById("aibot-in");
+  var msg=(inp.value||"").trim(); if(!msg) return;
+  inp.value=""; aibotPush("u",msg); aibotHist.push({role:"user",content:msg});
+  aibotBusy=true; var typing=aibotPush("a","…");
+  try{
+    var r=await fetch("/chat",{method:"POST",headers:{"Content-Type":"application/json"},cache:"no-store",
+      body:JSON.stringify({message:msg,history:aibotHist.slice(-20),seen:aibotSeen.slice(-40),ctx:aibotCtx,last:aibotLast})});
+    var d=await r.json();
+    typing.textContent=d.reply||"죄송합니다. 답변을 받지 못했습니다.";
+    aibotHist.push({role:"assistant",content:typing.textContent+(d.list_text||"")}); if(d.used_args&&Object.keys(d.used_args).length)aibotCtx=d.used_args; if(d.cards&&d.cards.length){aibotLast=d.cards;aibotCards(d.cards);d.cards.forEach(function(c){if(c.item_key)aibotSeen.push(c.item_key);});}
+  }catch(e){ typing.textContent="죄송합니다. 연결 오류가 발생했습니다."; }
+  aibotBusy=false;
+}
+</script>
+</body>
+</html>
