@@ -2005,6 +2005,11 @@ def auctions(
     offset: int = 0,
 ) -> dict:
     usage = _expand_vehicle_usages(usage)         # SUV/승용자동차 → 실제 모델명 usage_name 집합
+    if caseno:   # 사건번호 = 특정 물건 직접조회 → 목록 좁히는 필터(등급/유형/특수/지역/법원/상태) 전부 무시.
+        grade = type_filter = fuel = brand = zone = special = None   #  매수판정 등이 localStorage로 복원돼 사건번호 검색에
+        buy_ok = False                                                #  AND로 걸려, 그 물건 등급/유형이 필터와 다르면 0건 나오던 버그
+        barea_min = barea_max = invest_min = invest_max = None        #  (2025타경100006=매수금지 물건이 매수양호 필터에 걸려 사라짐)
+        group = usage = keyword = region = regions = sido = court = court_code = status = None
     _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로(IN-리스트 회피)
     item_keys = _combine_item_keys(_type_filter_keys(type_filter), _fuel_filter_keys(fuel),
                                    _brand_filter_keys(brand), _zone_filter_keys(zone),
@@ -2085,6 +2090,11 @@ def auction_stats(
 ) -> dict:
     """현재 검색조건 기준 물건 상태별 건수(물건통계)."""
     usage = _expand_vehicle_usages(usage)         # SUV/승용자동차 → 실제 모델명 usage_name 집합
+    if caseno:   # 사건번호 = 특정 물건 직접조회 → 목록 좁히는 필터 전부 무시(위 /auctions 와 동일, 물건통계도 0 나오던 버그)
+        grade = type_filter = fuel = brand = zone = special = None
+        buy_ok = False
+        barea_min = barea_max = invest_min = invest_max = None
+        group = usage = keyword = region = sido = court = court_code = None
     _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로
     item_keys = _combine_item_keys(_type_filter_keys(type_filter), _fuel_filter_keys(fuel),
                                    _brand_filter_keys(brand), _zone_filter_keys(zone),
