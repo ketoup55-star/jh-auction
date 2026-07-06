@@ -7332,11 +7332,21 @@ def _chat_search_properties(args: dict, exclude_keys=None) -> dict:
 
 
 @app.post("/chat")
-def chat_bot(body: dict = Body(...)) -> dict:
-    """사이트 안내 + 실제 물건 검색·추천 AI 챗봇. openai_key 재사용, GPT function calling."""
+def chat_bot(body: dict = Body(...), sid: Optional[str] = Cookie(None)) -> dict:
+    """사이트 안내 + 실제 물건 검색·추천 AI 챗봇. openai_key 재사용, GPT function calling.
+    물건 검색·조회(카드)는 프리미엄 등급 이상(또는 관리자) 전용 — 일반 안내는 누구나."""
     msg = (body.get("message") or "").strip()
     if not msg:
         return {"reply": "무엇을 도와드릴까요? 지역·예산·유형을 알려주시면 실제 물건도 찾아드려요."}
+    # 물건 검색·조회 게이트용 등급 판정(비로그인/무료=미허용, 프리미엄 rank≥20 또는 admin=허용)
+    try:
+        _cu = user_store.get_user_by_session(sid) if sid else None
+    except Exception:
+        _cu = None
+    _is_premium = bool(_cu and (_cu.get("role") == "admin" or _user_grade_rank(_cu) >= _PREMIUM_MIN_RANK))
+    _PREMIUM_GATE = {"reply": "AI 물건 검색·조회는 프리미엄 등급 이상 회원 전용이에요. 요금제에서 프리미엄으로 올리시면 "
+                              "조건에 맞는 실제 경매 물건을 AI가 바로 찾아드립니다. (사이트 이용법·경매 기초·용어는 지금도 얼마든지 물어보세요!)",
+                     "cards": [], "used_args": {}, "list_text": ""}
     key = ""
     try:
         st = _kb().load_state()
@@ -7404,6 +7414,9 @@ def chat_bot(body: dict = Body(...)) -> dict:
             _tc = ({"type": "function", "function": {"name": "search_properties"}}
                    if (_filter_intent or any(_k in msg for _k in ("물건", "추천", "매물", "투자", "구입", "찾아", "살 만", "나와", "보여")))
                    else "auto")
+        # [게이트] 물건 검색/조회(도구 강제)를 프리미엄 미만이 요청하면 GPT 호출 없이 안내
+        if _tc != "auto" and not _is_premium:
+            return _PREMIUM_GATE
         r = httpx.post(url, headers=hdr,
                        json={"model": "gpt-4o-mini", "messages": msgs,
                              "tools": _CHAT_TOOLS, "tool_choice": _tc,
@@ -7412,6 +7425,8 @@ def chat_bot(body: dict = Body(...)) -> dict:
             return {"reply": "죄송합니다. 답변 생성에 실패했습니다. 잠시 후 다시 시도해 주세요."}
         choice = ((r.json().get("choices") or [{}])[0].get("message", {})) or {}
         tcs = choice.get("tool_calls")
+        if tcs and not _is_premium:       # [게이트] auto였는데 GPT가 물건 도구를 부른 경우도 차단
+            return _PREMIUM_GATE
         if tcs:
             _detail_msgs = []             # get_property_detail 결과(2차 GPT로 자연어화)
             for tc in tcs:
