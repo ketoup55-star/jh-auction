@@ -104,6 +104,7 @@
   .kaptrow{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:2px;}.kaptrow:empty{display:none;}
   .kapt{font-size:11px;color:var(--primary);font-weight:600;flex-basis:100%;}.kapt:empty{display:none;}   /* 준공/세대/승강기는 한 줄 독점 → 매수·위반 등 배지는 아랫줄로 */
   .gradechip{}.gradechip:empty{display:none;}
+  .carspec{font-size:13px;font-weight:600;color:var(--text);}   /* 목록 차량 스펙(연식·주행거리·연료) 글씨 키움 */
   .zonerow{margin-top:2px;}
   .zonechip{display:inline-block;font-size:11px;font-weight:700;border-radius:5px;padding:1px 7px;background:#eef4ff;color:#2c5db0;border:1px solid #cfe0ff;}
   .gbadge{display:inline-block;font-size:11px;font-weight:700;border-radius:5px;padding:1px 7px;}
@@ -976,7 +977,7 @@ async function fillAptBriefs(attempt){
         if(r.year) parts.push("연식 "+r.year);
         if(r.mileage){ parts.push("주행거리 "+r.mileage); const km=parseInt((""+r.mileage).replace(/[^0-9]/g,""),10); if(!isNaN(km)) el.dataset.km=km; }
         if(r.fuel) parts.push(`연료 <span class="fueltag" onclick="event.stopPropagation();pickFuel('${r.fuel}')">${r.fuel}</span>`);  // 클릭=그 연료로 필터
-        el.innerHTML=(parts.length?parts.join(" · ")+" ":"")+buyBadge(r.grade);
+        el.innerHTML=(parts.length?'<span class="carspec">'+parts.join(" · ")+'</span> ':"")+buyBadge(r.grade);
         const tr=el.closest('tr'); if(tr) tr.dataset.buy = r.grade ? (r.grade.ok?'ok':'no') : 'na';
         return;
       }else{
@@ -1080,7 +1081,7 @@ function prefillFromResponse(list){
         if(r.year) parts.push("연식 "+r.year);
         if(r.mileage){ parts.push("주행거리 "+r.mileage); const km=parseInt((""+r.mileage).replace(/[^0-9]/g,""),10); if(!isNaN(km)) el.dataset.km=km; }
         if(r.fuel) parts.push(`연료 <span class="fueltag" onclick="event.stopPropagation();pickFuel('${r.fuel}')">${r.fuel}</span>`);
-        el.innerHTML=(parts.length?parts.join(" · ")+" ":"")+buyBadge(r.grade);
+        el.innerHTML=(parts.length?'<span class="carspec">'+parts.join(" · ")+'</span> ':"")+buyBadge(r.grade);
         const tr=el.closest('tr'); if(tr) tr.dataset.buy = r.grade ? (r.grade.ok?'ok':'no') : 'na';
       }else{
         if(r.build_year){ parts.push("준공 "+r.build_year+"년"); el.dataset.year=r.build_year; }
