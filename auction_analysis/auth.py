@@ -368,7 +368,30 @@ class UserStore:
             "SELECT * FROM users WHERE provider=%s AND provider_id=%s",
             (provider, provider_id), fetch="one")
         if r:
-            return _user_dict(r)
+            u = _user_dict(r)
+            # 재로그인 소급 갱신: 카카오가 이번에 실제 닉네임/이메일을 주면 기존 '카카오회원'·합성이메일을 채운다.
+            new_name = (name or "").strip()
+            real_email = (email or "").strip().lower()
+            sets, vals = [], []
+            if new_name and new_name != f"{provider}회원" and (u.get("name") or "") != new_name:
+                sets.append("name=%s"); vals.append(new_name)
+            if real_email and "@" in real_email and (u.get("email") or "").endswith(f"@{provider}.local"):
+                sets.append("email=%s"); vals.append(real_email)
+            if sets:
+                try:
+                    self._ex(f"UPDATE users SET {', '.join(sets)} WHERE id=%s",
+                             tuple(vals) + (u["id"],), fetch="rowcount")
+                    u = self.get_user(u["id"])
+                except psycopg.errors.UniqueViolation:        # 실제이메일이 이미 다른 계정에 있음 → 이름만 갱신
+                    try:
+                        if new_name and new_name != f"{provider}회원" and (u.get("name") or "") != new_name:
+                            self._ex("UPDATE users SET name=%s WHERE id=%s", (new_name, u["id"]), fetch="rowcount")
+                            u = self.get_user(u["id"])
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+            return u
 
         # email 미동의 시 합성 이메일로 UNIQUE 제약 충족. 충돌 시에도 합성으로 폴백.
         synthetic = f"{provider}_{provider_id}@{provider}.local"

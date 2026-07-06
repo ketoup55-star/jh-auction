@@ -79,12 +79,16 @@ th{background:#f6f8fa;color:#555;font-weight:600;position:sticky;top:0}
   <!-- 관리자 토큰 (관리자에게만 표시) -->
   <div class="card" id="tokenCard" style="display:none">
     <h2>🔑 KB siteToken <span style="font-size:12px;color:var(--muted);font-weight:400">(관리자 전용 · Supabase 공유)</span></h2>
-    <div class="sub">kbland.kr 카카오 로그인 → F12 콘솔 <code>JSON.parse(localStorage.vuex).member.siteToken</code> 값을 넣으면 로컬·클라우드가 함께 씁니다. 만료 시 여기서 한 번만 갱신.</div>
+    <div class="sub">kbland.kr 카카오 로그인 → F12 콘솔 <code>JSON.parse(localStorage.vuex).member</code> 에서 값 복사. 로컬·클라우드가 함께 씁니다.<br>
+      <b style="color:var(--primary)">✅ refreshToken을 넣으면 siteToken(수명 ~2일)이 만료 전 자동 재발급</b>되어 다시 넣을 필요가 없습니다(카카오 재로그인·CAPTCHA 불필요).</div>
     <div class="tokrow">
-      <input id="kbtoken" class="inp" placeholder="siteToken 붙여넣기 (예: 7305a96b-....)" style="flex:1;min-width:280px" autocomplete="off">
-      <button class="btn primary" onclick="saveToken()">토큰 저장</button>
+      <input id="kbrefresh" class="inp" placeholder="refreshToken 붙여넣기 (자동갱신·권장, 예: c610a62d-....)" style="flex:1;min-width:280px" autocomplete="off">
+      <button class="btn primary" onclick="saveToken()">저장</button>
       <button class="btn" onclick="testToken()">유효성 테스트</button>
       <span id="tokenStatus" class="sub" style="margin:0"></span>
+    </div>
+    <div class="tokrow" style="margin-top:8px">
+      <input id="kbtoken" class="inp" placeholder="(선택) siteToken만 직접 쓰려면 여기에 — 이 경우 자동갱신 없음" style="flex:1;min-width:280px" autocomplete="off">
     </div>
   </div>
 
@@ -341,14 +345,16 @@ async function checkAdmin(){
 }
 async function saveToken(){
   const tok=document.getElementById('kbtoken').value.trim();
+  const rt=document.getElementById('kbrefresh').value.trim();
   const st=document.getElementById('tokenStatus');
-  if(!tok){ st.textContent='토큰을 입력하세요.'; return; }
-  st.textContent='저장 중…';
+  if(!tok && !rt){ st.textContent='refreshToken(권장) 또는 siteToken을 입력하세요.'; return; }
+  st.textContent=rt?'refreshToken 검증·siteToken 발급 중…':'저장 중…';
   try{
-    const r=await fetch('/admin/kb/set_token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok})});
+    const r=await fetch('/admin/kb/set_token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:tok,refresh_token:rt})});
     const d=await r.json();
     if(!r.ok) throw new Error(d.detail||'실패');
-    document.getElementById('kbtoken').value='';
+    document.getElementById('kbtoken').value=''; document.getElementById('kbrefresh').value='';
+    st.textContent=d.auto_refresh?('✅ 저장 완료 — 자동갱신 켜짐(siteToken ~'+(d.expires_hours||45)+'h마다 자동 재발급)'):'저장 완료(자동갱신 없음)';
     checkAdmin();
   }catch(e){ st.textContent='저장 실패: '+String(e.message||e); }
 }
@@ -368,7 +374,7 @@ async function testToken(){
 function logout(){ fetch("/auth/logout",{method:"POST"}).then(function(){location.href="/";}); }
 (function(){ var s=document.getElementById("caseYear"); if(!s)return; var n=new Date().getFullYear(); for(var y=n;y>=2008;y--){var o=document.createElement("option");o.value=y;o.textContent=y;s.appendChild(o);} })();
 function caseSearch(){ var y=document.getElementById("caseYear").value, no=document.getElementById("caseNoIn").value.trim(); var p=new URLSearchParams(); if(y)p.set("year",y); if(no)p.set("keyword",no); location.href="/static/auctions.html"+(p.toString()?"?"+p.toString():""); }
-fetch("/auth/me",{cache:"no-store"}).then(function(r){return r.json();}).then(function(u){ var el=document.getElementById("util"); if(!el)return; if(u&&(u.email||u.name)){ el.innerHTML='<span style="color:var(--primary);font-weight:600">'+(u.name||u.email)+'님</span> <a onclick="logout()">로그아웃</a> <a href="/static/mypage.html">정보수정</a> <a href="/static/mypage.html">마이페이지</a> <a href="/static/payment.html" class="pay">요금결제</a>'; } }).catch(function(){});
+fetch("/auth/me",{cache:"no-store"}).then(function(r){return r.json();}).then(function(u){ var el=document.getElementById("util"); if(!el)return; if(u&&(u.email||u.name)){ el.innerHTML='<span style="color:var(--primary);font-weight:600">'+(u.name||u.email)+'님</span> <a onclick="logout()">로그아웃</a> <a href="/static/mypage.html">정보수정</a> <a href="/static/mypage.html">마이페이지</a> <a href="/static/payment.html" class="pay">요금결제</a>'+(u.role==="admin"?'<a href="/static/admin.html" style="color:#fff;background:#e23b3b;padding:2px 9px;border-radius:6px;font-weight:700;margin-left:5px;text-decoration:none">🔧 관리자</a>':''); } }).catch(function(){});
 (async function initKb(){       // 페이지 진입 게이트 — 전국 등급 이상만(로그아웃/무료 진입 차단)
   let ok=false;
   try{

@@ -410,9 +410,10 @@ class SupabaseSource:
                  fail_min=None, fail_max=None, barea_min=None, barea_max=None,
                  sell_from=None, sell_to=None, buy_grade=None) -> list[tuple]:
         """PostgREST 필터를 (key,value) 튜플 리스트로. 같은 컬럼 범위(gte+lte) 지원."""
-        if (result_prefix in _PAST_PREFIXES or sell_from or sell_to) and data_class == "현황":
-            # 매각·종결(과거) 상태 OR 매각기일 날짜범위 조회 시 백데이터(과거 매각분)도 함께 노출
-            #  ('전체'로 특정 날짜 조회 시 그날 매각된 물건이 백데이터라 빠지던 버그 픽스)
+        if (result_prefix in _PAST_PREFIXES or sell_from or sell_to or caseno) and data_class == "현황":
+            # 매각·종결(과거) 상태 OR 매각기일 날짜범위 OR **사건번호 검색** 시 백데이터(과거 매각분)도 함께 노출
+            #  ('전체'로 특정 날짜 조회 시 그날 매각된 물건이 백데이터라 빠지던 버그 + 사건번호로 검색해도
+            #   매각완료 물건(백데이터)이 안 나오던 버그 픽스 — 특정 사건번호는 상태 무관하게 찾아야 함)
             f: list[tuple] = [("data_class", "in.(현황,백데이터)")]
         else:
             f: list[tuple] = [("data_class", f"eq.{data_class}")]

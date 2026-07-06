@@ -500,7 +500,7 @@ def _area_warm() -> None:
         pass
 
 
-_invest_idx: dict = {"ts": 0.0, "map": None}   # item_key -> 투자금(단기매도 선금=총필요금액−종소세). min_price+area_text 산출.
+_invest_idx: dict = {"ts": 0.0, "map": None, "building": False}   # item_key -> 투자금(단기매도 선금=총필요금액−종소세). min_price+area_text 산출.
 
 
 def _invest_of(min_price, excl_area) -> int:
@@ -522,11 +522,26 @@ def _invest_of(min_price, excl_area) -> int:
 
 
 def _invest_index(force: bool = False) -> dict:
-    """전 물건의 투자금(선금) 색인 — min_price+area_text(전용/건물 ㎡)로 _invest_of 산출. 30분 캐시."""
+    """전 물건의 투자금(선금) 색인 — min_price+area_text(전용/건물 ㎡)로 _invest_of 산출.
+    30분 메모리캐시 + **Supabase 공유캐시**(클라우드는 25페이지 재계산=14초 없이 즉시 읽기).
+    요청 경로는 캐시(메모리→Supabase) 즉답, 없으면 백그라운드 1회 빌드(요청 stall 방지)."""
     import time as _t
     m = _invest_idx["map"]
     if m is not None and not force and _t.time() - _invest_idx["ts"] < 1800:
         return m
+    if not force:                                   # 요청 경로: Supabase 공유캐시 우선(클라우드 즉답)
+        try:
+            cached = (auction_db.cache_get_many(["invest_index"]) or {}).get("invest_index")
+            if isinstance(cached, dict) and cached:
+                _invest_idx["map"] = cached
+                _invest_idx["ts"] = _t.time()
+                return cached
+        except Exception:
+            pass
+        if not _invest_idx.get("building"):         # 캐시 없음 → 백그라운드 1회 빌드(14초 블로킹 안 함)
+            _invest_idx["building"] = True
+            threading.Thread(target=_invest_warm, daemon=True).start()
+        return _invest_idx["map"] or {}
     import re as _re
     out: dict = {}
     off = 0
@@ -555,6 +570,11 @@ def _invest_index(force: bool = False) -> dict:
     if out:
         _invest_idx["map"] = out
         _invest_idx["ts"] = _t.time()
+        try:
+            auction_db.cache_save("invest_index", out)      # 공유 → 클라우드가 재계산 없이 읽음
+        except Exception:
+            pass
+    _invest_idx["building"] = False
     return _invest_idx["map"] or {}
 
 
@@ -7166,7 +7186,8 @@ _CHAT_TOOLS = [{
         "description": "실제 진행 중인 경매 물건을 조건으로 검색해 추천한다. 사용자가 지역·예산·물건유형으로 '투자 가능한 물건', '어떤 물건 있어?', '추천해줘' 등을 물으면 반드시 호출한다.",
         "parameters": {"type": "object", "properties": {
             "sido": {"type": "string", "description": "시/도. 예: 대구, 서울, 부산, 경기. 사용자가 '전국·지방 전체·규제 없는 곳·어디든·넓혀서'처럼 특정 시/도를 벗어난 넓은 범위를 원하면 이 값을 비워라(생략=전국 검색). 직전 대화에서 특정 지역을 봤더라도 최신 요청 범위를 따른다."},
-            "region": {"type": "string", "description": "구/군/동 키워드(선택). 예: 수성구"},
+            "region": {"type": "string", "description": "구/군/동 키워드 1개(선택). 예: 수성구. 여러 지역을 동시에 원하면 이것 대신 regions 배열을 써라."},
+            "regions": {"type": "array", "items": {"type": "string"}, "description": "여러 구/군/동을 동시에 검색(OR). 사용자가 말한 각 지역(동·구·군)을 하나씩 원소로 넣어라. 시/도는 sido에 넣고 여기엔 동/구/군 이름만. 예: '부산 온천동, 대연동 빌라' → sido='부산', regions=['온천동','대연동']. '수성구·달서구' → regions=['수성구','달서구']."},
             "usages": {"type": "array", "items": {"type": "string"}, "description": "물건유형(현황용도). 다음에서만 선택: 아파트, 다세대 (빌라), 도시형생활 주택, 주택, 다가구 (원룸등), 근린주택, 농가주택, 오피스텔, 근린상가, 숙박시설"},
             "invest_max": {"type": "integer", "description": "투자금(초기 필요자금) 상한(원). 3천만원=30000000"},
             "price_max": {"type": "integer", "description": "최저매각가 상한(원, 선택)"},
@@ -7317,10 +7338,17 @@ def _chat_search_properties(args: dict, exclude_keys=None) -> dict:
     _limit = 150 if _order in ("profit", "cheap") else 60   # 정렬 요청 시 표본 확대(차익·저가 최대 근사)
     params = [("limit", str(_limit)), ("sort", "사건번호")]   # 시세없음·매수금지 제외 후 아래서 정렬→6건
     sido = (args.get("sido") or "").replace("광역시", "").replace("특별시", "").replace("특별자치도", "").strip()
-    if sido:
+    _regs = args.get("regions")
+    if isinstance(_regs, str):
+        _regs = [_regs]
+    _regs = [str(r).strip() for r in (_regs or []) if str(r).strip()]
+    if not _regs and args.get("region"):
+        _regs = [str(args["region"]).strip()]
+    if _regs:                                  # 여러 동/구 → 각각 '시도 구군동'으로 → 백엔드 regions OR(지역끼리 OR, 토큰 AND)
+        for r in _regs:
+            params.append(("regions", r if (not sido or sido in r) else sido + " " + r))
+    elif sido:
         params.append(("sido", sido))
-    if args.get("region"):
-        params.append(("region", str(args["region"])))
     _umap = {"다세대": "다세대 (빌라)", "빌라": "다세대 (빌라)", "다세대(빌라)": "다세대 (빌라)",
              "다가구": "다가구 (원룸등)", "원룸": "다가구 (원룸등)", "다가구(원룸등)": "다가구 (원룸등)",
              "도시형생활주택": "도시형생활 주택", "도시형": "도시형생활 주택", "도시형생활": "도시형생활 주택"}
@@ -7523,6 +7551,11 @@ def chat_bot(body: dict = Body(...), sid: Optional[str] = Cookie(None)) -> dict:
                              "tools": _CHAT_TOOLS, "tool_choice": _tc,
                              "temperature": 0.3, "max_tokens": 600}, timeout=45)
         if r.status_code != 200:
+            if r.status_code in (401, 403):   # OpenAI 키 무효/폐기 — 관리자에게 명확히 안내
+                return {"reply": "AI 상담 키 인증에 실패했습니다(키 무효/만료). 관리자 페이지 → 카카오 발송 탭에서 "
+                                 "유효한 OpenAI 키를 다시 저장해 주세요."}
+            if r.status_code == 429:
+                return {"reply": "AI 상담 사용량이 한도에 도달했습니다(OpenAI 크레딧/요율). 잠시 후 다시 시도하거나 결제 상태를 확인해 주세요."}
             return {"reply": "죄송합니다. 답변 생성에 실패했습니다. 잠시 후 다시 시도해 주세요."}
         choice = ((r.json().get("choices") or [{}])[0].get("message", {})) or {}
         tcs = choice.get("tool_calls")
@@ -7540,14 +7573,14 @@ def chat_bot(body: dict = Body(...), sid: Optional[str] = Cookie(None)) -> dict:
                     # 맥락 유지: GPT가 유형·예산·지역을 빠뜨리면 직전 검색 조건(ctx)으로 보완.
                     #  단 '전국·지방 확대·어디든' 요청이면 지역(sido)은 일부러 물려받지 않는다(확대 의도 존중).
                     _expand = any(_k in msg for _k in ("전국", "지방", "확대", "어디든", "다른 지역", "타지역", "전지역", "전국구"))
-                    for _ck in (("usages", "invest_max") if _expand else ("usages", "invest_max", "sido")):
+                    for _ck in (("usages", "invest_max") if _expand else ("usages", "invest_max", "sido", "region", "regions")):
                         if not a.get(_ck) and _ctx.get(_ck):
                             a[_ck] = _ctx[_ck]
                     if _ref and _last:
                         result = _chat_filter_recent(_last, a)     # '이 중에서 ~' — 직전 목록에서만 필터(재검색 안 함)
                     else:
                         result = _chat_search_properties(a, _seen_keys)
-                    _used_args = {k: a.get(k) for k in ("usages", "sido", "invest_max", "region", "price_max") if a.get(k)}
+                    _used_args = {k: a.get(k) for k in ("usages", "sido", "invest_max", "region", "regions", "price_max") if a.get(k)}
                     _cards = result.get("물건목록", []) or _cards
                 elif fn == "get_property_detail":
                     try:
@@ -8238,12 +8271,37 @@ def _kb_issue_token() -> bool:
 
 
 def _kb_apply_token() -> bool:
-    """소비자(모든 서버): Supabase api_cache에서 토큰 읽어 AUTH 적용."""
+    """소비자(모든 서버): Supabase api_cache에서 토큰 읽어 AUTH 적용.
+    refresh_token이 저장돼 있으면 siteToken 만료 임박(2h 전) 시 카카오 없이 자동 재발급 후 재저장."""
     try:
         import kb_crawler as _kb
         import time as _t
+        import datetime as _dt
         d = (auction_db.cache_get_many(["kb:auth"]) or {}).get("kb:auth")
-        if not d or not d.get("token"):
+        if not d:
+            return False
+        rt = d.get("refresh_token")
+        if rt:                                   # 만료 임박/토큰없음 → refreshToken으로 자동 재발급
+            need = not d.get("token")
+            try:
+                age = (_dt.datetime.now() - _dt.datetime.fromisoformat(d.get("at"))).total_seconds()
+                exp = int(d.get("expires_in") or 0)
+                if exp and age > exp - 7200:     # 만료 2시간 전부터 갱신
+                    need = True
+            except Exception:
+                pass
+            if need:
+                nu = _kb.refresh_site_token(rt)
+                if nu:
+                    d = {"token": nu["token"], "refresh_token": nu["refresh_token"],
+                         "expires_in": nu["expires_in"], "headers": d.get("headers") or {},
+                         "at": _dt.datetime.now().isoformat()}
+                    try:
+                        auction_db.cache_save("kb:auth", d)
+                    except Exception:
+                        pass
+                    print("[kb] refreshToken으로 siteToken 자동 재발급(카카오 불필요)", flush=True)
+        if not d.get("token"):
             return False
         _kb.AUTH.token = d["token"]
         _kb.AUTH.captured_headers = d.get("headers") or None
@@ -8274,20 +8332,34 @@ def _kb_auth_loop() -> None:
 
 @app.post("/admin/kb/set_token")
 def admin_kb_set_token(body: dict = Body(...), admin: dict = Depends(require_admin)) -> dict:
-    """KB siteToken을 Supabase(api_cache kb:auth) 공유 저장 + 즉시 적용. 로컬·클라우드가 같은 토큰 사용."""
+    """KB siteToken/refreshToken을 Supabase(api_cache kb:auth) 공유 저장 + 즉시 적용.
+    refreshToken을 주면 그걸로 새 siteToken을 발급(검증 겸)하고, 이후 만료 임박 시 자동 재발급된다
+    (카카오 재로그인 불필요). siteToken만 주면 종전과 동일(자동갱신 없음)."""
     tok = (body.get("token") or "").strip().strip("'\"").strip()   # 콘솔 복사 시 딸려온 따옴표 제거
-    if not tok:
-        raise HTTPException(400, "토큰을 입력하세요.")
+    rt = (body.get("refresh_token") or "").strip().strip("'\"").strip()
     import kb_crawler as _kb
     import time as _t
     import datetime as _dt
+    exp = 0
+    if rt:                                   # refreshToken 우선 — 새 siteToken 발급(무효면 즉시 알림)
+        nu = _kb.refresh_site_token(rt)
+        if not nu:
+            raise HTTPException(400, "refreshToken이 무효/만료입니다. kbland.kr 재로그인 후 다시 복사해 주세요.")
+        tok = nu["token"]; rt = nu["refresh_token"]; exp = nu["expires_in"]
+    if not tok:
+        raise HTTPException(400, "siteToken 또는 refreshToken을 입력하세요.")
     _kb.AUTH.token = tok
     _kb.AUTH.obtained_at = _t.monotonic()
+    rec = {"token": tok, "headers": {}, "at": _dt.datetime.now().isoformat()}
+    if rt:
+        rec["refresh_token"] = rt
+        rec["expires_in"] = exp
     try:
-        auction_db.cache_save("kb:auth", {"token": tok, "headers": {}, "at": _dt.datetime.now().isoformat()})
+        auction_db.cache_save("kb:auth", rec)
     except Exception as e:
         raise HTTPException(500, f"Supabase 저장 실패: {e}")
-    return {"ok": True, "saved": True}
+    return {"ok": True, "saved": True, "auto_refresh": bool(rt),
+            "expires_hours": round(exp / 3600, 1) if exp else None}
 
 
 @app.get("/admin/kb/token_status")

@@ -319,6 +319,41 @@ class _Auth:
 AUTH = _Auth()
 
 
+# ── refreshToken 기반 siteToken 재발급(카카오 재로그인·브라우저·CAPTCHA 전부 불필요·저위험) ──
+#  kbland 프론트가 쓰는 OAuth refresh_token 그랜트를 그대로 호출. 클라이언트 인증(Basic)은
+#  kbland JS에 공개된 고정값. 응답 access_token = 새 siteToken(수명 ~45h), refresh_token은 재사용 가능.
+_KB_OAUTH_URL = "https://api.kbland.kr/land-auth/oauth/token"
+_KB_CLIENT_BASIC = "Basic " + base64.b64encode(b"localTestId:!QAZ@WSX3e").decode()
+
+
+def refresh_site_token(refresh_token: str) -> dict | None:
+    """refreshToken으로 새 siteToken 발급. 성공 {token, refresh_token, expires_in}, 실패 None."""
+    rt = (refresh_token or "").strip().strip("'\"").strip()
+    if not rt:
+        return None
+    try:
+        r = requests.post(
+            _KB_OAUTH_URL,
+            data={"refresh_token": rt, "grant_type": "refresh_token"},
+            headers={"Content-Type": "application/x-www-form-urlencoded",
+                     "Authorization": _KB_CLIENT_BASIC,
+                     "User-Agent": "Mozilla/5.0", "Referer": "https://kbland.kr/"},
+            timeout=20,
+        )
+        j = r.json()
+        if (j.get("dataHeader") or {}).get("resultCode") != "10000":
+            return None
+        data = (j.get("dataBody") or {}).get("data") or {}
+        at = (data.get("access_token") or "").strip()
+        if not at:
+            return None
+        return {"token": at,
+                "refresh_token": (data.get("refresh_token") or rt).strip(),
+                "expires_in": int(data.get("expires_in") or 0)}
+    except Exception:
+        return None
+
+
 def _kakao_login_capture(email: str, password: str):
     """카카오 자동로그인 → (siteToken, 캡처 인증헤더). playwright 필요."""
     if not email or not password:

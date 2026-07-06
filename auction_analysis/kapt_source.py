@@ -120,7 +120,7 @@ class KaptSource:
         if ck in self._code_cache:
             return self._code_cache[ck]
         target = _norm(apt_name)
-        best, best_code = -1, None
+        best, best_code, best_nm = -1, None, ""
         for it in self._sigungu_list(lawd_cd):
             nm = _norm(it.get("kaptName"))
             if not nm:
@@ -140,7 +140,16 @@ class KaptSource:
                 else:
                     continue
             if score > best:
-                best, best_code = score, it.get("kaptCode")
+                best, best_code, best_nm = score, it.get("kaptCode"), nm
+        # ── 확신 가드(주인님 지시: 억지 매칭 금지, 확신 없으면 정보없음) ──
+        #  물건명이 kapt 단지명의 대부분을 덮어야 확정한다. 짧은 브랜드명('편한세상')이
+        #  같은 시군구의 다른 특정단지('율하이편한세상' 506세대)에 substring으로 잘못 붙는 것을 차단.
+        #  물건명이 단지명의 <60%만 덮으면(=구별 접두어를 통째로 빠뜨림) 매칭 취소 → None(세대수 정보없음).
+        #  완전일치(nm==target)는 항상 통과. kaptName은 소규모(<의무관리)를 아예 담지 않으므로,
+        #  DB에 없는 소단지에 딴 단지를 억지로 붙이는 대신 정보없음을 노출하는 게 옳다.
+        if best_code and best_nm != target:
+            if _lcs(best_nm, target) / max(len(best_nm), 1) < 0.6:
+                best_code = None
         if best_code:                       # 성공만 캐시
             self._code_cache[ck] = best_code
         return best_code
