@@ -587,6 +587,18 @@ class SupabaseSource:
         """현재 필터 기준 상태별 건수(전체 + 존재하는 상태만). 카운트 쿼리 병렬 실행."""
         from concurrent.futures import ThreadPoolExecutor
         kw.pop("result_prefix", None)   # 상태필터는 제외하고 전 상태 집계
+        if kw.get("caseno"):            # 사건번호 검색 = 1~2건 → 14개 카운트쿼리(~1.3s) 대신 1회 조회 후 파이썬 집계
+            params = [("select", "result"), ("limit", "500")] + self._filters(**kw)   #  (덤: 전상태 (1) 뜨던 것 → 전체+실제상태만)
+            r = self._get("items", params)
+            rows = r.json() if r.status_code in (200, 206) else []
+            out: dict[str, int] = {"전체": len(rows)}
+            for x in rows:
+                res = (x.get("result") or "").strip()
+                for st in self.STATUS_ORDER:
+                    if res.startswith(st):
+                        out[st] = out.get(st, 0) + 1
+                        break
+            return out
 
         def one(st):
             if st == "전체":
