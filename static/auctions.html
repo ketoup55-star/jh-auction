@@ -494,7 +494,7 @@ function buildUsageGrid(){
     const gv=grp.gv||grp.g;
     const items=grp.items.map(it=>{
       const label=it[0], val=it[1]||it[0];
-      return `<label class="ck"><input type="checkbox" class="usage" data-group="${gv}" value="${val}"> ${label}</label>`;
+      return `<label class="ck"><input type="checkbox" class="usage" data-group="${gv}" value="${val}" onchange="syncGroupHead('${gv}')"> ${label}</label>`;
     }).join("");
     return `<div class="ug">
       <label class="ck head"><input type="checkbox" class="grp-head" value="${gv}" onchange="toggleGroup(this)"> ${grp.g}</label>
@@ -503,6 +503,13 @@ function buildUsageGrid(){
 }
 function toggleGroup(el){
   document.querySelectorAll(`.usage[data-group="${el.value}"]`).forEach(c=>c.checked=el.checked);
+}
+// 개별 용도 체크박스 변경 → 그룹 헤더 동기화. 하위가 하나라도 빠지면 헤더 해제(안 그러면 buildQuery가
+//  group=주거용 전체를 보내, '주택'만 원해도 주거용 전체가 조회되는 버그).
+function syncGroupHead(gv){
+  const subs=[...document.querySelectorAll(`.usage[data-group="${gv}"]`)];
+  const head=document.querySelector(`.grp-head[value="${gv}"]`);
+  if(head) head.checked = subs.length>0 && subs.every(c=>c.checked);
 }
 function clearUsage(){ document.querySelectorAll('.usage,.grp-head').forEach(c=>c.checked=false); }
 

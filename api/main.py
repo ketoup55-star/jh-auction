@@ -222,6 +222,15 @@ def home() -> FileResponse:
     return FileResponse(os.path.join(_STATIC_DIR, "index.html"))
 
 
+@app.get("/{page}.html")
+def _bare_html_redirect(page: str):
+    """정적 화면은 /static/에만 마운트돼 있어 /auctions.html 같은 '맨' 경로는 404.
+    직접 URL 접속·북마크 대비: 파일이 있으면 /static/<page>.html 로 리다이렉트(없으면 404)."""
+    if os.path.exists(os.path.join(_STATIC_DIR, page + ".html")):
+        return RedirectResponse("/static/" + page + ".html", status_code=307)
+    raise HTTPException(404, "not found")
+
+
 @app.get("/api")
 def api_info() -> dict:
     return {
