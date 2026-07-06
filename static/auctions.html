@@ -610,6 +610,8 @@ function saveFavs(){
 let selectedStatus="진행물건";   // 초기 경매결과 = 진행물건
 function filterParams(){
   const p=new URLSearchParams();
+  const _cn=(v('caseno')||'').trim()||_urlCaseno;
+  if(_cn){ p.set('caseno',_cn); if(v('year'))p.set('year',v('year')); return p; }   // 사건번호 검색 = 특정물건 직접조회 → 등급/유형/특수/지역·상태 등 모든 필터 해제
   const groups=[...document.querySelectorAll('.grp-head:checked')].map(c=>c.value);
   groups.forEach(g=>p.append('group',g));
   document.querySelectorAll('.usage:checked').forEach(c=>{ if(!groups.includes(c.dataset.group)) p.append('usage',c.value); });
@@ -618,7 +620,6 @@ function filterParams(){
   if(branch) p.append('court_code',branch);
   else if(jibeop) Object.values((REG&&REG.courts[jibeop])||{}).forEach(c=>p.append('court_code',c));
   if(v('year'))p.set('year',v('year'));
-  const _cn=(v('caseno')||'').trim()||_urlCaseno; if(_cn)p.set('caseno',_cn);   // 폼 입력 우선, 없으면 상단 사건검색(초기 1회)
   const sd=v('sido'), gu=v('gugun'), de=v('dongeup');
   if(_locations.length){                       // +버튼으로 추가한 소재지 여러 개 → regions(지역끼리 OR)
     _locations.forEach(function(l){ p.append('regions', l.q); });
@@ -663,7 +664,7 @@ function renderLocChips(){
 function buildQuery(){
   const p=filterParams();
   const _hasType=document.querySelectorAll('.tpchk:checked').length>0;   // 유형별 필터 켜면 과거(매각완료) 물건도 보이게 '진행물건'(기본값)만 자동 해제.
-  if(selectedStatus && !(_hasType && selectedStatus==="진행물건"))p.set('status',selectedStatus);   // 사용자가 고른 상태(신건·매각·유찰 등)는 유형필터와 무관하게 항상 반영
+  if(!p.has('caseno') && selectedStatus && !(_hasType && selectedStatus==="진행물건"))p.set('status',selectedStatus);   // 사건번호 검색이면 상태필터도 해제(그 외엔 사용자가 고른 상태 반영)
   const _sv=v('sort');
   if(_sv){ p.set('sort',_sv); if(v('sort2'))p.set('sort2',v('sort2')); }
   else {   // 기본: 사건번호순. 단 매각기일을 여러 날(범위)로 설정했으면 → 매각기일 우선 + 날짜 내 사건번호
@@ -1257,7 +1258,12 @@ async function loadRegions(){
 }
 buildUsageGrid();
 loadBrands();
-loadRegions().then(()=>{ applyUrl(); restorePageSize(); restoreBuyFilter(); doSearch(); });
+loadRegions().then(()=>{ applyUrl(); restorePageSize();
+  if((new URLSearchParams(location.search)).get('caseno')){   // 사건번호 검색 = 저장된 매수판정 필터도 해제(UI·요청 모두 순수 조회)
+    gradeFilter=""; try{localStorage.setItem('auc_grade','');}catch(e){}
+    const _gs=document.getElementById('gradeSel'); if(_gs)_gs.value="";
+  } else { restoreBuyFilter(); }
+  doSearch(); });
 // 공용 플로팅 툴팁 — 칩(data-tip)에 호버 시 body에 fixed로 띄워 테이블 클리핑 회피
 (function(){
   const tip=document.createElement('div'); tip.className='ttip'; document.body.appendChild(tip);
