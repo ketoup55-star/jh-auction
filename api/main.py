@@ -100,8 +100,9 @@ auction_db = SupabaseSource(
          or "sb_publishable_OAKI_mJcm8v9M4n1WLRotQ_wF0sl5p-"),
     r2_url=os.environ.get("R2_PUBLIC_URL", "https://pub-edb1dd3fca454e75b710b61210fb9cbe.r2.dev"),
 )
-# 회원 계정은 파일 DB에 영속 저장(서버 재시작에도 유지). 테스트는 :memory: 사용.
-user_store = UserStore(os.environ.get("AUCTION_AUTH_DB", os.path.join(_ROOT, "auth.db")))
+# 회원 계정은 PostgreSQL(Supabase)에 영속 저장. UserStore가 SUPABASE_DB_URL로 직접 연결한다.
+# (인자는 하위호환용으로 받되 무시됨. AUCTION_AUTH_DB/파일경로는 더 이상 사용 안 함.)
+user_store = UserStore(os.environ.get("AUCTION_AUTH_DB"))
 # 관리자 지정: 기본 '진혁' + 환경변수 ADMIN_NAMES/ADMIN_EMAILS(쉼표구분).
 _ADMIN_NAMES = set(["진혁"] + [x.strip() for x in os.environ.get("ADMIN_NAMES", "").split(",") if x.strip()])
 _ADMIN_EMAILS = set(x.strip().lower() for x in os.environ.get("ADMIN_EMAILS", "").split(",") if x.strip())
