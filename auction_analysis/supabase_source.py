@@ -227,11 +227,16 @@ class SupabaseSource:
                                 keepalive_expiry=60))
         # 로컬 디스크 캐시(write-behind): Supabase 과부하(크롤러 등) 시 앱이 로컬에서 즉시 응답.
         #   계산결과(cache_save)는 로컬에 즉시 저장(synced=0) → 나중에 flush_localcache.py가 api_cache로 동기화.
-        try:
-            from auction_analysis.local_cache import LocalCache
-            self.local = LocalCache()
-        except Exception:
+        # DISABLE_LOCAL_CACHE=1 → 로컬 버퍼 끔(cache_save가 Supabase 직접 쓰기). 예열 VM에서 N개 프로세스가
+        #  같은 _localcache.db에 쓰는 경합을 피하려고 사용(단일 프로세스 앱에선 미설정=버퍼 유지).
+        if os.environ.get("DISABLE_LOCAL_CACHE", "0") in ("1", "true", "True"):
             self.local = None
+        else:
+            try:
+                from auction_analysis.local_cache import LocalCache
+                self.local = LocalCache()
+            except Exception:
+                self.local = None
 
     def _name(self, value: Optional[str]) -> str:
         """마스킹 토글 적용. 끄면 원문 그대로."""
