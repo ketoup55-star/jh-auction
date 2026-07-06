@@ -7308,6 +7308,19 @@ def _chat_search_properties(args: dict, exclude_keys=None) -> dict:
     for x in out:
         _ev = _exp.get(x.get("item_key"))
         x["예상낙찰가"] = (_ev.get("expected_bid") if isinstance(_ev, dict) and _ev.get("expected_bid") else None)
+    # 예상낙찰가가 있으면 '실제 차익 = 시세 − 예상낙찰가'로 교체하고, 손해(예상낙찰가 ≥ 시세)는 제외.
+    #  (최저가 기준 차익은 허수 — 실제 매수가는 예상낙찰가이므로. 주인님 지시)
+    _kept = []
+    for x in out:
+        _eb = _to_int(x.get("예상낙찰가"))
+        _estv = _to_int(x.get("시세")) or 0
+        if _eb:
+            _real = _estv - _eb
+            if _real <= 0:
+                continue                  # 예상낙찰가 ≥ 시세 → 사면 손해 → 추천 제외
+            x["예상차익"] = _real           # 카드 차익을 실제(시세 − 예상낙찰가)로 교체
+        _kept.append(x)
+    out = _kept
     if args.get("has_expbid"):
         out = [x for x in out if x.get("예상낙찰가")]   # 예상낙찰가 산정된 물건만
     if _order == "profit":

@@ -445,12 +445,13 @@ function aibotCards(cards){
     var tag=c["유형"]?('<span class="aibot-card-tag">'+c["유형"]+'</span>'):"";
     var appr=c["감정가"]?('<span class="k">감정</span>'+aibotWon(c["감정가"])):"";
     var low=c["최저가"]?('<span class="k">최저</span>'+aibotWon(c["최저가"])):"";
+    var est=c["시세"]?('<span class="k">시세</span>'+aibotWon(c["시세"])):"";
     return '<a class="aibot-card" href="'+(c["링크"]||"#")+'" target="_blank">'
       +'<div class="aibot-card-img">'+img+badge+tag+'</div>'
       +'<div class="aibot-card-body">'
       +'<div class="aibot-card-case">'+(c["사건번호"]||"물건")+grade+'</div>'
       +'<div class="aibot-card-addr">'+(c["소재지"]||"")+'</div>'
-      +'<div class="aibot-card-prices">'+appr+(appr&&low?' · ':'')+low+'</div>'
+      +'<div class="aibot-card-prices">'+appr+(appr&&low?' · ':'')+low+((appr||low)&&est?' · ':'')+est+'</div>'
       +'</div></a>';
   }).join("");
   box.appendChild(wrap); box.scrollTop=box.scrollHeight;
