@@ -521,6 +521,13 @@ class SupabaseSource:
             f.append(("sell_date", f"gte.{sell_from}"))
         if sell_to:
             f.append(("sell_date", f"lte.{sell_to}~"))
+        # ⚠️ PostgREST는 root-level or= 파라미터를 '하나만' 허용. or 그룹이 2개↑(예: 복수소재지 regions +
+        #  진행물건 status, 또는 시/도 sido + status)면 or=X&or=Y가 되어 422로 실패한다.
+        #  → and=(or(X),or(Y)) 로 묶어 각 or 그룹을 AND로 결합(= 지역들 중 하나 그리고 진행물건).
+        _ors = [v for (k, v) in f if k == "or"]
+        if len(_ors) >= 2:
+            f = [(k, v) for (k, v) in f if k != "or"]
+            f.append(("and", "(" + ",".join("or" + v for v in _ors) + ")"))
         return f
 
     def _count_one(self, **kw) -> int:
