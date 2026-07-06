@@ -1116,6 +1116,8 @@ function prefillFromResponse(list){
   applyAptSort();
 }
 async function doSearch(){
+  const _g=document.getElementById("grid"); if(_g) _g.innerHTML='<div style="padding:32px;text-align:center;color:#888;font-weight:600">🔎 검색 중…</div>';   // 클릭 즉시 피드백(버튼 눌렸는지 헷갈림 해소)
+  const _c=document.getElementById("cnt"); if(_c) _c.textContent="검색 중…";
   loadStats();   // 물건통계 비동기 갱신(결과와 병렬) — 이 시점 _urlCaseno(상단 사건검색) 동기로 읽음
   const _q=buildQuery();   // 메인 쿼리도 _urlCaseno 읽음
   _urlCaseno="";           // ★상단 사건검색 caseno는 '초기 1회'만 적용 → 사용 직후 해제. 이후 어떤 필터 경로(상태·통계·검색하기 등)로 검색해도 사건번호 안 따라붙음
