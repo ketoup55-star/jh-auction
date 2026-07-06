@@ -1930,6 +1930,7 @@ def auctions(
     usage: Optional[list[str]] = Query(None, description="현황용도(다중)"),
     keyword: Optional[str] = None,
     region: Optional[str] = Query(None, description="소재지(구군/동 키워드)"),
+    regions: Optional[list[str]] = Query(None, description="소재지 다중(+버튼, 각 '시도 구군 동' 문자열, 지역끼리 OR)"),
     sido: Optional[str] = Query(None, description="시/도 표준명(변형 OR 매칭)"),
     year: Optional[str] = Query(None, description="사건 연도"),
     caseno: Optional[str] = Query(None, description="타경번호(사건번호 숫자부)"),
@@ -1970,7 +1971,7 @@ def auctions(
                                    _barea_filter_keys(barea_min, barea_max),  # +건물면적(area_text 전용 파싱)
                                    _invest_filter_keys(invest_min, invest_max))  # +투자금(min_price+면적 산출)
     kw = dict(group=group, usages=usage, keyword=keyword,
-              region=region, sido=sido, year=year, caseno=caseno, court=court, court_code=court_code,
+              region=region, regions=regions, sido=sido, year=year, caseno=caseno, court=court, court_code=court_code,
               result_prefix=status, special=special, item_keys=item_keys,
               buy_grade=(grade if _use_col else None),
               appraisal_min=appraisal_min, appraisal_max=appraisal_max,

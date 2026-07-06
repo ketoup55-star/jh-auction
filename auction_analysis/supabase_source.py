@@ -399,7 +399,7 @@ class SupabaseSource:
     }
 
     def _filters(self, *, group=None, usages=None, keyword=None, data_class="현황",
-                 region=None, sido=None, year=None, caseno=None, court=None, court_code=None,
+                 region=None, regions=None, sido=None, year=None, caseno=None, court=None, court_code=None,
                  result_prefix=None, special=None, item_keys=None,
                  appraisal_min=None, appraisal_max=None, price_min=None, price_max=None,
                  fail_min=None, fail_max=None, barea_min=None, barea_max=None,
@@ -448,6 +448,21 @@ class SupabaseSource:
             #  기존 연속매칭("강서구 화곡동")은 지번주소만 잡고 도로명주소는 누락했음.
             for _rp in region.split():
                 f.append(("address", f"ilike.*{_rp}*"))
+        if regions:
+            # 소재지 여러 개(+버튼) → 지역끼리 OR, 각 지역 안 토큰은 AND.
+            #  예: (대구 AND 달서구) OR (부산 AND 해운대구)  →  or=(and(...),and(...))
+            _rgroups = []
+            for _reg in (regions if isinstance(regions, (list, tuple)) else [regions]):
+                _toks = [t for t in str(_reg).split() if t]
+                if not _toks:
+                    continue
+                if len(_toks) == 1:
+                    _rgroups.append(f"address.ilike.*{_toks[0]}*")
+                else:
+                    _inner = ",".join(f"address.ilike.*{t}*" for t in _toks)
+                    _rgroups.append(f"and({_inner})")
+            if _rgroups:
+                f.append(("or", f"({','.join(_rgroups)})"))
         if sido:
             # 시/도만 선택 시 표기 변형(충남|충청남도 등)을 OR로 모두 매칭 → 누락 방지.
             #  시/도는 주소 맨 앞에 오므로 '전방일치'(대구*)로 매칭 — '%대구%'면 부산 '해운대구'에 오매칭됨.

@@ -37,6 +37,12 @@
   .lab.tall{align-items:flex-start;flex-direction:column;gap:4px;}
   .clr{font-size:10px;background:var(--primary);color:#fff;border:none;border-radius:4px;padding:2px 5px;cursor:pointer;}
   .val{flex:1;padding:8px 10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0;}
+  .loc-add{width:26px;height:26px;border:1px solid var(--primary);background:var(--primary-bg);color:var(--primary);border-radius:6px;cursor:pointer;font-weight:700;font-size:14px;line-height:1;padding:0;}
+  .loc-add:hover{background:var(--primary);color:#fff;}
+  .loc-chips{display:inline-flex;flex-wrap:wrap;gap:4px;}
+  .loc-chip{display:inline-flex;align-items:center;gap:5px;background:var(--primary-bg);border:1px solid var(--primary);border-radius:13px;padding:2px 4px 2px 9px;font-size:12px;color:var(--primary);font-weight:600;}
+  .loc-chip b{cursor:pointer;color:var(--danger);font-weight:700;font-size:13px;padding:0 3px;line-height:1;}
+  .loc-chip b:hover{color:#fff;background:var(--danger);border-radius:50%;}
   .val.col{flex-direction:column;align-items:stretch;gap:9px;}
   .half{flex:1;display:flex;}
   select,input[type=text],input[type=number],input[type=date]{height:30px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;background:#fff;}
@@ -209,6 +215,8 @@
         <select id="sido"><option value="">시/도 전체</option></select>
         <select id="gugun"><option value="">구/군</option></select>
         <select id="dongeup"><option value="">동/읍</option></select>
+        <button type="button" class="loc-add" onclick="addLocation()" title="소재지 추가">＋</button>
+        <span id="locChips" class="loc-chips"></span>
       </div>
       <div class="lab">명칭검색</div>
       <div class="val"><input type="text" id="keyword" placeholder="소재지 또는 건물명 입력" onkeydown="if(event.key==='Enter')doSearch()"></div>
@@ -604,7 +612,9 @@ function filterParams(){
   if(v('year'))p.set('year',v('year'));
   const _cn=(v('caseno')||'').trim()||_urlCaseno; if(_cn)p.set('caseno',_cn);   // 폼 입력 우선, 없으면 상단 사건검색(초기 1회)
   const sd=v('sido'), gu=v('gugun'), de=v('dongeup');
-  if(de) p.set('region',(gu?gu+" ":"")+de);   // "강남구 역삼동"
+  if(_locations.length){                       // +버튼으로 추가한 소재지 여러 개 → regions(지역끼리 OR)
+    _locations.forEach(function(l){ p.append('regions', l.q); });
+  } else if(de) p.set('region',(gu?gu+" ":"")+de);   // "강남구 역삼동"
   else if(gu) p.set('region',gu);             // 구/군(주소와 일치, 누락 없음)
   else if(sd) p.set('sido',sd);               // 시/도만 → 표준명(백엔드가 변형 OR 매칭)
   if(v('apMin'))p.set('appraisal_min',v('apMin')); if(v('apMax'))p.set('appraisal_max',v('apMax'));
@@ -620,6 +630,27 @@ function filterParams(){
   if(gradeFilter) p.append('grade',gradeFilter);                                         // 매수판정(AI 위험도)
   if(zoneFilter) p.append('zone',zoneFilter);                                            // 용도지역
   return p;
+}
+// ---- 소재지 다중(+버튼으로 여러 지역 추가) ----
+var _locations=[];
+function addLocation(){
+  var sdE=document.getElementById('sido'), guE=document.getElementById('gugun'), deE=document.getElementById('dongeup');
+  var sd=sdE.value, gu=guE.value, de=deE.value;
+  if(!sd && !gu && !de){ alert('시/도·구/군·동을 선택한 뒤 ＋를 눌러 추가하세요.'); return; }
+  var sdT=sd?sdE.options[sdE.selectedIndex].text:'';
+  var guT=gu?guE.options[guE.selectedIndex].text:'';
+  var deT=de?deE.options[deE.selectedIndex].text:'';
+  var label=[sdT,guT,deT].filter(Boolean).join(' ');
+  var q=[sd,gu,de].filter(Boolean).join(' ');    // 백엔드 regions용(토큰 AND)
+  if(_locations.some(function(l){return l.q===q;})) return;   // 중복 방지
+  _locations.push({label:label, q:q});
+  renderLocChips();
+}
+function removeLocation(i){ _locations.splice(i,1); renderLocChips(); }
+function renderLocChips(){
+  document.getElementById('locChips').innerHTML=_locations.map(function(l,i){
+    return '<span class="loc-chip">'+l.label+'<b onclick="removeLocation('+i+')" title="삭제">×</b></span>';
+  }).join('');
 }
 function buildQuery(){
   const p=filterParams();
@@ -1145,6 +1176,7 @@ function resetForm(){
   try{ localStorage.setItem('auc_grade',''); }catch(e){}
   document.querySelectorAll("input[type=text],input[type=number]").forEach(i=>i.value="");
   document.querySelectorAll("#apMin,#apMax,#lpMin,#lpMax,#fMin,#fMax,#court,#courtBranch,#year,#sido,#gugun,#dongeup").forEach(s=>s.value="");
+  _locations=[]; renderLocChips();   // 소재지 다중 칩도 초기화
   document.getElementById("courtBranch").innerHTML='<option value="">전체</option>';
   document.getElementById("gugun").innerHTML='<option value="">구/군</option>';
   document.getElementById("dongeup").innerHTML='<option value="">동/읍</option>';
