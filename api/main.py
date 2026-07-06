@@ -1423,6 +1423,10 @@ def _grade_buckets(force: bool = False) -> dict:
             _grade_cache["building"] = True
             threading.Thread(target=lambda: _grade_buckets(force=True), daemon=True).start()
         return {}
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        # 클라우드 안전장치: 어떤 경로로 force가 들어와도 수만 행 페이징 재계산 금지(컬럼 신뢰). 스파이크→OOM 방지.
+        _grade_cache["building"] = False
+        return _grade_cache.get("buckets") or {}
     db = auction_db
     out = {g: set() for g in _GRADE_LABELS}
 
@@ -1897,7 +1901,7 @@ def _enrich_list(items: list) -> None:
             it["est_kind"] = e.get("kind")
             if e.get("trades_3m") is not None:
                 it["trades_3m"] = e["trades_3m"]
-        g = grade_rev.get(k)
+        g = grade_rev.get(k) or it.get("buy_grade")   # in-메모리 버킷(로컬) 우선 → 없으면 items.buy_grade 컬럼(클라우드)
         if g:
             it["grade"] = g
         if it.get("violation") and it.get("grade") == "매수양호":
@@ -3037,9 +3041,23 @@ def _prewarm_loop() -> None:
 
 
 def _grade_warm_loop() -> None:
-    """매수판정 버킷(목록 배지·필터용)을 항상 따뜻하게 유지(시작 직후 빌드 + 25분마다 재산출, 사용자 대기 방지)."""
+    """매수판정 버킷(목록 배지·필터용)을 항상 따뜻하게 유지(시작 직후 빌드 + 25분마다 재산출, 사용자 대기 방지).
+    ⚠️ CLOUD_READER=1(클라우드 얇은 리더)이면 재계산 안 함 — 로컬 워머가 채운 items.buy_grade 컬럼을 신뢰.
+       (25분마다 수만 행 페이징 재계산이 1GB 인스턴스에서 주기적 OOM→503을 유발하던 것을 제거)"""
     import time as _t
     _t.sleep(3)          # 재기동 직후 곧바로 빌드 → 필터·배지 즉시 정상(첫 필터 16초 stall 방지)
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        # 클라우드: 재계산 생략. 필터=items.buy_grade 컬럼 WHERE, 배지=컬럼 SELECT, 히어로=Supabase 캐시(로컬이 채움).
+        try:
+            if _buy_grade_col_exists():
+                _buy_grade["synced"] = True     # 컬럼 신뢰 → 매수판정 필터가 컬럼 WHERE 사용(버킷 불필요)
+                _grade_cache["buckets"] = {}    # 요청 경로가 무거운 재계산 스레드를 스폰하지 않도록(배지는 컬럼 SELECT로)
+                print("[buy_grade] CLOUD_READER=1 → 재계산 생략, items.buy_grade 컬럼 신뢰", flush=True)
+            else:
+                print("[buy_grade] CLOUD_READER=1이나 buy_grade 컬럼 없음 → 배지/필터는 컬럼 채워질 때까지 제한", flush=True)
+        except Exception:
+            pass
+        return
     while True:
         try:
             _grade_buckets(force=True)          # 워밍 스레드만 재계산(캐시는 유지 → 요청 stall 없음)
