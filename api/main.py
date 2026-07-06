@@ -2210,14 +2210,21 @@ def auction_analysis(item_key: str) -> dict:
             from auction_analysis.doc_analysis import analyze_doc_summary
             ds = analyze_doc_summary(auction_db, item_key)
             _nm = lambda s: re.sub(r"\([^)]*\)|\s", "", s or "")   # 괄호(호수·별지)·공백 제거 후 이름 비교
-            rmap = {_nm(tr.get("name")): tr.get("rent")
-                    for tr in (ds.get("tenant_rents") or []) if tr.get("rent")}
+            rmap = {_nm(tr.get("name")): tr
+                    for tr in (ds.get("tenant_rents") or []) if tr.get("name")}
             if rmap:
                 ts = [dict(t) for t in res["tenants"]]
                 for t in ts:
-                    rv = rmap.get(_nm(t.get("name")))
-                    if rv:
-                        t["rent"] = rv
+                    src = rmap.get(_nm(t.get("name")))
+                    if not src:
+                        continue
+                    if src.get("rent"):
+                        t["rent"] = src["rent"]
+                    # 전입일·확정일: item_tenants(현황조사)가 미상일 때만 명세서 값으로 보완(현황조사 우선)
+                    if src.get("move_in") and not t.get("move_in"):
+                        t["move_in"] = src["move_in"]
+                    if src.get("fixed") and not t.get("fixed"):
+                        t["fixed"] = src["fixed"]
                 res = {**res, "tenants": ts}
         except Exception:
             pass

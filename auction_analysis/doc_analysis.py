@@ -35,6 +35,7 @@ _CDIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _cache = SqliteDict(os.path.join(_CDIR, "cache_analysis.db"))         # DiskDict→SqliteDict(2026-06-29): 증분 upsert + 메모리 비상주(통짜 JSON 198MB 로드 제거). 동시 프로세스(샤드) WAL 공유 안전
 _appraisal_cache = SqliteDict(os.path.join(_CDIR, "cache_appraisal.db"))
 _summary_cache = SqliteDict(os.path.join(_CDIR, "cache_summary.db"))
+_DOCSUM_VER = 2   # 캐시 포맷 버전(2=tenant_rents에 전입일·확정일 포함). 불일치 캐시는 1회 재파싱.
 _vehicle_cache = SqliteDict(os.path.join(_CDIR, "cache_vehicle.db"))
 
 # PDF 동시 파싱 상한 — _prewarm_docs가 4작업×4워커=최대 16개 PDF(대용량 감정평가서)를 동시에 메모리에
@@ -117,8 +118,8 @@ def analyze_doc_summary(source, item_key: str) -> dict:
     """명세서 요약사항: 최선순위·소멸되지않는권리·지상권·주의사항(비고) + 법원문건접수/송달. 캐시 적용."""
     if item_key in _summary_cache:
         cached = _summary_cache[item_key]
-        # 차임(월세) 도입 전 옛 캐시(available인데 tenant_rents 키 없음)는 1회 재파싱해 보강. 그 외엔 캐시 사용.
-        if cached.get("tenant_rents") is not None or not cached.get("available"):
+        # 캐시 포맷 버전 불일치면 1회 재파싱(전입일 병합 등 포맷 갱신 반영). 미available 캐시는 그대로.
+        if cached.get("_v") == _DOCSUM_VER or not cached.get("available"):
             return cached
     out: dict = {"available": False}
     try:
@@ -137,16 +138,19 @@ def analyze_doc_summary(source, item_key: str) -> dict:
             docs = sorted(docs, key=lambda d: d.get("date", ""), reverse=True)  # 최신순
             out = {
                 "available": True,
+                "_v": _DOCSUM_VER,
                 "senior_setup": _fmt_senior(ms.get("senior_setup") or ""),
                 "surviving_rights": ms.get("surviving_rights") or "",
                 "ground_rights": ms.get("ground_rights") or "",
                 "caution": ms.get("caution") or "",
                 "dividend_deadline": ms.get("dividend_deadline"),
                 "court_docs": docs,
-                # 차임(월세): 임차인/대항력 패널(item_tenants 기반·차임 컬럼 없음)이 이름으로 병합하도록 전달
-                "tenant_rents": [{"name": t.name, "rent": t.rent}
-                                 for t in _merge_tenants(ms.get("tenants") or [])
-                                 if getattr(t, "rent", 0)],
+                # 명세서 임차인정보(차임·전입일·확정일): 임차인/대항력 패널(item_tenants 기반)이 이름으로
+                #  병합. item_tenants(현황조사)가 전입일·차임 미상일 때 명세서 값으로 보완. 차임 없어도 포함.
+                "tenant_rents": [{"name": t.name, "rent": getattr(t, "rent", 0) or 0,
+                                  "move_in": t.move_in_date.isoformat() if getattr(t, "move_in_date", None) else None,
+                                  "fixed": t.fixed_date.isoformat() if getattr(t, "fixed_date", None) else None}
+                                 for t in _merge_tenants(ms.get("tenants") or [])],
             }
     except Exception as e:
         out = {"available": False, "reason": type(e).__name__}

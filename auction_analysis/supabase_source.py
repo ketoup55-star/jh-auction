@@ -410,6 +410,9 @@ class SupabaseSource:
                  fail_min=None, fail_max=None, barea_min=None, barea_max=None,
                  sell_from=None, sell_to=None, buy_grade=None) -> list[tuple]:
         """PostgREST 필터를 (key,value) 튜플 리스트로. 같은 컬럼 범위(gte+lte) 지원."""
+        if caseno:                     # 특정 사건번호 검색 = 상태·매각기일 무관하게 그 물건을 찾는다
+            result_prefix = None       #  프론트가 기본 status=진행물건 + 매각기일범위(오늘~+3개월)를 항상 붙이는데,
+            sell_from = sell_to = None #   과거 매각물건은 그 둘에 다 걸려 안 나왔음 → 사건번호는 특정 물건이니 필터 무시
         if (result_prefix in _PAST_PREFIXES or sell_from or sell_to or caseno) and data_class == "현황":
             # 매각·종결(과거) 상태 OR 매각기일 날짜범위 OR **사건번호 검색** 시 백데이터(과거 매각분)도 함께 노출
             #  ('전체'로 특정 날짜 조회 시 그날 매각된 물건이 백데이터라 빠지던 버그 + 사건번호로 검색해도
