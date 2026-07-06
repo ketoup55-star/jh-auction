@@ -4699,13 +4699,52 @@ from auction_analysis.onbid_source import OnbidSource  # noqa: E402
 onbid = OnbidSource()
 
 
+def _gm_q(v: str) -> str:
+    """PostgREST and=() 내부 값 이스케이프(따옴표/콤마 제거)."""
+    return '"' + str(v).replace('"', "").replace(",", " ").strip() + '"'
+
+
 @app.get("/gongmae")
 def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
-                 prop: str = "압류재산", dpsl_mtd: Optional[str] = None,
-                 usg_lcls: Optional[str] = None, goods: Optional[str] = None) -> dict:
-    """온비드 부동산 공매물건 목록(재산유형/처분방식/명칭 필터)."""
-    return onbid.list_items(page=page, rows=rows, prop=prop, dpsl_mtd=dpsl_mtd,
-                            usg_lcls=usg_lcls, goods=goods)
+                 prop: Optional[str] = "압류재산", dpsl_mtd: Optional[str] = None,
+                 usg_lcls: Optional[str] = None, goods: Optional[str] = None,
+                 sido: Optional[str] = None, sgg: Optional[str] = None,
+                 usage: Optional[str] = None) -> dict:
+    """온비드 공매물건 목록 — 우리 DB(gongmae_items) 소재지/재산유형/명칭 필터.
+    온비드 API가 소재지 검색을 지원하지 않아 전량 적재분을 우리가 필터한다.
+    DB 실패 시 온비드 라이브 API로 폴백."""
+    try:
+        conds = []   # (col, op, val)
+        if prop:
+            conds.append(("prop_type", "eq", prop))
+        if sido:
+            conds.append(("address", "ilike", f"*{sido}*"))
+        if sgg:
+            conds.append(("address", "ilike", f"*{sgg}*"))
+        if goods:
+            conds.append(("name", "ilike", f"*{goods}*"))
+        if usage:
+            conds.append(("usage", "ilike", f"*{usage}*"))
+        if dpsl_mtd:
+            conds.append(("disposal", "ilike", f"*{dpsl_mtd}*"))
+        params = {"select": "data,bid_close", "order": "bid_close.asc",
+                  "offset": str(max(0, (page - 1) * rows)), "limit": str(rows)}
+        if conds:
+            params["and"] = "(" + ",".join(f"{c}.{op}.{_gm_q(v)}" for c, op, v in conds) + ")"
+        resp = auction_db._get("gongmae_items", params, count=True)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"db {resp.status_code}")
+        data_rows = resp.json()
+        cr = resp.headers.get("content-range", "")
+        total = int(cr.split("/")[-1]) if "/" in cr and cr.split("/")[-1].isdigit() else len(data_rows)
+        items = [r.get("data") for r in data_rows if r.get("data")]
+        return {"items": items, "total": total, "page": page, "source": "db"}
+    except Exception as e:
+        # DB 미가용 시 라이브 폴백(소재지 필터는 불가)
+        out = onbid.list_items(page=page, rows=rows, prop=prop or "압류재산",
+                               dpsl_mtd=dpsl_mtd, usg_lcls=usg_lcls, goods=goods)
+        out["source"] = f"live({type(e).__name__})"
+        return out
 
 
 # ---------- 실거래(국토부 연립다세대 매매) ----------

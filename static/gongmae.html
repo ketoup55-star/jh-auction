@@ -114,7 +114,7 @@
       <div class="crumb">🏠 › 공매 › <b>공매종합검색</b></div></div>
 
     <table class="ftbl">
-      <tr><th>용도</th><td colspan="3"><select id="ctgr"><option value="">전체</option></select> <span class="sep">⊕ (세부용도)</span></td></tr>
+      <tr><th>용도</th><td colspan="3"><select id="ctgr"><option value="">전체</option></select> <span class="sep">⊕</span> <select id="ctgr2"><option value="">세부용도 전체</option></select></td></tr>
       <tr><th>입찰방식</th><td><select id="bidmtd"><option value="">전체</option><option>일반경쟁</option><option>지명경쟁</option></select></td>
           <th>물건관리번호</th><td><input type="text" id="manageNo" placeholder="물건관리번호"></td></tr>
       <tr><th>소재지</th><td><select id="sido"><option value="">전체</option></select> <select id="gugun"><option>구/군</option></select> <select id="dong"><option>동/읍</option></select></td>
@@ -125,7 +125,7 @@
           <th>최저입찰가</th><td><select><option>최소(비공개 포함)</option></select> <span class="sep">~</span> <select><option>최대</option></select></td></tr>
       <tr><th>절감율</th><td><select><option>최소</option></select> <span class="sep">~</span> <select><option>최대</option></select></td>
           <th>처분방식</th><td><select id="dpsl"><option value="">전체</option><option value="0001">매각</option><option value="0002">임대</option></select></td></tr>
-      <tr><th>재산종류</th><td><select id="prop"><option>압류재산</option><option>국유재산</option><option>수탁재산</option><option>유입자산</option></select></td>
+      <tr><th>재산종류</th><td><select id="prop"><option>압류재산</option><option>국유재산</option><option>수탁재산</option><option>유입자산</option><option>공유재산</option><option>기타일반재산</option><option value="">전체</option></select></td>
           <th>정렬방식</th><td><select id="sort"><option>입찰기일▲</option><option>감정가순</option><option>최저가순</option></select></td></tr>
       <tr><th>토지이용계획</th><td colspan="3">국계법에 따른 지역/지구 <select><option>전체</option></select> <span class="sep">(AND 조건)</span> <input type="text" placeholder="예) 개발제한구역" style="max-width:200px"></td></tr>
       <tr><th>특수물건</th><td colspan="3"><select><option>전체</option></select></td></tr>
@@ -167,27 +167,81 @@ async function gmFav(i,btn){
   else { GMFAV.add(L.manage_no); btn.textContent="♥"; btn.classList.add("on"); }
 }
 
+// ── 소재지 드롭다운(온비드 저장분 기준) ──
+let REGIONS={};
+const SIDO_LABEL={"전남광주통합특별시":"광주·전남"};
+const SIDO_ORDER=["서울특별시","부산광역시","대구광역시","인천광역시","전남광주통합특별시","대전광역시","울산광역시","세종특별자치시","경기도","강원특별자치도","충청북도","충청남도","전북특별자치도","경상북도","경상남도","제주특별자치도"];
+async function loadRegions(){
+  try{ REGIONS=await (await fetch("/static/data/gongmae_regions.json",{cache:"no-store"})).json(); }catch(e){ REGIONS={}; }
+  const sd=document.getElementById("sido");
+  const keys=Object.keys(REGIONS).sort((a,b)=>{let ia=SIDO_ORDER.indexOf(a),ib=SIDO_ORDER.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+  keys.forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=SIDO_LABEL[k]||k;sd.appendChild(o);});
+  sd.addEventListener("change",onSido);
+}
+function onSido(){
+  const sido=document.getElementById("sido").value;
+  const gg=document.getElementById("gugun"); gg.innerHTML='<option value="">구/군 전체</option>';
+  (REGIONS[sido]||[]).forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;gg.appendChild(o);});
+}
+
+// ── 용도 드롭다운(대분류 → 세부용도) ──
+let USAGES={};
+const LCLS_ORDER=["주거용건물","용도복합용건물","상가용및업무용건물","토지","산업용및기타특수용건물"];
+const LCLS_LABEL={"주거용건물":"주거용","용도복합용건물":"용도복합","상가용및업무용건물":"상가·업무용","토지":"토지","산업용및기타특수용건물":"산업·특수용"};
+async function loadUsages(){
+  try{ USAGES=await (await fetch("/static/data/gongmae_usages.json",{cache:"no-store"})).json(); }catch(e){ USAGES={}; }
+  const c=document.getElementById("ctgr");
+  const keys=Object.keys(USAGES).sort((a,b)=>{let ia=LCLS_ORDER.indexOf(a),ib=LCLS_ORDER.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
+  keys.forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=LCLS_LABEL[k]||k;c.appendChild(o);});
+  c.addEventListener("change",onLcls);
+}
+function onLcls(){
+  const lc=document.getElementById("ctgr").value;
+  const c2=document.getElementById("ctgr2"); c2.innerHTML='<option value="">세부용도 전체</option>';
+  (USAGES[lc]||[]).forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;c2.appendChild(o);});
+}
+
+let GM_PAGE=1, GM_TOTAL=0; const GM_ROWS=30;
+function gmParams(page){
+  const p=new URLSearchParams({rows:String(GM_ROWS),page:String(page)});
+  const pr=document.getElementById("prop").value; p.set("prop",pr);   // 빈값=전체(명시 전송)
+  const g=document.getElementById("goods").value.trim(); if(g)p.set("goods",g);
+  const dp=document.getElementById("dpsl").value; if(dp)p.set("dpsl_mtd",dp);
+  const sido=document.getElementById("sido").value; if(sido)p.set("sido",sido);
+  const gg=document.getElementById("gugun").value; if(gg&&gg!=="구/군")p.set("sgg",gg);
+  const sc=document.getElementById("ctgr2").value, lc=document.getElementById("ctgr").value;
+  if(sc)p.set("usage",sc); else if(lc)p.set("usage",lc);   // 세부용도 우선, 없으면 대분류
+  return p;
+}
 async function search(){
+  GM_PAGE=1; window.GM=[];
   const cnt=document.getElementById("cnt"), box=document.getElementById("list");
   box.innerHTML='<div class="notice">공매물건을 불러오는 중…</div>'; cnt.textContent="";
   await loadGmFav();
-  const p=new URLSearchParams({rows:"30"});
-  const pr=document.getElementById("prop").value; if(pr)p.set("prop",pr);
-  const g=document.getElementById("goods").value.trim(); if(g)p.set("goods",g);
-  const dp=document.getElementById("dpsl").value; if(dp)p.set("dpsl_mtd",dp);
-  let d; try{ d=await (await fetch("/gongmae?"+p)).json(); }catch(e){ d={error:"요청 실패"}; }
+  let d; try{ d=await (await fetch("/gongmae?"+gmParams(1))).json(); }catch(e){ d={error:"요청 실패"}; }
   if(d.error){
     box.innerHTML=`<div class="notice"><b>온비드 공매 데이터를 불러올 수 없습니다.</b><br>${d.error}<br><br>
       ※ data.go.kr에서 <b>온비드 부동산 물건목록 OpenAPI 활용신청 승인</b> 및 키 활성화 후 자동으로 표시됩니다.</div>`;
     cnt.textContent=""; return;
   }
-  window.GM=d.items||[];
-  cnt.innerHTML=`총 <b>${(d.total||0).toLocaleString()}</b>건`;
+  window.GM=d.items||[]; GM_TOTAL=d.total||0;
+  cnt.innerHTML=`총 <b>${GM_TOTAL.toLocaleString()}</b>건`;
   if(!window.GM.length){ box.innerHTML='<div class="notice">검색 결과가 없습니다.</div>'; return; }
-  box.innerHTML=`<table class="gtbl"><thead><tr>
+  render();
+}
+function render(){
+  const rows=window.GM.map((L,i)=>row(L,i)).join("");
+  const more=(window.GM.length<GM_TOTAL)
+    ? `<div style="text-align:center;margin:16px 0"><button class="btn b-ghost" onclick="loadMore()">더 보기 (${window.GM.length.toLocaleString()} / ${GM_TOTAL.toLocaleString()})</button></div>` : "";
+  document.getElementById("list").innerHTML=`<table class="gtbl"><thead><tr>
     <th style="width:120px">물건관리번호</th><th>물건명 / 소재지</th><th style="width:90px">용도</th>
     <th style="width:110px">감정가<br>최저입찰가</th><th style="width:130px">입찰기간</th><th style="width:64px">처분방식</th><th style="width:72px">재산종류</th>
-  </tr></thead><tbody>${window.GM.map((L,i)=>row(L,i)).join("")}</tbody></table>`;
+  </tr></thead><tbody>${rows}</tbody></table>${more}`;
+}
+async function loadMore(){
+  GM_PAGE++;
+  let d; try{ d=await (await fetch("/gongmae?"+gmParams(GM_PAGE))).json(); }catch(e){ return; }
+  window.GM=window.GM.concat(d.items||[]); render();
 }
 function gmOpen(i){ sessionStorage.setItem("gm_item", JSON.stringify(window.GM[i])); location.href="/static/gongmae_detail.html"; }
 function row(L,i){
@@ -204,7 +258,7 @@ function row(L,i){
     <td class="cc">${L.prop_type||"-"}</td>
   </tr>`;
 }
-search();
+Promise.all([loadRegions(),loadUsages()]).then(search);
 </script>
 <style>
 #aibot-btn{position:fixed;right:22px;bottom:22px;width:60px;height:60px;border-radius:50%;background:#1a73e8;color:#fff;border:none;font-size:22px;font-weight:800;letter-spacing:1px;cursor:pointer;box-shadow:0 6px 20px -4px rgba(26,115,232,.6);z-index:9998;display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:aibotTilt 4.5s ease-in-out infinite,aibotGlow 2.2s ease-in-out infinite;transform-origin:center bottom;}
