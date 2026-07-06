@@ -319,8 +319,9 @@ class UserStore:
                 (name, rank, lec, color, _now()))
 
     def _ensure_column(self, table: str, col: str, decl: str) -> None:
-        # PostgreSQL: ADD COLUMN IF NOT EXISTS로 안전하게(있으면 무시).
-        self._ex(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {decl}")
+        # Supabase 테이블은 완성된 컬럼으로 이미 생성돼 있어 ALTER가 불필요하다.
+        #  매 시작 시 ALTER TABLE이 pooler의 statement timeout을 유발하므로 no-op 처리.
+        return
 
     # ---- 회원 ----
     def create_user(self, email: str, password: str, name: str = "", phone: str = "") -> dict:
