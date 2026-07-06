@@ -475,13 +475,18 @@ class SupabaseSource:
             ors = ",".join(f"address.ilike.{v}*" for v in variants)
             f.append(("or", f"({ors})"))
         if caseno:
-            # 타경번호 검색: case_no 는 'YYYY-NNNNNN' 형식. 연도 있으면 정확 일치, 없으면 끝자리 매칭
-            cno = re.sub(r"[^0-9]", "", str(caseno))
-            if cno:
-                if year:
-                    f.append(("case_no", f"eq.{year}-{cno}"))
-                else:
-                    f.append(("case_no", f"like.*-{cno}"))
+            # 타경번호 검색: case_no 는 'YYYY-NNNNNN' 형식. 연도 있으면 정확 일치, 없으면 끝자리 매칭.
+            cs = str(caseno).strip()
+            _m = re.match(r"^(\d{4})-(\d+)$", cs)   # 이미 '연도-번호'(예: 2024-3113)로 들어오면 그대로 정확일치
+            if _m:                                  #  (프론트가 연도 붙여 보내도 0건 안 되게 — 숫자만 추출하면 20243113로 깨짐)
+                f.append(("case_no", f"eq.{_m.group(1)}-{_m.group(2)}"))
+            else:
+                cno = re.sub(r"[^0-9]", "", cs)
+                if cno:
+                    if year:
+                        f.append(("case_no", f"eq.{year}-{cno}"))
+                    else:
+                        f.append(("case_no", f"like.*-{cno}"))
         elif year:
             f.append(("case_no", f"like.{year}-*"))
         if court:
