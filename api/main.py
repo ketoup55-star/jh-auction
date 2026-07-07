@@ -4892,6 +4892,124 @@ def gongmae_nearby_trades(mng: str, cdtn: Optional[str] = None,
     return _trim_to_radius(result)
 
 
+@app.get("/gongmae/building_brief")
+def gongmae_building_brief(mng: str, cdtn: Optional[str] = None) -> dict:
+    """공매 건물정보(준공년도·세대·승강기) — 경매 building.info(주소) 재사용. gm_brief: 캐시."""
+    ck = "gm_brief:" + mng
+    try:
+        hit = auction_db.cache_get_many([ck]).get(ck)
+        if hit is not None:
+            return hit
+    except Exception:
+        pass
+    e, _cur = _gm_cur(mng, cdtn)
+    out = {"available": False}
+    if e:
+        try:
+            b = building.info(e.get("addr_jibun") or "")
+            if b:
+                out = {"available": True, **b}
+        except Exception:
+            pass
+    if out.get("available"):
+        try:
+            auction_db.cache_save(ck, out)
+        except Exception:
+            pass
+    return out
+
+
+@app.get("/gongmae/villa_est")
+def gongmae_villa_est(mng: str, cdtn: Optional[str] = None) -> dict:
+    """공매 빌라 시세 = 공시가격×유사실거래 평균요율(없으면 유사거래 평균). 경매 _villa_est_value 로직 복제(nb는 공매)."""
+    try:
+        nb = gongmae_nearby_trades(mng, cdtn)
+    except Exception:
+        return {"available": False}
+    if not (isinstance(nb, dict) and nb.get("available") and nb.get("geo_ok")):
+        return {"available": False}
+    trades = nb.get("trades") or []
+    if not trades:
+        return {"available": False}
+    py = nb.get("prop_build_year")
+    sgg = nb.get("sigungu_prefix") or ""
+    best = [t for t in trades if py and _to_int(t.get("build_year")) is not None
+            and abs(_to_int(t["build_year"]) - py) <= 5] or trades
+    best = sorted(best, key=lambda t: t.get("deal_date", ""), reverse=True)[:14]
+    pg = nb.get("prop_gongsi")
+    if isinstance(pg, dict) and pg.get("price"):
+        keys = [f"{(sgg + ' ' + (t.get('umd') or '') + ' ' + (t.get('jibun') or '')).strip()}"
+                f"|{t.get('area') or ''}|{t.get('floor') or ''}" for t in best]
+        try:
+            gmap = auction_gongsi(";".join(keys))
+        except Exception:
+            gmap = {}
+        yuls = []
+        for t, gk in zip(best, keys):
+            amt = _to_int(t.get("amount"))
+            g = gmap.get(gk)
+            if amt and isinstance(g, dict) and g.get("price"):
+                yuls.append(amt / g["price"])
+        pgp = _to_int(pg.get("price"))
+        if yuls and pgp:
+            yul = sum(yuls) / len(yuls)
+            return {"available": True, "price": round(pgp * yul), "yul": round(yul, 4), "gongsi": pgp, "kind": "est"}
+    amts = [_to_int(t.get("amount")) for t in best if _to_int(t.get("amount"))]
+    if amts:
+        return {"available": True, "price": round(sum(amts) / len(amts)), "kind": "trade_avg", "n": len(amts)}
+    return {"available": False}
+
+
+@app.get("/gongmae/villa_expected_bid")
+def gongmae_villa_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
+    """공매 빌라/도생 예상낙찰가 — 경매 백데이터(빌라 매각사례) 참조·eb.compute_villa 무수정 재사용.
+    반경1km·전용±6㎡·층±1·감정가±1500만·낙찰가율<100%·3년. gm_vexpbid: 캐시(온디맨드)."""
+    from auction_analysis import expected_bid as eb
+    ck = "gm_vexpbid:" + mng
+    try:
+        hit = auction_db.cache_get_many([ck]).get(ck)
+        if isinstance(hit, dict):
+            return hit
+    except Exception:
+        pass
+    e, cur = _gm_cur(mng, cdtn)
+    if not cur:
+        return {"available": False}
+    if not _is_villa_usage(cur.get("usage")):
+        return {"available": False, "reason": "빌라/도생 아님"}
+    ll = _geocode(eb.geo_addr(cur.get("address")))
+    if not ll:
+        return {"available": False, "reason": "좌표 없음"}
+    region = _villa_region_prefix(cur.get("address"))
+    cases = []
+    if region:
+        try:
+            rr = auction_db._get("items", {
+                "select": "item_key,address,area_text,building_area,appraisal_price,sale_price,sale_rate,sell_date,bid_count,sale_2nd_price",
+                "or": _VILLA_OR, "address": f"ilike.*{region}*",
+                "sale_price": "gt.0", "order": "item_key", "limit": "2000"})
+            cases = rr.json() if rr.status_code in (200, 206) else []
+        except Exception:
+            cases = []
+    for c in cases:
+        c["ll"] = _geocode(eb.geo_addr(c.get("address")))   # 대부분 경매 워밍 캐시 적중
+    est = None
+    try:
+        ev = gongmae_villa_est(mng, cdtn)
+        if isinstance(ev, dict) and ev.get("available"):
+            est = ev.get("price")
+    except Exception:
+        pass
+    r = eb.compute_villa(cur, ll, cases, est_price=est)
+    r["v"] = _VEXPBID_V
+    if r.get("available"):
+        try:
+            auction_db.cache_save(ck, r)
+        except Exception:
+            pass
+    return r
+
+
 # ---------- 실거래(국토부 연립다세대 매매) ----------
 from auction_analysis.molit_source import MolitSource, filter_similar  # noqa: E402
 molit = MolitSource()
