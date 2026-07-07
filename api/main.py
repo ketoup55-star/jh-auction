@@ -7493,16 +7493,7 @@ def chat_bot(body: dict = Body(...), sid: Optional[str] = Cookie(None)) -> dict:
     _PREMIUM_GATE = {"reply": "AI 물건 검색·조회는 프리미엄 등급 이상 회원 전용이에요. 요금제에서 프리미엄으로 올리시면 "
                               "조건에 맞는 실제 경매 물건을 AI가 바로 찾아드립니다. (사이트 이용법·경매 기초·용어는 지금도 얼마든지 물어보세요!)",
                      "cards": [], "used_args": {}, "list_text": ""}
-    key = ""
-    try:
-        st = _kb().load_state()
-        for kind in ("news", "upcoming", "sold"):
-            k = (st.get(kind) or {}).get("openai_key")
-            if k:
-                key = k
-                break
-    except Exception:
-        pass
+    key = _openai_key()   # env var(OPENAI_API_KEY) 우선 → 로컬 kakao_broadcast.json 폴백(챗봇이 _openai_key 안 쓰고 파일만 읽던 버그 픽스)
     if not key:
         return {"reply": "죄송합니다. AI 상담 기능이 아직 준비 중입니다(관리자 설정 필요). "
                          "그동안 궁금한 점은 고객센터로 문의해 주세요."}
