@@ -36,3 +36,4 @@ _server_*.log
 run_server_*.bat
 _dbg_*.py
 _warmup.py
+kakao_broadcast.json

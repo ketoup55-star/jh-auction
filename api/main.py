@@ -7686,8 +7686,11 @@ def _load_ai_kb() -> str:
 
 
 def _openai_key() -> str:
+    k = os.environ.get("OPENAI_API_KEY", "").strip()   # 클라우드=env var 우선(키를 repo에 안 올려 노출·폐기 방지)
+    if k:
+        return k
     try:
-        st = _kb().load_state()
+        st = _kb().load_state()                         # 로컬 폴백: kakao_broadcast.json(이제 gitignore됨)
         for kind in ("news", "upcoming", "sold"):
             k = (st.get(kind) or {}).get("openai_key")
             if k:
