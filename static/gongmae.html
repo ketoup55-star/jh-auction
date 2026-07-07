@@ -443,10 +443,33 @@ function row(L,i){
   const mng=L.manage_no||"", cdtn=L.pbct_cdtn_no||"", usg=L.usage||"";
   const graded=gmIsGraded(usg);
   const key=mng+(cdtn?("|"+cdtn):"");
-  // 매수판정 배지 칩 + 추정시세/차익 셀(빌라·아파트만 · 경매 목록과 동일 구조)
-  const gradechip=graded?`<span class="gradechip" data-key="${escAttr(key)}"></span>`:"";
-  const estcell=graded?`<div class="${GM_APT_RE.test(usg)?'aptest':'villaest'}" data-key="${escAttr(key)}" data-base="${L.min_price||''}"></div>`:"";
-  return `<tr data-idx="${i}" data-mng="${escAttr(mng)}" data-cdtn="${escAttr(cdtn)}" onclick="gmOpen(${i})">
+  // ── 사전계산(warm_gongmae_grade.py) 값이 있으면 배지·시세·차익을 즉시 렌더(라이브 호출 없음) ──
+  //    buy_grade 없는 미워밍 물건만 빈 placeholder로 남겨 fillGmGrades/fillGmEstimates가 소수 폴백.
+  const warmed=graded && L.buy_grade;
+  let gradechip="", estcell="", trGrade="", trProfit="", trSise="";
+  if(warmed){
+    const cls=GM_GCLS[L.buy_grade]||"g-mid";
+    gradechip=`<span class="gradechip" data-key="${escAttr(key)}" data-done="1"><span class="gbadge ${cls}" title="${escAttr(L.grade_reason||"")}">${L.buy_grade}</span></span>`;
+    trGrade=` data-grade="${escAttr(L.buy_grade)}"`;
+    const base=+(L.min_price||0);
+    let ehtml="";
+    if(L.sise!=null){
+      ehtml='<div class="ecsi"><span class="lbl">시세 :</span><span class="amt">'+won(L.sise)+'</span></div>';
+      trSise=` data-sise="${L.sise}"`;
+      if(L.profit!=null){ const diff=+L.profit;
+        ehtml+='<div class="'+(diff>=0?'eprofit':'eloss')+'"><span class="lbl">차익 :</span><span class="amt">'+(diff>=0?'+':'−')+won(Math.abs(diff))+'</span></div>';
+        trProfit=` data-profit="${L.profit}"`;
+      }
+    } else {
+      ehtml='<div class="ecsi"><span class="lbl nosise">시세 없음</span></div>';
+    }
+    const cellcls=GM_APT_RE.test(usg)?'aptest':'villaest';
+    estcell=`<div class="${cellcls}" data-key="${escAttr(key)}" data-base="${base||''}" data-done="1">${ehtml}</div>`;
+  } else if(graded){
+    gradechip=`<span class="gradechip" data-key="${escAttr(key)}"></span>`;
+    estcell=`<div class="${GM_APT_RE.test(usg)?'aptest':'villaest'}" data-key="${escAttr(key)}" data-base="${L.min_price||''}"></div>`;
+  }
+  return `<tr data-idx="${i}"${trGrade}${trProfit}${trSise} data-mng="${escAttr(mng)}" data-cdtn="${escAttr(cdtn)}" onclick="gmOpen(${i})">
     <td class="cc"><input type="checkbox" class="rowchk" value="${escAttr(mng)}" onclick="event.stopPropagation()"></td>
     <td class="cc"><button class="gmfav${GMFAV.has(L.manage_no)?' on':''}" onclick="event.stopPropagation();gmFav(${i},this)" title="관심등록/해제">${GMFAV.has(L.manage_no)?'♥':'♡'}</button><br>${L.manage_no||"-"}</td>
     <td><div style="display:flex;gap:9px;align-items:center;">
@@ -517,11 +540,21 @@ function applyGmSort(){
   rows.sort((a,b)=>{ let c=_gmCmp(k1,a,b); if(c)return c; c=_gmCmp(k2,a,b); if(c)return c; return idx(a)-idx(b); });
   rows.forEach(r=>tbody.appendChild(r));
 }
-// ── 매수판정 배지 비동기 채움(행별 /gongmae/buy_grade) ──
+// ── 소량 폴백용 동시성 제한 풀(미워밍 물건만 소수 호출 · 경매식 사전계산이라 대부분 즉시 렌더) ──
+//    사전계산(warm_gongmae_grade.py)이 채운 행은 row()에서 즉시 렌더+data-done → 여기서 호출 안 함.
+//    buy_grade 미보유(미워밍) 행만 남는데, 그마저도 동시 3개로 제한해 예전의 20~100 동시폭주를 방지.
+const GM_FALLBACK_CONC=3;
+async function _gmPool(items,worker,conc){
+  conc=conc||GM_FALLBACK_CONC; let i=0;
+  async function next(){ while(i<items.length){ const j=i++; await worker(items[j]); } }
+  await Promise.all(Array.from({length:Math.min(conc,items.length)},next));
+}
+// ── 매수판정 배지(미워밍 폴백만 · 행별 /gongmae/buy_grade) ──
 const GM_GCLS={"매수양호":"g-ok","매수검토":"g-mid","매수금지":"g-no"};
 async function fillGmGrades(){
   const els=[...document.querySelectorAll('.gradechip[data-key]')].filter(e=>!e.dataset.done);
-  await Promise.all(els.map(async el=>{
+  if(!els.length){ applyGradeFilter(); applyGmSort(); return; }   // 전부 사전계산됨 → 라이브 호출 0
+  await _gmPool(els, async el=>{
     const key=el.dataset.key, p=key.split("|"), mng=p[0], cdtn=p[1]||"";
     let g; try{ g=await (await fetch("/gongmae/buy_grade?mng="+encodeURIComponent(mng)+(cdtn?"&cdtn="+encodeURIComponent(cdtn):""))).json(); }catch(e){ return; }
     el.dataset.done="1";
@@ -529,14 +562,15 @@ async function fillGmGrades(){
     const cls=GM_GCLS[g.grade]||"g-mid";
     el.innerHTML='<span class="gbadge '+cls+'" title="'+escAttr(g.reason||"")+'">'+g.grade+'</span>';
     const tr=el.closest('tr'); if(tr){ tr.dataset.grade=g.grade; if(g.profit!=null)tr.dataset.profit=g.profit; if(g.sise!=null)tr.dataset.sise=g.sise; }
-  }));
+  });
   applyGradeFilter();   // 등급 도착 후 필터 재적용
   applyGmSort();        // 정렬도 재적용(등급/차익 기준 정렬 반영)
 }
-// ── 추정시세·차익 비동기 채움(빌라=villa_est · 아파트=apt_info.est) ──
+// ── 추정시세·차익(미워밍 폴백만 · 빌라=villa_est · 아파트=apt_info.est) ──
 async function fillGmEstimates(){
   const els=[...document.querySelectorAll('.villaest[data-key],.aptest[data-key]')].filter(e=>!e.dataset.done);
-  await Promise.all(els.map(async el=>{
+  if(!els.length){ applyGmSort(); return; }   // 전부 사전계산됨 → 중복 시세호출 0
+  await _gmPool(els, async el=>{
     const key=el.dataset.key, p=key.split("|"), mng=p[0], cdtn=p[1]||"";
     const isApt=el.classList.contains("aptest");
     const url=isApt?("/gongmae/apt_info?mng="+encodeURIComponent(mng)+(cdtn?"&cdtn="+encodeURIComponent(cdtn):""))
@@ -554,7 +588,7 @@ async function fillGmEstimates(){
       const tr=el.closest('tr'); if(tr) tr.dataset.sise=price;   // 정렬용(차익은 grade에서 채움)
     }
     el.innerHTML=html;
-  }));
+  });
   applyGmSort();
 }
 function restoreGmToolbar(){

@@ -4782,7 +4782,9 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
         if low_max is not None:
             conds.append(("min_price", "lte", str(int(low_max))))
         order = _GM_SORTS.get(sort or "", "bid_close.asc")
-        params = {"select": "data,bid_close", "order": order,
+        # 사전계산 매수판정(warm_gongmae_grade.py) — data JSONB엔 없고 컬럼에 있으니 컬럼도 select해
+        # item에 병합. 목록이 행별 buy_grade/villa_est 라이브 호출 없이 배지·시세·차익을 즉시 렌더.
+        params = {"select": "data,bid_close,buy_grade,sise,profit,grade_reason", "order": order,
                   "offset": str(max(0, (page - 1) * rows)), "limit": str(rows)}
         if conds:
             # 가격 조건(gte/lte)은 숫자라 따옴표 없이, 문자열 조건만 _gm_q로 이스케이프
@@ -4795,7 +4797,17 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
         data_rows = resp.json()
         cr = resp.headers.get("content-range", "")
         total = int(cr.split("/")[-1]) if "/" in cr and cr.split("/")[-1].isdigit() else len(data_rows)
-        items = [r.get("data") for r in data_rows if r.get("data")]
+        items = []
+        for r in data_rows:
+            d = r.get("data")
+            if not d:
+                continue
+            # 사전계산 컬럼을 item에 병합(warm된 것만 값 존재, 미워밍은 None→프론트가 폴백 소수 호출)
+            d["buy_grade"] = r.get("buy_grade")
+            d["sise"] = r.get("sise")
+            d["profit"] = r.get("profit")
+            d["grade_reason"] = r.get("grade_reason")
+            items.append(d)
         return {"items": items, "total": total, "page": page, "source": "db"}
     except Exception as e:
         # DB 미가용 시 라이브 폴백(소재지 필터는 불가)
