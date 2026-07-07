@@ -5237,7 +5237,7 @@ def gongmae_competing_listings(mng: str, cdtn: Optional[str] = None) -> dict:
         return {"matched": False, "count": 0, "listings": []}
     if "아파트" not in (cur.get("usage") or "") and "오피스텔" not in (cur.get("usage") or ""):
         return {"matched": False, "count": 0, "listings": []}
-    # KB 단지 매칭(도로명 우선, 없으면 지번). 결과(complex_no·region_ok)만 캐시.
+    # KB 단지 매칭(지번주소 우선, 실패 시 도로명). 결과(complex_no·region_ok)만 캐시.
     ck = "gm_kbmatch:" + mng
     cno = None
     m = None
@@ -5245,11 +5245,22 @@ def gongmae_competing_listings(mng: str, cdtn: Optional[str] = None) -> dict:
         m = auction_db.cache_get_many([ck]).get(ck)
     except Exception:
         m = None
+    # 옛 버그(도로명 우선)로 저장된 미매칭 캐시({complex_no:None})는 무시하고 재매칭(근본수정 효과 반영)
+    if isinstance(m, dict) and not m.get("complex_no"):
+        m = None
     if not isinstance(m, dict):
-        addr_for_kb = (e.get("addr_road") or e.get("addr_jibun") or cur.get("address") or "")
+        # ★근본수정: 지번주소 우선. 도로명주소는 단지명이 괄호 안(예: '평산6길 22 (평산동, 장원하이드파크)')이라
+        #   kb_crawler.extract_complex_name이 괄호를 먼저 제거 → 단지명추출실패 → 미매칭. 지번주소는 단지명이 인라인.
+        addr_jibun = (e.get("addr_jibun") or cur.get("address") or "")
+        addr_road = (e.get("addr_road") or "")
         try:
             import kb_crawler as _kb
-            m = _kb.match_address(addr_for_kb)
+            m = _kb.match_address(addr_jibun) if addr_jibun else None
+            # 지번으로 미매칭이면 도로명으로 재시도(지번주소 자체가 없거나 단지명 인라인 실패한 경우 대비)
+            if (not isinstance(m, dict) or not m.get("complex_no")) and addr_road:
+                m2 = _kb.match_address(addr_road)
+                if isinstance(m2, dict) and m2.get("complex_no"):
+                    m = m2
         except Exception as ex:
             # KB 미가용(토큰 없음/무효/네트워크) — 우아하게 미매칭 반환(재시도 위해 캐시 안 함)
             return {"matched": False, "count": 0, "listings": [], "reason": f"KB 미가용({type(ex).__name__})"}
@@ -5331,6 +5342,89 @@ def gongmae_bid_schedule(mng: str = Query(..., description="물건관리번호 c
             auction_db.cache_save(ck, out)
         except Exception:
             pass
+    return out
+
+
+def _gm_last_min(mng: str) -> Optional[int]:
+    """입찰일정(bid_schedule) 마지막(최고 회차) 회차의 최저입찰가(원). 유찰 저감된 현재 최저가."""
+    try:
+        bs = gongmae_bid_schedule(mng)
+    except Exception:
+        return None
+    rounds = (bs or {}).get("rounds") or []
+    if not rounds:
+        return None
+    # rounds는 회차 오름차순 정렬 → 마지막 = 최고 회차(가장 저감된 최저입찰가)
+    lp = rounds[-1].get("min_price")
+    return _to_int(lp) if lp is not None else None
+
+
+@app.get("/gongmae/buy_grade")
+def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
+    """공매 매수판정(빌라·다세대·도시형생활주택 + 아파트) — 마지막회차 최저가 vs 추정시세.
+    · 시세 소스: 빌라류=villa_est.price / 아파트·오피스텔=apt_info.est.price
+    · 시세 산출불가 → 매수금지("수요 없음 · 매수세 없음")
+    · 마지막회차 최저가 > 시세 → 매수금지
+    · 차익(시세−마지막회차최저가) ≥ 3,000만 → 매수양호 · 0~3,000만 → 매수검토
+    gm_grade: 캐시(온디맨드). 대상 아닌 용도(토지·상가·단독 등)는 applicable:False."""
+    ck = "gm_grade:" + mng + ((":" + cdtn) if cdtn else "")
+    try:
+        hit = auction_db.cache_get_many([ck]).get(ck)
+        if isinstance(hit, dict) and hit.get("v") == 1:
+            return {**hit, "_cache": "hit"}
+    except Exception:
+        pass
+    e, cur = _gm_cur(mng, cdtn)
+    if not cur:
+        return {"applicable": False, "reason": "물건 없음", "v": 1}
+    usage = cur.get("usage") or ""
+    is_villa = _is_villa_usage(usage)
+    is_apt = ("아파트" in usage) or ("오피스텔" in usage)
+    if not (is_villa or is_apt):
+        return {"applicable": False, "reason": "매수판정 대상 아님(빌라류·아파트만)",
+                "usage": usage, "v": 1}
+    # ① 추정 시세(용도별 소스 분기)
+    sise = None
+    try:
+        if is_villa:
+            ev = gongmae_villa_est(mng, cdtn)
+            if isinstance(ev, dict) and ev.get("available"):
+                sise = _to_int(ev.get("price"))
+        else:
+            ai = gongmae_apt_info(mng, cdtn)
+            if isinstance(ai, dict) and isinstance(ai.get("est"), dict) and ai["est"].get("price"):
+                sise = _to_int(ai["est"]["price"])
+    except Exception:
+        sise = None
+    # ② 마지막회차 최저가(bid_schedule) — 없으면 물건 자체 최저가 폴백
+    last_min = _gm_last_min(mng)
+    if last_min is None:
+        last_min = _to_int(e.get("min_price")) if isinstance(e, dict) else None
+    kind = "villa" if is_villa else "apt"
+    # ③ 판정(주인님 지정 규칙)
+    if not sise:
+        out = {"applicable": True, "grade": "매수금지", "kind": kind,
+               "reason": "수요 없음 · 매수세 없음",
+               "sise": None, "last_min": last_min, "profit": None, "v": 1}
+    elif last_min is None:
+        return {"applicable": False, "reason": "최저입찰가 확인 불가",
+                "sise": sise, "kind": kind, "v": 1}
+    elif last_min > sise:
+        out = {"applicable": True, "grade": "매수금지", "kind": kind,
+               "reason": "최저입찰가가 추정시세보다 높음",
+               "sise": sise, "last_min": last_min, "profit": sise - last_min, "v": 1}
+    else:
+        profit = sise - last_min
+        if profit >= 30000000:
+            grade, reason = "매수양호", "차익 3천만원 이상"
+        else:
+            grade, reason = "매수검토", "차익 3천만원 미만"
+        out = {"applicable": True, "grade": grade, "kind": kind, "reason": reason,
+               "sise": sise, "last_min": last_min, "profit": profit, "v": 1}
+    try:
+        auction_db.cache_save(ck, out)
+    except Exception:
+        pass
     return out
 
 
