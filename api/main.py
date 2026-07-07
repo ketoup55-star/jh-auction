@@ -4812,6 +4812,86 @@ def gongmae_enrich(mng: str = Query(..., description="물건관리번호 cltrMng
     return d
 
 
+# ---------- 공매 물건상세: 경매기능 재사용(온디맨드·gm_* 캐시·경매코드 무수정) ----------
+_gm_nearby_cache: dict = {}
+
+
+def _gm_cur(mng: str, cdtn: Optional[str] = None):
+    """공매 enrich → 경매 내부함수용 합성 dict.
+    주소에 '층' 부착(예낙/유사거래 층필터가 주소 정규식 의존)·usage=세부용도·building_area='N㎡'(전용)."""
+    e = gongmae_enrich(mng, cdtn)
+    if not e or e.get("error"):
+        return None, None
+    addr = (e.get("addr_jibun") or "").strip()
+    if e.get("floor"):
+        addr = f"{addr} {e['floor']}층"
+    cur = {
+        "address": addr,
+        "usage": e.get("usage_scls") or "",
+        "building_area": (f"{e['bld_area']}㎡" if e.get("bld_area") else None),
+        "area_text": None,
+        "appraisal_price": e.get("appraisal_price"),
+        "land_area": e.get("land_area"),
+        "item_key": None,
+    }
+    return e, cur
+
+
+@app.get("/gongmae/nearby_trades")
+def gongmae_nearby_trades(mng: str, cdtn: Optional[str] = None,
+                          months: int = Query(12, le=24)) -> dict:
+    """공매 빌라/도생 주변 유사실거래 — 경매 `_nearby_filtered` 그대로 재사용(온디맨드·gm_nearby: 캐시)."""
+    ck = "gm_nearby:" + mng
+    if ck in _gm_nearby_cache:
+        return _trim_to_radius(_gm_nearby_cache[ck])
+    try:
+        db = auction_db.cache_get_many([ck]).get(ck)
+    except Exception:
+        db = None
+    if isinstance(db, dict) and db.get("available"):
+        _gm_nearby_cache[ck] = db
+        return _trim_to_radius(db)
+    e, cur = _gm_cur(mng, cdtn)
+    if not cur:
+        return {"available": False}
+    if not re.search(r"다세대|연립|빌라|도시형", cur["usage"]):
+        return {"available": False, "reason": "연립다세대/도시형 대상 아님"}
+    addr = cur["address"]
+
+    def _bi():
+        try:
+            b = building.info(addr)
+            return _to_int(b.get("build_year")) if b else None
+        except Exception:
+            return None
+    with _cf.ThreadPoolExecutor(max_workers=2) as ex:
+        f_r = ex.submit(_nearby_filtered, cur)
+        f_by = ex.submit(_bi)
+        r = f_r.result()
+        prop_build_year = f_by.result()
+    if r is None:
+        return {"available": False, "reason": "법정동코드 변환 실패", "address": addr}
+    picked = sorted(r["trades"], key=lambda t: t.get("deal_date", ""), reverse=True)[:500]
+    result = {
+        "available": True, "v": 2, "address": addr, "addr_prefix": r["addr_prefix"],
+        "sigungu_prefix": r["sigungu_prefix"], "addr_jibun": r["addr_jibun"],
+        "prop_area": r["prop_area"], "prop_floor": r["prop_floor"],
+        "prop_build_year": prop_build_year, "prop_gongsi": None, "months": months,
+        "geo_ok": r.get("geo_ok", False), "prop_lng": r.get("prop_lng"), "prop_lat": r.get("prop_lat"),
+        "trades": [{"amount": t["amount"], "area": t["area"], "build_year": t.get("build_year"),
+                    "floor": t.get("floor"), "jibun": t.get("jibun"), "name": t.get("name"),
+                    "umd": t.get("umd"), "deal_date": t.get("deal_date"),
+                    "lng": t.get("lng"), "lat": t.get("lat")} for t in picked],
+    }
+    if result.get("geo_ok"):
+        _gm_nearby_cache[ck] = result
+        try:
+            auction_db.cache_save(ck, result)
+        except Exception:
+            pass
+    return _trim_to_radius(result)
+
+
 # ---------- 실거래(국토부 연립다세대 매매) ----------
 from auction_analysis.molit_source import MolitSource, filter_similar  # noqa: E402
 molit = MolitSource()
