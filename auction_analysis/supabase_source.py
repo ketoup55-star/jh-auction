@@ -609,7 +609,7 @@ class SupabaseSource:
         # 결과가 크지 않으면(≤1000건) 상태별 15개 카운트쿼리(~1s) 대신 1회 조회 후 파이썬 집계(~0.3s).
         #  count=exact로 총건수를 함께 받아 '전량 확보'됐을 때만 집계(캡 초과 시 아래 카운트쿼리 폴백). 전상태 (1) 뜨던 것도 해소.
         try:
-            params = [("select", "result"), ("limit", "1000")] + self._filters(**kw)
+            params = [("select", "result,status_reason,data_class"), ("limit", "1000")] + self._filters(**kw)
             r = self._get("items", params, count=True)
             if r.status_code in (200, 206):
                 rows = r.json()
@@ -617,7 +617,7 @@ class SupabaseSource:
                 if total <= len(rows):        # 전량 확보(캡 안 넘음) → 정확 집계
                     out: dict[str, int] = {"전체": total}
                     for x in rows:
-                        res = (x.get("result") or "").strip()
+                        res = (_reconciled_result(x) or "").strip()   # 목록과 동일 교정(백데이터 매각을 신건으로 오집계 방지)
                         for st in self.STATUS_ORDER:
                             if res.startswith(st):
                                 out[st] = out.get(st, 0) + 1
