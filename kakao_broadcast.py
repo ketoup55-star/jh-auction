@@ -201,7 +201,8 @@ def _prop_block(p, usage="", sold=False):
         ("투자금", r["total"], ""),
     ]
     width = max(_vwidth(_won(x[1])) for x in rows if x)      # 금액 최대 시각폭
-    out = [f"📍 {_city(p['addr'])}" + (f" ({usage})" if usage else "") + (" (매각완료)" if sold else "")]
+    _tag = "(매각완료)" if sold else "(매각예정)"
+    out = [f"{_tag}📍 {_city(p['addr'])}" + (f" ({usage})" if usage else "")]
     for x in rows:
         if x is None:
             out.append("")
