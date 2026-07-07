@@ -180,8 +180,8 @@ def _amt(n, width):
     return " " * max(0, width - _vwidth(s)) + s
 
 
-def _prop_block(p, usage=""):
-    """물건 1개 → 주소(시·군·구, 용도) + 정렬된 단기매도 정보. 사건번호·부가세 문구 없음."""
+def _prop_block(p, usage="", sold=False):
+    """물건 1개 → 주소(시·군·구, 용도) + 정렬된 단기매도 정보. 사건번호·부가세 문구 없음. sold=True면 '(매각완료)' 표기."""
     r = ss.calc(bid=p["bid"], sell=p["price"], appraisal=p["appraisal"],
                 deposit=p["deposit"], exclusive_area=p["area"])
     loan_src = "감정60%" if r["use_appr"] else "낙찰80%"
@@ -201,7 +201,7 @@ def _prop_block(p, usage=""):
         ("투자금", r["total"], ""),
     ]
     width = max(_vwidth(_won(x[1])) for x in rows if x)      # 금액 최대 시각폭
-    out = [f"📍 {_city(p['addr'])}" + (f" ({usage})" if usage else "")]
+    out = [f"📍 {_city(p['addr'])}" + (f" ({usage})" if usage else "") + (" (매각완료)" if sold else "")]
     for x in rows:
         if x is None:
             out.append("")
@@ -252,7 +252,7 @@ def build_sold():
         for p in picks:
             if p.get("thumb"):
                 items.append({"type": "image", "url": p["thumb"]})
-            items.append({"type": "text", "text": _prop_block(p, name)})
+            items.append({"type": "text", "text": _prop_block(p, name, sold=True)})
     return (date, items) if picked else (date, None)
 
 
