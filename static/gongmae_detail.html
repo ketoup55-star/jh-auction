@@ -27,7 +27,10 @@
   .navin{max-width:1180px;margin:0 auto;padding:0 16px;display:flex;gap:4px;flex-wrap:wrap;}
   .nav a{padding:14px 18px;font-size:15px;font-weight:600;color:#333;text-decoration:none;}
   .nav a:hover,.nav a.on{color:var(--primary);}
-  .wrap{max-width:1000px;margin:18px auto;padding:0 16px;}
+  .wrap{max-width:1180px;margin:18px auto;padding:0 16px;}
+  .detail-grid{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:16px;align-items:start;}
+  #gm-files-panel{position:sticky;top:120px;}
+  @media(max-width:860px){ .detail-grid{grid-template-columns:1fr;} #gm-files-panel{position:static;} }
   .back{font-size:13px;color:var(--primary);}
   .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-top:14px;}
   h1{font-size:20px;font-weight:700;margin:6px 0 2px;}
@@ -45,8 +48,32 @@
   .hcell .hl{font-size:11px;color:var(--labeltx);font-weight:700;}
   .hcell .hv{font-weight:600;font-size:13px;word-break:break-all;}
   .hcell .hv.low{color:var(--hotred);font-weight:700;}
-  .gm-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;}
-  .gm-gal img{width:100%;height:100px;object-fit:cover;border-radius:6px;border:1px solid var(--line);cursor:zoom-in;background:#eef1f5;}
+  .gm-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;}
+  .gm-gal img{width:100%;height:92px;object-fit:cover;border-radius:6px;border:1px solid var(--line);cursor:zoom-in;background:#eef1f5;transition:border-color .12s,transform .12s;}
+  .gm-gal img:hover{border-color:var(--primary);transform:scale(1.02);}
+  /* 사진 라이트박스(캐러셀) */
+  .lb-ov{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:10000;display:none;align-items:center;justify-content:center;}
+  .lb-ov.on{display:flex;}
+  .lb-stage{position:relative;max-width:92vw;max-height:92vh;display:flex;align-items:center;justify-content:center;}
+  .lb-stage img{max-width:92vw;max-height:86vh;object-fit:contain;border-radius:6px;box-shadow:0 6px 30px rgba(0,0,0,.6);background:#111;}
+  .lb-arr{position:absolute;top:50%;transform:translateY(-50%);width:52px;height:52px;border-radius:50%;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:30px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;}
+  .lb-arr:hover{background:rgba(255,255,255,.32);}
+  .lb-prev{left:-64px;}.lb-next{right:-64px;}
+  .lb-close{position:fixed;top:18px;right:22px;width:44px;height:44px;border-radius:50%;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:26px;cursor:pointer;z-index:10001;}
+  .lb-close:hover{background:rgba(255,255,255,.32);}
+  .lb-count{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);color:#fff;font-size:14px;font-weight:600;background:rgba(0,0,0,.55);padding:6px 16px;border-radius:20px;letter-spacing:.03em;}
+  @media(max-width:860px){ .lb-prev{left:6px;}.lb-next{right:6px;} .lb-arr{width:44px;height:44px;font-size:24px;background:rgba(255,255,255,.28);} }
+  /* 첨부파일 우측 세로 패널 */
+  .fpanel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;}
+  .fpanel .fphd{font-weight:700;font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+  .fpanel .fpitem{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:8px;background:#fbfcfe;transition:border-color .12s,background .12s;}
+  .fpanel .fpitem:last-child{margin-bottom:0;}
+  .fpanel .fpitem:hover{border-color:var(--primary);background:#f2f7ff;}
+  .fpanel .fpic{flex:0 0 auto;width:26px;height:32px;border-radius:4px;background:#e53935;color:#fff;font-size:8.5px;font-weight:800;display:flex;align-items:center;justify-content:center;letter-spacing:.02em;}
+  .fpanel .fpmeta{min-width:0;flex:1;}
+  .fpanel .fpname{font-size:12px;font-weight:600;color:var(--text);word-break:break-all;line-height:1.35;}
+  .fpanel .fpdl{font-size:11px;color:var(--primary);font-weight:600;margin-top:2px;}
+  .fpanel .fpempty{color:var(--muted);font-size:12px;line-height:1.6;}
   /* 부동산DB '전국' 스티커 — 점멸 + hover 시 좌우 기울기(프리미엄 스티커와 동일 형식) */
   @keyframes natlBlink{0%,100%{opacity:1}50%{opacity:.35}}
   @keyframes natlWobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg)}55%{transform:rotate(9deg)}80%{transform:rotate(-4deg)}}
@@ -69,6 +96,59 @@
   .tbl th{background:var(--label);color:var(--labeltx);font-weight:600;white-space:nowrap;}
   .tbl td.amt{text-align:right;font-variant-numeric:tabular-nums;}.tbl td.low{color:var(--hotred);font-weight:700;}
   .scrollx{overflow-x:auto;}
+  /* ── 경매 '실거래가 상세(유사 매물)' 컴포넌트 1:1 이식(auction.html 복사) ── */
+  .mapsub{font-size:12px;font-weight:500;color:var(--muted);margin-left:6px;}
+  .nbcard h2{font-size:16px;font-weight:700;margin:0 0 12px;}
+  .elevseg{display:inline-flex;align-items:center;gap:6px;margin-bottom:10px;}
+  .elevseg-lb{font-size:13px;font-weight:700;color:var(--primary);margin-right:2px;}
+  .eseg{font-size:12px;font-weight:600;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:14px;padding:4px 12px;cursor:pointer;transition:.12s;}
+  .eseg:hover{border-color:#9fb6e0;}
+  .eseg.on{background:#1565ff;border-color:#1565ff;color:#fff;}
+  .grpseg{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .grpseg-lb{font-size:13px;font-weight:700;color:var(--primary);margin-right:2px;}
+  .gchip{font-size:12px;font-weight:600;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:14px;padding:4px 12px;cursor:pointer;transition:.12s;white-space:nowrap;}
+  .gchip:hover{border-color:#9fb6e0;}
+  .gchip.on{background:#1565ff;border-color:#1565ff;color:#fff;}
+  .nb-scroll{max-height:240px;overflow:auto;}
+  .nb-tbl{width:100%;border-collapse:collapse;}
+  .nb-tbl th{background:#f7f9fc;color:var(--primary);font-weight:700;font-size:11.5px;padding:6px 5px;border:1px solid var(--line);white-space:nowrap;position:sticky;top:0;}
+  .nb-tbl td{padding:6px 7px;border:1px solid var(--line);font-size:12px;text-align:center;}
+  .nb-tbl td.amt{font-weight:800;color:var(--hotred);white-space:nowrap;}
+  .nb-tbl td.bd{text-align:left;}
+  .nb-tbl td.bd b{font-weight:700;}
+  .nb-tbl td.adr2{text-align:left;color:var(--muted);font-size:11px;white-space:nowrap;}
+  .nb-tbl td.gp{color:var(--muted);white-space:nowrap;}
+  .nb-tbl td.yul{color:#7a3fd0;font-weight:700;}
+  .nb-head{display:flex;align-items:center;justify-content:space-between;margin:18px 0 4px;gap:8px;flex-wrap:wrap;}
+  .nb-title{font-size:15px;font-weight:800;color:var(--text);}
+  .nb-apibadge{font-size:10.5px;font-weight:700;color:var(--primary);background:#eef3fc;border:1px solid #d4e0f5;border-radius:6px;padding:2px 7px;margin-left:6px;vertical-align:middle;}
+  .nb-headr{display:flex;align-items:center;gap:10px;}
+  .nb-total{font-size:12.5px;color:var(--muted);font-weight:700;}
+  .nb-xls{font-size:12px;font-weight:700;color:#1a7f4b;background:#eafaf1;border:1px solid #b6e6cb;border-radius:8px;padding:6px 12px;cursor:pointer;}
+  .nb-xls:hover{background:#d8f3e3;}
+  .nb-subt{font-size:12px;color:var(--muted);margin:2px 0 12px;line-height:1.55;}
+  .nb-subt .nb-hl{color:var(--primary);font-weight:700;}
+  .nb-subt .nb-hl2{color:#1a7f4b;font-weight:700;}
+  .nb-subt .nb-hl3{color:#7a3fd0;font-weight:700;}
+  .nb-subt .nb-prop{display:block;margin-top:5px;}
+  .acc{border:1px solid var(--line);border-radius:10px;margin-bottom:8px;overflow:hidden;}
+  .acc-h{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 14px;background:#fafbfd;cursor:pointer;user-select:none;}
+  .acc-h:hover{background:#f3f6fb;}
+  .acc.open .acc-h{background:#eef3fc;}
+  .acc-hl{display:flex;align-items:center;gap:9px;flex-wrap:wrap;}
+  .acc-name{font-weight:800;font-size:13px;color:var(--text);}
+  .acc-cnt{font-size:11.5px;font-weight:700;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:6px;padding:2px 8px;}
+  .acc-badge{font-size:10.5px;font-weight:800;color:#fff;border-radius:6px;padding:3px 9px;}
+  .acc-badge.red{background:#e8202a;}
+  .acc-badge.blue{background:#1f6fe0;}
+  .acc-badge.gray{background:#8a93a3;}
+  .acc-hr{display:flex;align-items:center;gap:12px;white-space:nowrap;}
+  .acc-avg{font-size:12px;color:var(--primary);font-weight:700;}
+  .acc-avg .acc-yul{color:var(--muted);font-weight:600;}
+  .acc-chev{font-size:12px;color:var(--muted);transition:transform .15s;}
+  .acc.open .acc-chev{transform:rotate(180deg);}
+  .acc-b{display:none;border-top:1px solid var(--line);}
+  .acc.open .acc-b{display:block;}
   /* 유사거래 지도 핀 */
   .mflag{width:24px;height:24px;background:#1a73e8;border:2px solid #fff;border-radius:50% 50% 50% 0;box-shadow:0 2px 5px rgba(0,0,0,.4);transform:rotate(-45deg) translate(5px,-5px);cursor:pointer;position:relative;}
   .mflag::after{content:"";position:absolute;top:50%;left:50%;width:8px;height:8px;background:#fff;border-radius:50%;transform:translate(-50%,-50%);}
@@ -144,7 +224,10 @@
 </div>
 <div class="wrap">
   <a class="back" href="/static/gongmae.html">← 공매 목록으로</a>
-  <div id="root"><div class="card"><div class="sub">불러오는 중…</div></div></div>
+  <div class="detail-grid">
+    <div id="root"><div class="card"><div class="sub">불러오는 중…</div></div></div>
+    <aside id="gm-files-panel"></aside>
+  </div>
 </div>
 <script>
 const won=n=>{n=Math.round(+n||0); if(!n)return"-"; const e=Math.floor(n/1e8),m=Math.floor((n%1e8)/1e4); let s=""; if(e)s+=e+"억 "; if(m)s+=m.toLocaleString()+"만"; if(!s)s=n.toLocaleString(); return s.trim()+"원";};
@@ -175,7 +258,6 @@ function load(){
       <h1>${d.name||"-"}</h1>
       <div class="addrrow"><span class="sub">${d.address||""}</span><a class="obtn-inline" href="${onbid}" target="_blank" rel="noopener">온비드에서 보기 ↗</a></div>
     </div>
-    ${d.thumb?`<div class="card" style="text-align:center"><a href="${onbid}" target="_blank" rel="noopener" title="온비드에서 전체 사진 보기"><img src="${d.thumb}" referrerpolicy="no-referrer" style="width:100%;max-width:460px;border-radius:8px;border:1px solid var(--line);cursor:zoom-in" onerror="this.parentNode.parentNode.style.display='none'"></a><div class="sub" style="margin-top:8px">※ 대표 이미지 — 클릭하면 온비드에서 전체 사진 확인</div></div>`:""}
     <div id="gm-gallery"></div>
     <div class="card"><div class="hgrid" id="hgrid">
       ${hc("용도", d.usage)}
@@ -193,6 +275,7 @@ function load(){
 }
 async function enrichDetail(d){
   if(!d||!d.manage_no) return;
+  GM_D=d;   // 첨부/계산기/지도 프리필용(loadGmFiles가 loadGmFeatures보다 먼저 호출됨)
   var q="mng="+encodeURIComponent(d.manage_no)+(d.pbct_cdtn_no?"&cdtn="+encodeURIComponent(d.pbct_cdtn_no):"");
   let e; try{ e=await (await fetch("/gongmae/enrich?"+q)).json(); }catch(err){ return; }
   if(!e||e.error) return;
@@ -206,14 +289,60 @@ async function enrichDetail(d){
     if(cells) g.insertAdjacentHTML("afterbegin", cells);
   }
   if(e.photos&&e.photos.length){
+    GM_PHOTOS=e.photos.slice();
     var box=document.getElementById("gm-gallery");
     if(box){ box.className="card";
-      box.innerHTML='<div style="font-weight:700;margin-bottom:10px">📷 물건 사진 '+e.photos.length+'장</div>'
-        +'<div class="gm-gal">'+e.photos.map(function(u){return '<a href="'+u+'" target="_blank" rel="noopener"><img src="'+u+'" referrerpolicy="no-referrer" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></a>';}).join("")+'</div>';
+      box.innerHTML='<div style="font-weight:700;margin-bottom:10px">📷 물건 사진 '+GM_PHOTOS.length+'장 <span style="font-weight:400;color:var(--muted);font-size:12px">썸네일을 클릭하면 좌우로 넘겨보실 수 있습니다</span></div>'
+        +'<div class="gm-gal">'+GM_PHOTOS.map(function(u,i){return '<img src="'+u+'" referrerpolicy="no-referrer" loading="lazy" onclick="openLightbox('+i+')" onerror="this.style.display=\'none\'">';}).join("")+'</div>';
     }
   }
-  loadGmBidInfo(d, e);   // 입찰정보(회차 일정·공고정보·공고문·첨부) — 모든 용도
+  loadGmBidInfo(d, e);   // 입찰정보(회차 일정·공고정보·공고문) — 모든 용도
+  loadGmFiles(e);        // 첨부파일 → 우측 세로 패널
   loadGmFeatures(d, e);
+}
+// ─────────────────────────── 사진 라이트박스(캐러셀) ───────────────────────────
+var GM_PHOTOS=[], _lbIdx=0;
+function _lbEnsure(){
+  if(document.getElementById("gm-lb")) return;
+  var ov=document.createElement("div"); ov.id="gm-lb"; ov.className="lb-ov";
+  ov.innerHTML='<button type="button" class="lb-close" aria-label="닫기" onclick="closeLightbox()">✕</button>'
+    +'<button type="button" class="lb-arr lb-prev" aria-label="이전" onclick="event.stopPropagation();lbStep(-1)">‹</button>'
+    +'<div class="lb-stage"><img id="gm-lb-img" src="" referrerpolicy="no-referrer" alt="물건 사진"></div>'
+    +'<button type="button" class="lb-arr lb-next" aria-label="다음" onclick="event.stopPropagation();lbStep(1)">›</button>'
+    +'<div class="lb-count" id="gm-lb-count"></div>';
+  ov.addEventListener("click",function(ev){ if(ev.target===ov) closeLightbox(); });   // 배경 클릭=닫기
+  document.body.appendChild(ov);
+}
+function _lbShow(){
+  if(!GM_PHOTOS.length) return;
+  _lbIdx=(_lbIdx+GM_PHOTOS.length)%GM_PHOTOS.length;
+  var img=document.getElementById("gm-lb-img"); if(img) img.src=GM_PHOTOS[_lbIdx];
+  var c=document.getElementById("gm-lb-count"); if(c) c.textContent=(_lbIdx+1)+" / "+GM_PHOTOS.length;
+}
+function openLightbox(i){ if(!GM_PHOTOS.length) return; _lbEnsure(); _lbIdx=i||0; _lbShow();
+  document.getElementById("gm-lb").classList.add("on"); document.body.style.overflow="hidden"; }
+function closeLightbox(){ var ov=document.getElementById("gm-lb"); if(ov) ov.classList.remove("on"); document.body.style.overflow=""; }
+function lbStep(d){ _lbIdx+=d; _lbShow(); }
+document.addEventListener("keydown",function(ev){
+  var ov=document.getElementById("gm-lb"); if(!ov||!ov.classList.contains("on")) return;
+  if(ev.key==="Escape") closeLightbox();
+  else if(ev.key==="ArrowLeft") lbStep(-1);
+  else if(ev.key==="ArrowRight") lbStep(1);
+});
+// ─────────────────────────── 첨부파일 우측 세로 패널 ───────────────────────────
+function loadGmFiles(e){
+  var panel=document.getElementById("gm-files-panel"); if(!panel) return;
+  var files=(e&&e.files)||[];
+  if(!files.length){ panel.innerHTML=""; return; }   // 첨부 없으면 패널 숨김(공간 미점유)
+  var items=files.map(function(f){
+    var nm=esc(f.name||"첨부파일");
+    var ext=(nm.split(".").pop()||"").toUpperCase(); if(ext.length>4||/\s/.test(ext)) ext="FILE";
+    return '<a class="fpitem" href="'+f.url+'" target="_blank" rel="noopener" title="'+nm+' 다운로드">'
+      +'<span class="fpic">'+(/(PDF)/.test(ext)?"PDF":ext.slice(0,4))+'</span>'
+      +'<span class="fpmeta"><span class="fpname">'+nm+'</span><span class="fpdl">다운로드 ↗</span></span></a>';
+  }).join("");
+  panel.innerHTML='<div class="fpanel"><div class="fphd">📁 첨부파일 <span style="color:var(--muted);font-weight:400;font-size:12px">'+files.length+'건</span></div>'+items
+    +'<div class="fpempty" style="margin-top:8px">※ 공매공고·감정평가서 등 원문(PDF). 최신 서류는 <a href="'+onbidUrl(GM_D||{})+'" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600">온비드 공고</a>에서 확인하세요.</div></div>';
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
 function gmHcell(k,v,cls){return v?'<div class="hcell"><span class="hl">'+k+'</span><span class="hv'+(cls?' '+cls:'')+'">'+v+'</span></div>':'';}
@@ -252,11 +381,7 @@ async function loadGmBidInfo(d, e){
     var nrows=notice.map(function(n){return '<div class="nrow"><span class="nlab">'+esc(n.label)+'</span>'+esc(n.text)+'</div>';}).join("");
     html+='<div class="card"><div class="cardhd">📄 공고문 (물건 세부내용)</div><div class="noticebox">'+nrows+'</div></div>';
   }
-  // ④ 첨부파일
-  if(files.length){
-    var fl=files.map(function(f){return '<a class="filelink" href="'+f.url+'" target="_blank" rel="noopener">📎 '+esc(f.name)+' <span style="color:#9aa0a6;font-weight:400">다운로드 ↗</span></a>';}).join("");
-    html+='<div class="card"><div class="cardhd">📁 첨부파일</div><div class="filelist">'+fl+'</div></div>';
-  }
+  // ④ 첨부파일 → loadGmFiles가 우측 세로 패널(#gm-files-panel)에 렌더
   box.innerHTML=html;
 }
 var GM_D=null, GM_APT=null, GM_EST=null, GM_XB=null, GM_NB=null;   // 계산기·지도 프리필용
@@ -283,14 +408,10 @@ async function loadGmFeatures(d, e){
     if(bid) html+=gmHcell("예상 낙찰가",won(bid));
     if(sise&&bid) html+=gmHcell("예상 차익",won(sise-bid),(sise-bid>0?"low":""));
     html+='</div><div class="sub" style="margin-top:8px">※ 시세=주변 유사 실거래 · 예상낙찰가=인근 경매 낙찰사례 기준(±면적·층·감정가·낙찰율)</div></div>'; }
-  html+='<div id="gm-map"></div>';
-  if(nb.available && nb.trades && nb.trades.length){
-    html+='<div class="card"><div class="cardhd">📊 주변 유사 실거래 '+nb.trades.length+'건 <span style="font-weight:400;color:var(--muted);font-size:12px">반경1km·전용±10㎡·최근12개월</span></div>'
-      +'<div class="scrollx"><table class="tbl" style="min-width:520px"><tr><th>거래일</th><th>단지</th><th>전용</th><th>층</th><th>거래가</th></tr>'
-      +nb.trades.slice(0,20).map(function(t){return '<tr><td>'+(t.deal_date||"")+'</td><td>'+esc(t.name||"")+'</td><td>'+(t.area||"")+'㎡</td><td>'+(t.floor||"")+'층</td><td class="low amt">'+won(t.amount)+'</td></tr>';}).join("")
-      +'</table></div></div>'; }
+  // 주변 유사 실거래(지도 + 실거래가 상세) — 경매 loadNearbyMap 1:1 이식
+  html+='<div id="gm-nearby"></div>';
   box.innerHTML=html||'<div class="card"><div class="sub">이 물건은 주변 유사 실거래·경매 사례가 없어 시세/예상낙찰가를 산출할 수 없습니다.</div></div>';
-  if(nb.available) loadGmMap(nb);
+  if(nb.available) loadGmNearby(nb);
 }
 // 아파트/오피스텔: 아파트정보·실거래·예상낙찰가·차익·경쟁매물
 async function loadGmApt(box, d, gf){
@@ -369,41 +490,278 @@ function loadKakaoSDK(){
     s.onload=function(){kakao.maps.load(res);}; s.onerror=rej; document.head.appendChild(s); });
   return _kakaoLoad;
 }
-async function loadGmMap(nb){
-  var box=document.getElementById("gm-map"); if(!box) return;
-  var trades=(nb.trades||[]).filter(function(t){return t.lat!=null&&t.lng!=null;});
-  box.innerHTML='<div class="card"><div class="cardhd">🗺️ 주변 유사 실거래 지도 <span style="font-weight:400;color:var(--muted);font-size:12px">반경1km · 물건=빨강 · 유사거래=파랑</span></div>'
-    +'<div id="gmkmap" style="width:100%;height:380px;border-radius:10px;border:1px solid var(--line);background:#eef1f5"></div>'
-    +'<div id="gmmapnote" class="sub" style="margin-top:8px">지도 불러오는 중…</div></div>';
-  try{ await loadKakaoSDK(); }catch(err){ document.getElementById("gmmapnote").textContent="지도 로드 실패 — 카카오 개발자센터 도메인 등록을 확인하세요."; return; }
-  var center=null;
-  if(nb.prop_lat!=null&&nb.prop_lng!=null){ center=new kakao.maps.LatLng(nb.prop_lat, nb.prop_lng); }
+// ═══════════ 주변 유사 실거래(지도 + 실거래가 상세) — 경매 auction.html loadNearbyMap 1:1 이식 ═══════════
+function wonShort(a){ a=+a; return a>=100000000?(Math.round(a/10000000)/10)+"억":Math.round(a/10000).toLocaleString()+"만"; }
+var YEAR_BANDS=["2000년 이전","2000~2009","2010~2015","2016~2019","2020 이후"];
+function yearBand(y){ y=+y; if(!y) return "연식미상"; if(y<2000) return "2000년 이전"; if(y<=2009) return "2000~2009"; if(y<=2015) return "2010~2015"; if(y<=2019) return "2016~2019"; return "2020 이후"; }
+async function loadGmNearby(r){
+  var box=document.getElementById("gm-nearby"); if(!box) return;
+  if(!r||!r.available) return;
+  box.innerHTML='<div class="card nbcard"><h2>주변 유사 실거래<span class="mapsub">반경 500m · 면적 ±10㎡ · 최근 '+r.months+'개월</span></h2>'
+    +'<div class="elevseg"><span class="elevseg-lb">승강기</span>'
+    +'<button type="button" class="eseg on" data-m="all">전체</button>'
+    +'<button type="button" class="eseg" data-m="yes">있음</button>'
+    +'<button type="button" class="eseg" data-m="no">없음</button></div>'
+    +'<div id="grpseg" class="grpseg"></div>'
+    +'<div id="kmap" style="width:100%;height:400px;border-radius:10px;border:1px solid var(--line);background:#eef1f5"></div>'
+    +'<div id="mapnote" class="sub" style="margin:8px 0">지도·실거래 불러오는 중…</div>'
+    +'<div id="tradelist"></div></div>';
+  try{ await loadKakaoSDK(); }catch(e){ document.getElementById("mapnote").textContent="지도 로드 실패 — 카카오 개발자센터에서 이 도메인(플랫폼>Web) 등록을 확인하세요."; return; }
+  var sgg=r.sigungu_prefix;
+  var center;
+  if(r.prop_lat!=null&&r.prop_lng!=null){ center=new kakao.maps.LatLng(r.prop_lat, r.prop_lng); }
   else{ var gc=new kakao.maps.services.Geocoder();
-    center=await new Promise(function(rs){ gc.addressSearch(((nb.addr_prefix||"")+" "+(nb.addr_jibun||"")).trim(),function(res2,st){ rs(st===kakao.maps.services.Status.OK&&res2[0]?new kakao.maps.LatLng(+res2[0].y,+res2[0].x):null); }); }); }
-  if(!center){ document.getElementById("gmmapnote").textContent="물건 주소의 좌표를 찾지 못했습니다."; return; }
-  var map=new kakao.maps.Map(document.getElementById("gmkmap"),{center:center,level:5});
-  var subj=document.createElement("div"); subj.className="mflag subject"; subj.title="공매물건";
-  new kakao.maps.CustomOverlay({map:map,position:center,yAnchor:1,zIndex:10,content:subj}).setMap(map);
-  new kakao.maps.Circle({map:map,center:center,radius:1000,strokeWeight:2,strokeColor:"#1565ff",strokeOpacity:.6,fillColor:"#1565ff",fillOpacity:.04});
-  var _popup=null; function closePopup(){ if(_popup){_popup.setMap(null);_popup=null;} }
+    center=await new Promise(function(rs){ gc.addressSearch((r.addr_prefix+" "+(r.addr_jibun||"")).trim(),function(d,st){ rs(st===kakao.maps.services.Status.OK&&d[0]?new kakao.maps.LatLng(+d[0].y,+d[0].x):null); }); }); }
+  if(!center){ document.getElementById("mapnote").textContent="물건 주소의 좌표를 찾지 못했습니다."; return; }
+  var map=new kakao.maps.Map(document.getElementById("kmap"),{center:center,level:5});
+  try{ addMapTools(map, document.getElementById("kmap")); }catch(e){}   // 카카오맵 도구(거리·면적·이동경로·로드뷰·스카이뷰)
+  var _subj=document.createElement("div"); _subj.className="mflag subject"; _subj.title="공매물건";  // 공매물건=빨간핀
+  new kakao.maps.CustomOverlay({map:map,position:center,yAnchor:1,zIndex:10,content:_subj}).setMap(map);
+  new kakao.maps.Circle({map:map,center:center,radius:500,strokeWeight:2,strokeColor:"#1565ff",strokeOpacity:.7,fillColor:"#1565ff",fillOpacity:.05});
+  var inRange=(r.trades||[]).filter(function(t){return t.lat!=null&&t.lng!=null;});
+  if(!inRange.length){
+    document.getElementById("mapnote").innerHTML='<b style="color:#9a8f00">인근 실거래 없음</b> — 반경 500m · 최근 '+r.months+'개월 내 유사 실거래가 없습니다.';
+    document.getElementById("tradelist").innerHTML=""; return;
+  }
+  inRange.forEach(function(t){ t._ll=new kakao.maps.LatLng(t.lat, t.lng); });
+  var _ov=[]; var elevMode="all"; var mapGroupKey=null;
+  var _popup=null;
+  function closePopup(){ if(_popup){ _popup.setMap(null); _popup=null; } }
+  function openTradePopup(t){
+    closePopup();
+    var e=function(s){return (s||"").toString().replace(/&/g,"&amp;").replace(/</g,"&lt;");};
+    var sgg2=r.sigungu_prefix||"";
+    var wrap=document.createElement("div"); wrap.className="mpop";
+    wrap.innerHTML='<button type="button" class="mpop-x" aria-label="닫기">×</button>'
+      +'<div class="mpop-nm">'+(e(t.name)||"-")+'</div>'
+      +'<div class="mpop-ad">'+e(sgg2+" "+(t.umd||"")+" "+(t.jibun||""))+'</div>'
+      +'<div class="mpop-rw">거래일 <b>'+(t.deal_date||"-")+'</b></div>'
+      +'<div class="mpop-amt">'+won(t.amount)+'</div>';
+    wrap.querySelector(".mpop-x").addEventListener("click",function(ev){ev.stopPropagation();closePopup();});
+    _popup=new kakao.maps.CustomOverlay({map:map,position:t._ll,yAnchor:1.45,zIndex:20,content:wrap}); _popup.setMap(map);
+  }
   kakao.maps.event.addListener(map,"click",closePopup);
-  var sgg=nb.sigungu_prefix||"";
-  trades.forEach(function(t){
-    var ll=new kakao.maps.LatLng(t.lat,t.lng);
-    var el=document.createElement("div"); el.className="mflag"; el.title=won(t.amount);
-    el.addEventListener("click",function(ev){ ev.stopPropagation(); closePopup();
-      var wrap=document.createElement("div"); wrap.className="mpop";
-      wrap.innerHTML='<button type="button" class="mpop-x" aria-label="닫기">×</button>'
-        +'<div class="mpop-nm">'+esc(t.name||"-")+'</div>'
-        +'<div class="mpop-ad">'+esc((sgg+" "+(t.umd||"")+" "+(t.jibun||"")).trim())+'</div>'
-        +'<div class="mpop-rw">거래일 <b>'+(t.deal_date||"-")+'</b> · '+(t.area||"")+'㎡ · '+(t.floor||"")+'층</div>'
-        +'<div class="mpop-amt">'+won(t.amount)+'</div>';
-      wrap.querySelector(".mpop-x").addEventListener("click",function(e2){e2.stopPropagation();closePopup();});
-      _popup=new kakao.maps.CustomOverlay({map:map,position:ll,yAnchor:1.45,zIndex:20,content:wrap}); _popup.setMap(map);
+  var _accOpen={}, _accInit=false, _gongsiMap={};
+  var gkey=function(t){return sgg+" "+t.umd+" "+t.jibun+"|"+(t.area||"")+"|"+(t.floor||"");};
+  async function loadGongsi(rows, onChunk){
+    var keys=[]; var seen={}; rows.filter(function(t){return t.jibun&&t.umd;}).map(gkey).forEach(function(k){if(!seen[k]){seen[k]=1;keys.push(k);}});
+    if(!keys.length) return;
+    var chunks=[]; for(var i=0;i<keys.length;i+=30) chunks.push(keys.slice(i,i+30));
+    await Promise.all(chunks.map(async function(c){
+      try{ var m=await (await fetch("/auction/gongsi?items="+encodeURIComponent(c.join(";")))).json();
+        Object.assign(_gongsiMap,m); if(onChunk) onChunk();
+      }catch(e){}
+    }));
+  }
+  async function loadElev(rows, onChunk){
+    var addrs=[]; var seen={}; rows.filter(function(t){return t.jibun&&t.umd;}).map(function(t){return sgg+" "+t.umd+" "+t.jibun;}).forEach(function(a){if(!seen[a]){seen[a]=1;addrs.push(a);}});
+    if(!addrs.length) return;
+    var chunks=[]; for(var i=0;i<addrs.length;i+=20) chunks.push(addrs.slice(i,i+20));
+    await Promise.all(chunks.map(async function(c){
+      try{ var em=await (await fetch("/auction/elev?addrs="+encodeURIComponent(c.join("|")))).json();
+        rows.forEach(function(t){ var a=sgg+" "+t.umd+" "+t.jibun; if(a in em && em[a]!=null) t._elev=em[a]; });
+        if(onChunk) onChunk();
+      }catch(e){}
+    }));
+  }
+  function downloadXls(rows){
+    var head=["거래일","지역","건물명","주소","면적(㎡)","층","건축년도","승강기","거래가(원)","공시가격","요율"];
+    var cln=function(s){return (s==null?"":(""+s).replace(/[",\r\n]/g," ")).trim();};
+    var g=function(t){var x=_gongsiMap[gkey(t)];return x&&x.price?x.price:"";};
+    var y=function(t){var gp=g(t);return gp&&t.amount?(t.amount/gp).toFixed(4):"";};
+    var elv=function(t){return t._elev===true?"있음":t._elev===false?"없음":"";};
+    var lines=[head.join(",")].concat(rows.map(function(t){return [t.deal_date,t.umd,t.name,sgg+" "+t.umd+" "+t.jibun,t.area,t.floor,t.build_year,elv(t),t.amount,g(t),y(t)].map(cln).join(",");}));
+    var blob=new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv;charset=utf-8;"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="유사실거래.csv"; a.click(); URL.revokeObjectURL(a.href);
+  }
+  function buildSecs(show){
+    var py=r.prop_build_year;
+    var floorNear=function(t){return r.prop_floor==null||t.floor==null||Math.abs((+t.floor)-r.prop_floor)<=1;};
+    var secs=[];
+    if(py){ var rows=show.filter(function(t){return t.build_year&&Math.abs(t.build_year-py)<=5&&floorNear(t);});
+      if(rows.length) secs.push({key:"sim",name:"동일 시기 + 동일 층수(±1층)",badge:{t:"가장 유사",c:"red"},rows:rows}); }
+    secs.push({key:"all",name:"유사 면적 · 전체(모든 층)",badge:{t:"전체",c:"gray"},rows:show.slice()});
+    YEAR_BANDS.concat(["연식미상"]).forEach(function(band){
+      var rows2=show.filter(function(t){return yearBand(t.build_year)===band;}); if(!rows2.length) return;
+      var eraMatch=py&&yearBand(py)===band;
+      secs.push({key:"y_"+band,name:band,badge:eraMatch?{t:"이 빌라와 동일 시기",c:"blue"}:null,rows:rows2});
     });
-    new kakao.maps.CustomOverlay({map:map,position:ll,yAnchor:1,zIndex:3,content:el}).setMap(map);
+    return secs;
+  }
+  function render(){
+    var show=inRange.filter(function(t){ return elevMode==="all" ? true : elevMode==="yes" ? t._elev===true : t._elev===false; });
+    var esc2=function(s){return (s||"").toString().replace(/&/g,"&amp;").replace(/</g,"&lt;");};
+    var py=r.prop_build_year;
+    var secs=buildSecs(show);
+    if(mapGroupKey && !secs.some(function(s){return s.key===mapGroupKey;})) mapGroupKey=null;
+    var activeSec=mapGroupKey?secs.find(function(s){return s.key===mapGroupKey;}):null;
+    var mapRows=activeSec?activeSec.rows:show;
+    _ov.forEach(function(o){o.setMap(null);}); _ov=[];
+    closePopup();
+    mapRows.forEach(function(t){
+      var el=document.createElement("div"); el.className="mflag"; el.title=wonShort(t.amount);
+      el.addEventListener("click",function(ev){ ev.stopPropagation(); openTradePopup(t); });
+      var o=new kakao.maps.CustomOverlay({map:map,position:t._ll,yAnchor:1,zIndex:3,content:el});
+      o.setMap(map); _ov.push(o);
+    });
+    var lbl=elevMode==="all"?"전체":"승강기 "+(elevMode==="yes"?"있음":"없음");
+    var gf=activeSec?' · <b style="color:#1565ff">🗺 '+esc2(activeSec.name)+' '+mapRows.length+'건만 표시중</b>':"";
+    document.getElementById("mapnote").innerHTML='반경 500m · <b>'+lbl+'</b> 유사 실거래 <b>'+show.length+'건</b>'+gf+' · 국토부 실거래가(연립다세대·도시형생활주택) 기준';
+    var gseg=document.getElementById("grpseg");
+    if(gseg){
+      var shortNm=function(s){return s.key==="sim"?"동일시기·동일층":s.name;};
+      var gh='<span class="grpseg-lb">🗺 시기·연식</span><button type="button" class="gchip'+(!activeSec?" on":"")+'" data-mk="">전체 '+show.length+'건</button>';
+      secs.filter(function(s){return s.key!=="all";}).forEach(function(s){ gh+='<button type="button" class="gchip'+(activeSec&&activeSec.key===s.key?" on":"")+'" data-mk="'+s.key+'">'+esc2(shortNm(s))+' '+s.rows.length+'건</button>'; });
+      gseg.innerHTML=gh;
+      gseg.querySelectorAll(".gchip").forEach(function(b){b.onclick=function(){ mapGroupKey=b.dataset.mk||null; render(); };});
+    }
+    var tl=document.getElementById("tradelist");
+    var avgWon=function(rows){ if(!rows.length) return "-"; var m=Math.round(rows.reduce(function(s,t){return s+(+t.amount||0);},0)/rows.length); return won(m).replace("원",""); };
+    var gpOf=function(t){ var g=_gongsiMap[gkey(t)]; return g&&g.price?g.price:0; };
+    var yulOf=function(t){ var gp=gpOf(t); return gp&&t.amount?t.amount/gp:0; };
+    var avgYul=function(rows){ var ys=rows.map(yulOf).filter(function(v){return v>0;}); return ys.length?(ys.reduce(function(s,v){return s+v;},0)/ys.length).toFixed(4):"—"; };
+    if(!show.length){ tl.innerHTML='<div class="sub" style="padding:10px 2px">'+lbl+' 유사 실거래가 없습니다.</div>'; return; }
+    if(!_accInit){ _accInit=true; if(secs[0]) _accOpen[secs[0].key]=true; }
+    var html='<div class="nb-head"><div class="nb-title">실거래가 상세 (유사 매물)<span class="nb-apibadge">📡 국토교통부 API</span></div>'
+      +'<div class="nb-headr"><span class="nb-total">총 '+show.length+'건</span><button type="button" class="nb-xls" id="nbXls">⬇ 엑셀 다운로드</button></div></div>'
+      +'<div class="nb-subt">최근 '+(Math.round(r.months/12)||1)+'년, 같은 구/군, 유사 면적(±10㎡) 빌라/연립다세대·도시형생활주택 거래 내역입니다.'
+      +((py||r.prop_floor!=null||(r.prop_gongsi&&r.prop_gongsi.price))?'<div class="nb-prop">'
+        +(py?'<span class="nb-hl">(이 빌라 준공: '+py+'년)</span> ':"")
+        +(r.prop_floor!=null?'<span class="nb-hl2">(층수: '+r.prop_floor+'층)</span> ':"")
+        +(r.prop_gongsi&&r.prop_gongsi.price?'<span class="nb-hl3">(이 빌라 공시가격: '+won(r.prop_gongsi.price)+' · '+r.prop_gongsi.year+'년)</span>':"")
+        +'</div>':"")+'</div>';
+    secs.forEach(function(sec){
+      var open=!!_accOpen[sec.key];
+      var rows=sec.rows.slice().sort(function(a,b){return (b.deal_date||"").localeCompare(a.deal_date||"");});
+      html+='<div class="acc'+(open?" open":"")+'"><div class="acc-h" data-k="'+sec.key+'">'
+        +'<div class="acc-hl"><span class="acc-name">'+sec.name+'</span><span class="acc-cnt">'+rows.length+'건</span>'+(sec.badge?'<span class="acc-badge '+sec.badge.c+'">'+sec.badge.t+'</span>':"")+'</div>'
+        +'<div class="acc-hr"><span class="acc-avg">평균 '+avgWon(rows)+' <span class="acc-yul">| 요율 '+avgYul(rows)+'</span></span><span class="acc-chev">▾</span></div></div>'
+        +'<div class="acc-b"><div class="nb-scroll"><table class="nb-tbl"><thead><tr><th>거래일</th><th>지역</th><th>건물명</th><th>주소</th><th>면적</th><th>층</th><th>건축년도</th><th>승강기</th><th>거래가</th><th>공시가격</th><th>요율</th></tr></thead><tbody>'
+        +rows.map(function(t){var gp=gpOf(t),yl=yulOf(t);return '<tr><td>'+(t.deal_date||"-")+'</td><td>'+esc2(t.umd)+'</td><td class="bd"><b>'+(esc2(t.name)||"-")+'</b></td><td class="adr2">'+esc2(sgg+" "+t.umd+" "+t.jibun)+'</td><td>'+(t.area?Math.round(t.area*100)/100+"㎡":"-")+'</td><td>'+(t.floor||"-")+'</td><td>'+(t.build_year||"-")+'</td><td class="elv">'+(t._elev===true?"있음":t._elev===false?'<span style="color:#b3611a">없음</span>':'<span style="color:#aab">-</span>')+'</td><td class="amt">'+won(t.amount)+'</td><td class="gp">'+(gp?won(gp):"—")+'</td><td class="yul">'+(yl?yl.toFixed(4):"—")+'</td></tr>';}).join("")
+        +'</tbody></table></div></div></div>';
+    });
+    tl.innerHTML=html;
+    tl.querySelectorAll(".acc-h").forEach(function(h){h.onclick=function(){ var k=h.dataset.k; _accOpen[k]=!_accOpen[k]; h.parentNode.classList.toggle("open",_accOpen[k]); };});
+    var xb=document.getElementById("nbXls"); if(xb) xb.onclick=function(){downloadXls(show);};
+  }
+  box.querySelectorAll(".eseg").forEach(function(b){b.onclick=function(){ elevMode=b.dataset.m; box.querySelectorAll(".eseg").forEach(function(x){x.classList.toggle("on",x===b);}); render(); };});
+  render();
+  loadGongsi(inRange, render).then(render);   // 공시가격·요율: 청크 도착마다 + 완료 후 재렌더
+  loadElev(inRange, render).then(render);     // 승강기: 청크 도착마다 마커·건수 갱신(블로킹 X)
+}
+// 카카오맵 도구(거리·면적·이동경로·로드뷰·스카이뷰·지우기) — 경매 auction.html addMapTools 1:1 이식
+function addMapTools(map, mapDiv){
+  if(!map||!mapDiv||!(window.kakao&&kakao.maps)) return;
+  try{ map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT); }catch(e){}
+  var rvWrap=document.createElement("div");
+  rvWrap.style.cssText="position:absolute;inset:0;z-index:8;display:none;border-radius:10px;overflow:hidden";
+  var rvDiv=document.createElement("div"); rvDiv.style.cssText="width:100%;height:100%";
+  var rvExit=document.createElement("div"); rvExit.textContent="✕ 지도로";
+  rvExit.style.cssText="position:absolute;top:8px;right:8px;z-index:9;padding:6px 11px;background:#fff;border:1px solid #bbb;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.3)";
+  rvWrap.appendChild(rvDiv); rvWrap.appendChild(rvExit); mapDiv.appendChild(rvWrap);
+  var roadview=new kakao.maps.Roadview(rvDiv), rvClient=new kakao.maps.RoadviewClient();
+  rvExit.onclick=function(){ rvWrap.style.display="none"; setMode(null); };
+  var mode=null, drawing=false, clickLine=null, moveLine=null, apath=[], objs=[];
+  var walkStart=null, walkIdx=0, walkBusy=false;
+  var routes=[], routeSel=-1;
+  var WALK_COLORS=["#e6194b","#3cb44b","#4363d8","#f58231","#911eb4","#008080","#f032e6","#9a6324","#808000","#000075"];
+  var fmtD=function(m){return m>=1000?(m/1000).toFixed(2)+"km":Math.round(m)+"m";};
+  var fmtA=function(a){return (a>=1000000?(a/1000000).toFixed(2)+"km²":Math.round(a).toLocaleString()+"㎡")+" ("+Math.round(a/3.3058).toLocaleString()+"평)";};
+  var lab=function(t,pos,c){ var el=document.createElement("div");
+    el.style.cssText="padding:3px 8px;background:"+c+";color:#fff;font-size:11.5px;font-weight:800;border-radius:11px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.45)"; el.textContent=t;
+    objs.push(new kakao.maps.CustomOverlay({map:map,position:pos,content:el,yAnchor:1.5,zIndex:61})); };
+  var dot=function(pos,c){ var el=document.createElement("div");
+    el.style.cssText="width:8px;height:8px;background:#fff;border:2px solid "+c+";border-radius:50%;margin:-4px 0 0 -4px";
+    objs.push(new kakao.maps.CustomOverlay({map:map,position:pos,content:el,zIndex:60})); };
+  var areaOf=function(path){ if(path.length<3) return 0; var lat0=path[0].getLat()*Math.PI/180, ml=111320, mg=111320*Math.cos(lat0);
+    var p=path.map(function(q){return [q.getLng()*mg,q.getLat()*ml];}); var s=0;
+    for(var i=0;i<p.length;i++){var j=(i+1)%p.length; s+=p[i][0]*p[j][1]-p[j][0]*p[i][1];} return Math.abs(s/2); };
+  var clearAll=function(){ objs.forEach(function(o){try{o.setMap(null);}catch(e){}}); objs=[]; clickLine=null; moveLine=null; apath=[]; drawing=false; walkStart=null; walkIdx=0; routes=[]; routeSel=-1; renderRoutePanel(); };
+  var finish=function(){ if(!drawing) return; if(moveLine){moveLine.setMap(null);}
+    if(mode==="dist"&&clickLine){ var pa=clickLine.getPath(); lab("총 "+fmtD(clickLine.getLength()), pa[pa.length-1], "#b91c1c"); }
+    if(mode==="area"&&apath.length>=3){ var pg=new kakao.maps.Polygon({map:map,path:apath,strokeWeight:3,strokeColor:"#0b7a3b",strokeOpacity:.9,fillColor:"#22a366",fillOpacity:.2}); objs.push(pg);
+      var cl=0,cn=0; apath.forEach(function(q){cl+=q.getLat();cn+=q.getLng();}); lab(fmtA(areaOf(apath)), new kakao.maps.LatLng(cl/apath.length,cn/apath.length), "#0b7a3b"); }
+    drawing=false; clickLine=null; moveLine=null; apath=[]; };
+  var mkBtn=function(t){ var b=document.createElement("div"); b.textContent=t;
+    b.style.cssText="padding:5px 9px;background:#fff;border:1px solid #cfd4da;border-radius:7px;cursor:pointer;font-size:12px;font-weight:700;color:#333;box-shadow:0 1px 3px rgba(0,0,0,.18);user-select:none"; return b; };
+  var bDist=mkBtn("📏 거리"), bArea=mkBtn("⬛ 면적"), bWalk=mkBtn("🚶 이동경로"), bRv=mkBtn("🧍 로드뷰"), bSky=mkBtn("🛰 스카이뷰"), bClr=mkBtn("🗑 지우기");
+  var bar=document.createElement("div"); bar.style.cssText="position:absolute;top:8px;left:8px;z-index:7;display:flex;gap:4px;flex-wrap:wrap";
+  [bDist,bArea,bWalk,bRv,bSky,bClr].forEach(function(b){bar.appendChild(b);}); mapDiv.appendChild(bar);
+  var hint=document.createElement("div"); hint.style.cssText="position:absolute;bottom:8px;left:8px;z-index:7;padding:4px 9px;background:rgba(0,0,0,.72);color:#fff;font-size:11px;border-radius:6px;display:none;max-width:78%";
+  mapDiv.appendChild(hint);
+  var showHint=function(t){ hint.textContent=t; hint.style.display="block"; };
+  var routePanel=document.createElement("div");
+  routePanel.style.cssText="position:absolute;top:46px;left:8px;z-index:8;display:none;flex-direction:column;gap:2px;background:rgba(255,255,255,.95);padding:5px 7px;border-radius:8px;box-shadow:0 1px 5px rgba(0,0,0,.3);max-height:46%;overflow:auto;font-size:11px";
+  mapDiv.appendChild(routePanel);
+  function isolateRoute(i){
+    if(routeSel===i){ routes.forEach(function(rt){rt.pl.setMap(map);}); routeSel=-1; }
+    else { routes.forEach(function(rt,j){rt.pl.setMap(j===i?map:null);}); routeSel=i; }
+    renderRoutePanel();
+  }
+  function renderRoutePanel(){
+    if(!routes.length){ routePanel.style.display="none"; routePanel.innerHTML=""; return; }
+    routePanel.style.display="flex";
+    routePanel.innerHTML="<div style='font-weight:800;color:#444;margin-bottom:1px'>이동경로 "+routes.length+"개 <span style='font-weight:400;color:#888'>(클릭=그것만)</span></div>";
+    routes.forEach(function(rt,i){
+      var c=document.createElement("div");
+      c.style.cssText="display:flex;align-items:center;gap:5px;padding:2px 6px;border-radius:5px;cursor:pointer;font-weight:700;"+(routeSel===i?"background:#111;color:#fff":"color:#222");
+      c.innerHTML="<span style='width:10px;height:10px;border-radius:50%;background:"+rt.color+";display:inline-block;border:1.5px solid #fff;box-shadow:0 0 0 1px #999'></span>"+rt.num+"번 · "+fmtD(rt.dist);
+      c.onclick=function(){isolateRoute(i);};
+      routePanel.appendChild(c);
+    });
+    if(routeSel>=0){ var a=document.createElement("div"); a.textContent="↩ 전체 보기";
+      a.style.cssText="color:#1565ff;cursor:pointer;font-weight:700;margin-top:2px"; a.onclick=function(){isolateRoute(routeSel);}; routePanel.appendChild(a); }
+  }
+  var routeMarker=function(pos,num,col){ var el=document.createElement("div");
+    el.textContent=num; el.style.cssText="width:17px;height:17px;line-height:17px;text-align:center;background:"+col+";color:#fff;font-size:10.5px;font-weight:800;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.5)";
+    objs.push(new kakao.maps.CustomOverlay({map:map,position:pos,content:el,zIndex:62})); };
+  function setMode(m){
+    if(drawing) finish();
+    mode=(mode===m)?null:m;
+    [bDist,bArea,bWalk,bRv].forEach(function(b){b.style.background="#fff";b.style.color="#333";});
+    try{ map.removeOverlayMapTypeId(kakao.maps.MapTypeId.ROADVIEW); }catch(e){}
+    if(mode!=="walk") walkStart=null;
+    if(mode==="dist"){ bDist.style.background="#db4040";bDist.style.color="#fff"; showHint("클릭으로 점 추가 · 우클릭으로 완료"); }
+    else if(mode==="area"){ bArea.style.background="#0b7a3b";bArea.style.color="#fff"; showHint("클릭으로 꼭짓점 추가 · 우클릭으로 완료"); }
+    else if(mode==="walk"){ bWalk.style.background="#e6194b";bWalk.style.color="#fff"; showHint("출발지 클릭 → 도착지 클릭 = 도보 경로(경로마다 색 다름) · 여러 개 가능 · 지우기로 전체 삭제"); }
+    else if(mode==="rv"){ bRv.style.background="#1565ff";bRv.style.color="#fff"; try{map.addOverlayMapTypeId(kakao.maps.MapTypeId.ROADVIEW);}catch(e){} showHint("로드뷰 도로(파란선) 위를 클릭"); }
+    else { hint.style.display="none"; }
+    mapDiv.style.cursor=mode?"crosshair":"";
+  }
+  bDist.onclick=function(){setMode("dist");}; bArea.onclick=function(){setMode("area");}; bWalk.onclick=function(){setMode("walk");}; bRv.onclick=function(){setMode("rv");}; bClr.onclick=clearAll;
+  var sky=false;
+  bSky.onclick=function(){ sky=!sky; try{map.setMapTypeId(sky?kakao.maps.MapTypeId.HYBRID:kakao.maps.MapTypeId.ROADMAP);}catch(e){} bSky.style.background=sky?"#333":"#fff"; bSky.style.color=sky?"#fff":"#333"; };
+  kakao.maps.event.addListener(map,"click",function(e){ var pos=e.latLng;
+    if(mode==="walk"){
+      if(walkBusy) return;
+      var col=WALK_COLORS[walkIdx%WALK_COLORS.length];
+      if(!walkStart){ walkStart=pos; dot(pos,col); showHint("도착지를 클릭하세요"); return; }
+      var s=walkStart, en=pos; walkStart=null; walkBusy=true; dot(en,col); showHint("도보 경로 계산 중…");
+      fetch("/auction/walk_route?sx="+s.getLng()+"&sy="+s.getLat()+"&ex="+en.getLng()+"&ey="+en.getLat())
+        .then(function(r){return r.json();}).then(function(d){ walkBusy=false;
+          if(!d||!d.available||!d.path){ showHint("도보 경로를 찾지 못했습니다 · 다시 시도하세요"); return; }
+          var pa=d.path.map(function(c){return new kakao.maps.LatLng(c[1],c[0]);});
+          var pl=new kakao.maps.Polyline({map:map,path:pa,strokeWeight:3,strokeColor:col,strokeOpacity:.95}); objs.push(pl);
+          var num=routes.length+1; routes.push({pl:pl,path:pa,color:col,dist:d.dist_m,num:num}); routeMarker(pa[0],num,col);
+          routeSel=-1; renderRoutePanel();
+          walkIdx++; showHint("출발지 클릭=다음 경로(다른 색) · 좌측 목록에서 번호 클릭=그 경로만 보기");
+        }).catch(function(){ walkBusy=false; showHint("도보 경로 오류 · 다시 시도하세요"); });
+      return;
+    }
+    if(mode==="rv"){ rvClient.getNearestPanoId(pos,50,function(id){ if(!id){ showHint("이 지점엔 로드뷰가 없습니다 · 도로(파란선) 위를 클릭하세요"); return; }
+      rvWrap.style.display="block"; roadview.setPanoId(id,pos); setTimeout(function(){try{roadview.relayout();}catch(e){}},150); }); return; }
+    if(mode==="dist"){ if(!drawing){ drawing=true;
+        clickLine=new kakao.maps.Polyline({map:map,path:[pos],strokeWeight:4,strokeColor:"#db4040",strokeOpacity:.9}); objs.push(clickLine);
+        moveLine=new kakao.maps.Polyline({strokeWeight:4,strokeColor:"#db4040",strokeOpacity:.4,strokeStyle:"dash"}); objs.push(moveLine); dot(pos,"#db4040"); }
+      else { var p=clickLine.getPath(); p.push(pos); clickLine.setPath(p); dot(pos,"#db4040"); lab(fmtD(clickLine.getLength()),pos,"#db4040"); } return; }
+    if(mode==="area"){ if(!drawing){ drawing=true; apath=[pos];
+        clickLine=new kakao.maps.Polyline({map:map,path:[pos],strokeWeight:3,strokeColor:"#0b7a3b",strokeOpacity:.9}); objs.push(clickLine);
+        moveLine=new kakao.maps.Polyline({strokeWeight:3,strokeColor:"#0b7a3b",strokeOpacity:.4,strokeStyle:"dash"}); objs.push(moveLine); dot(pos,"#0b7a3b"); }
+      else { apath.push(pos); clickLine.setPath(apath); dot(pos,"#0b7a3b"); } }
   });
-  document.getElementById("gmmapnote").innerHTML=(trades.length?('반경 1km 유사 실거래 <b>'+trades.length+'건</b> 표시'):'좌표가 있는 유사 실거래가 없습니다.')+' · 국토부 실거래가(연립다세대·도시형·아파트) 기준';
+  kakao.maps.event.addListener(map,"mousemove",function(e){ if(!drawing||!moveLine||!clickLine) return;
+    var p=clickLine.getPath(); moveLine.setPath([p[p.length-1],e.latLng]); moveLine.setMap(map); });
+  kakao.maps.event.addListener(map,"rightclick",function(){ if(drawing) finish(); });
 }
 // 단기매도 수익률 계산기(아파트·빌라·다세대·도시형만)
 function maybeShortSale(usg){
