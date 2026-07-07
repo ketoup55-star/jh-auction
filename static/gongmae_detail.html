@@ -38,6 +38,13 @@
   .kgrid td.low{color:var(--hotred);font-weight:700;}
   .notice{background:#fff7e6;border:1px solid #f0d9a8;border-radius:10px;padding:18px;color:#9a6b0b;line-height:1.7;}
   .obtn{display:inline-block;margin-top:12px;background:var(--primary);color:#fff;border-radius:8px;padding:10px 18px;font-weight:600;}
+  .addrrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:3px;}
+  .obtn-inline{background:var(--primary);color:#fff;border-radius:6px;padding:5px 13px;font-weight:600;font-size:12px;white-space:nowrap;}
+  .hgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+  .hcell{background:#fff;padding:11px 13px;display:flex;flex-direction:column;gap:5px;min-width:0;}
+  .hcell .hl{font-size:11px;color:var(--labeltx);font-weight:700;}
+  .hcell .hv{font-weight:600;font-size:13px;word-break:break-all;}
+  .hcell .hv.low{color:var(--hotred);font-weight:700;}
   /* 부동산DB '전국' 스티커 — 점멸 + hover 시 좌우 기울기(프리미엄 스티커와 동일 형식) */
   @keyframes natlBlink{0%,100%{opacity:1}50%{opacity:.35}}
   @keyframes natlWobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg)}55%{transform:rotate(9deg)}80%{transform:rotate(-4deg)}}
@@ -83,32 +90,39 @@ function logout(){ fetch("/auth/logout",{method:"POST"}).then(function(){locatio
 (function(){ var s=document.getElementById("caseYear"); if(!s)return; var n=new Date().getFullYear(); for(var y=n;y>=2008;y--){var o=document.createElement("option");o.value=y;o.textContent=y;s.appendChild(o);} })();
 function caseSearch(){ var y=document.getElementById("caseYear").value, no=document.getElementById("caseNoIn").value.trim(); var p=new URLSearchParams(); if(y)p.set("year",y); if(no)p.set("keyword",no); location.href="/static/auctions.html"+(p.toString()?"?"+p.toString():""); }
 fetch("/auth/me",{cache:"no-store"}).then(function(r){return r.json();}).then(function(u){ var el=document.getElementById("util"); if(!el)return; if(u&&(u.email||u.name)){ el.innerHTML='<span style="color:var(--primary);font-weight:600">'+(u.name||u.email)+'님</span> <a onclick="logout()">로그아웃</a> <a href="/static/mypage.html">정보수정</a> <a href="/static/mypage.html">마이페이지</a> <a href="/static/payment.html" class="pay">요금결제</a>'+(u.role==="admin"?'<a href="/static/admin.html" style="color:#fff;background:#e23b3b;padding:2px 9px;border-radius:6px;font-weight:700;margin-left:5px;text-decoration:none">🔧 관리자</a>':''); } }).catch(function(){});
+var PROP_CD={"압류재산":"0007","국유재산":"0010","수탁재산":"0008","유입자산":"0006","공유재산":"0002","기타일반재산":"0005"};
+function onbidUrl(d){
+  if(d.onbid_url) return d.onbid_url;
+  var p=(d.id||"").split("|");
+  if(p[0]&&p[1]&&d.pbanc_no&&d.pbct_cdtn_no){ var prpt=PROP_CD[d.prop_type]||"0007";
+    return "https://www.onbid.co.kr/op/cltrpbancinf/cltrdtl/CltrDtlController/mvmnCltrDtl.do?cltrScrnGrpCd=0001&cltrPrptDivCd="+prpt+"&onbidCltrno="+p[0]+"&onbidPbancNo="+d.pbanc_no+"&pbctNo="+p[1]+"&pbctCdtnNo="+d.pbct_cdtn_no; }
+  return "https://www.onbid.co.kr";
+}
 function load(){
   const root=document.getElementById("root");
-  let d; try{ d=JSON.parse(sessionStorage.getItem("gm_item")||"null"); }catch(e){ d=null; }
+  var id=new URLSearchParams(location.search).get("id"); let d=null;
+  if(id){ try{ d=JSON.parse(localStorage.getItem("gm_"+id)||"null"); }catch(e){} }
+  if(!d){ try{ d=JSON.parse(sessionStorage.getItem("gm_item")||"null"); }catch(e){} }
   if(!d){ root.innerHTML='<div class="card"><div class="notice">목록에서 물건을 선택해 주세요.<br><a class="back" href="/static/gongmae.html">← 공매 목록</a></div></div>'; return; }
-  const r=d.bid_ratio;
+  const r=d.bid_ratio; const onbid=onbidUrl(d);
+  const hc=(k,v,cls)=>v?`<div class="hcell"><span class="hl">${k}</span><span class="hv${cls?' '+cls:''}">${v}</span></div>`:"";
   root.innerHTML=`
     <div class="card">
       <div class="sub">${d.prop_type||""} · 물건관리번호 ${d.manage_no||"-"}</div>
       <h1>${d.name||"-"}</h1>
-      <div class="sub">${d.address||""}</div>
+      <div class="addrrow"><span class="sub">${d.address||""}</span><a class="obtn-inline" href="${onbid}" target="_blank" rel="noopener">온비드에서 보기 ↗</a></div>
     </div>
-    ${d.thumb?`<div class="card" style="text-align:center"><img src="${d.thumb}" referrerpolicy="no-referrer" style="width:100%;max-width:460px;border-radius:8px;border:1px solid var(--line)" onerror="this.parentNode.style.display='none'"><div class="sub" style="margin-top:8px">※ 온비드 대표 이미지. 전체 사진은 '온비드에서 보기'에서 확인.</div></div>`:""}
-    <div class="card"><table class="kgrid">
-      ${row("소재지", d.address)}
-      ${row("용도", d.usage)}
-      ${row("재산종류", d.prop_type)}
-      <tr><th>감정가</th><td>${won(d.appraisal_price)}</td></tr>
-      <tr><th>최저입찰가</th><td class="low">${won(d.min_price)}${r!=null?` (${r}%)`:""}</td></tr>
-      ${row("처분방식", d.disposal)}
-      ${row("입찰방식", d.bid_method)}
-      ${row("입찰시작", d.bid_begin)}
-      ${row("입찰마감", d.bid_close)}
-      ${row("집행기관", d.org)}
-    </table>
-    <a class="obtn" href="https://www.onbid.co.kr" target="_blank">온비드에서 보기 ↗</a>
-    </div>`;
+    ${d.thumb?`<div class="card" style="text-align:center"><a href="${onbid}" target="_blank" rel="noopener" title="온비드에서 전체 사진 보기"><img src="${d.thumb}" referrerpolicy="no-referrer" style="width:100%;max-width:460px;border-radius:8px;border:1px solid var(--line);cursor:zoom-in" onerror="this.parentNode.parentNode.style.display='none'"></a><div class="sub" style="margin-top:8px">※ 대표 이미지 — 클릭하면 온비드에서 전체 사진 확인</div></div>`:""}
+    <div class="card"><div class="hgrid">
+      ${hc("용도", d.usage)}
+      ${hc("재산종류", d.prop_type)}
+      ${hc("감정가", won(d.appraisal_price))}
+      ${hc("최저입찰가", won(d.min_price)+(r!=null?` (${r}%)`:""), "low")}
+      ${hc("처분방식", d.disposal)}
+      ${hc("입찰방식", d.bid_method)}
+      ${hc("입찰기간", (d.bid_begin||"")+(d.bid_close?` ~ ${d.bid_close}`:""))}
+      ${hc("집행기관", d.org)}
+    </div></div>`;
 }
 load();
 </script>

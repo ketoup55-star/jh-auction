@@ -243,7 +243,7 @@ async function loadMore(){
   let d; try{ d=await (await fetch("/gongmae?"+gmParams(GM_PAGE))).json(); }catch(e){ return; }
   window.GM=window.GM.concat(d.items||[]); render();
 }
-function gmOpen(i){ sessionStorage.setItem("gm_item", JSON.stringify(window.GM[i])); location.href="/static/gongmae_detail.html"; }
+function gmOpen(i){ var it=window.GM[i]||{}; var k=it.id||it.manage_no||String(i); try{localStorage.setItem("gm_"+k,JSON.stringify(it));}catch(e){} window.open("/static/gongmae_detail.html?id="+encodeURIComponent(k),"_blank"); }
 function row(L,i){
   return `<tr onclick="gmOpen(${i})">
     <td class="cc"><button class="gmfav${GMFAV.has(L.manage_no)?' on':''}" onclick="event.stopPropagation();gmFav(${i},this)" title="관심등록/해제">${GMFAV.has(L.manage_no)?'♥':'♡'}</button><br>${L.manage_no||"-"}</td>

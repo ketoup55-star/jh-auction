@@ -89,12 +89,25 @@ class OnbidSource:
         rate = round(100 * minbid / appraisal) if appraisal else None
         usg = " ".join(x for x in [_t(it, "cltrUsgMclsCtgrNm"), _t(it, "cltrUsgSclsCtgrNm")] if x)
         addr = " ".join(x for x in [_t(it, "lctnSdnm"), _t(it, "lctnSggnm"), _t(it, "lctnEmdNm")] if x)
+        name = _t(it, "onbidCltrNm").strip()
+        cltrno = _t(it, "onbidCltrno"); pbctno = _t(it, "pbctNo")
+        pbanc = _t(it, "onbidPbancNo"); cdtn = _t(it, "pbctCdtnNo")
+        prpt_cd = _t(it, "cltrPrptDivCd") or _t(it, "prptDivCd")
+        scrn = _t(it, "cltrScrnGrpCd") or "0001"
+        # 온비드 물건상세 URL(500 방지: cltrno·pbctNo·plnmNo·pbctCdtnNo 모두 있어야 열림)
+        onbid_url = ""
+        if cltrno and pbctno and pbanc and cdtn:
+            onbid_url = ("https://www.onbid.co.kr/op/cltrpbancinf/cltrdtl/CltrDtlController/mvmnCltrDtl.do"
+                         f"?cltrScrnGrpCd={scrn}&cltrPrptDivCd={prpt_cd}&onbidCltrno={cltrno}"
+                         f"&onbidPbancNo={pbanc}&pbctNo={pbctno}&pbctCdtnNo={cdtn}")
+        mfl = re.search(r"제?\s*(\d+)\s*층", name)      # 물건명에서 층 파싱(제20층)
+        mho = re.search(r"제?\s*([0-9]+)\s*호", name)    # 호 파싱(제2002호)
         return {
-            "id": "|".join([_t(it, "onbidCltrno"), _t(it, "pbctNo"), _t(it, "pbctNsq")]),
+            "id": "|".join([cltrno, pbctno, _t(it, "pbctNsq")]),
             "manage_no": _t(it, "cltrMngNo"),
-            "name": _t(it, "onbidCltrNm").strip(),
+            "name": name,
             "usage": usg or _t(it, "cltrUsgLclsCtgrNm"),
-            "address": addr or _t(it, "onbidCltrNm").strip(),
+            "address": addr or name,
             "prop_type": _t(it, "prptDivNm"),                 # 재산유형(압류재산 등)
             "disposal": _t(it, "dspsMthodNm"),                # 처분방식
             "bid_method": _t(it, "cptnMthodNm") or _t(it, "bidDivNm"),
@@ -105,4 +118,10 @@ class OnbidSource:
             "bid_close": _dt(_t(it, "cltrBidEndDt")),
             "org": _t(it, "rqstOrgNm") or _t(it, "orgNm"),
             "thumb": _t(it, "thnlImgUrlAdr"),                 # 온비드 썸네일 이미지 URL
+            "pnu": _t(it, "ltnoPnu"),                         # 지번 PNU → 좌표·건축물대장
+            "pbanc_no": pbanc,                                # 공고번호(상세 URL·상세 API)
+            "pbct_cdtn_no": cdtn,                             # 공매조건번호(상세 URL·상세 API)
+            "onbid_url": onbid_url,                           # 물건별 온비드 상세 링크
+            "floor": int(mfl.group(1)) if mfl else None,      # 층(물건명 파싱)
+            "ho": mho.group(1) if mho else None,              # 호(물건명 파싱)
         }
