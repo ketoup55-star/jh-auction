@@ -121,12 +121,12 @@
           <th>물건명</th><td><input type="text" id="goods" placeholder="물건명"></td></tr>
       <tr><th>입찰일자</th><td><input type="date" id="bidFrom"> <span class="sep">~</span> <input type="date" id="bidTo"></td>
           <th>입찰결과</th><td><select id="result"><option>진행물건</option><option>전체</option><option>종결물건</option></select></td></tr>
-      <tr><th>감정가</th><td><select><option>최소(비공개 포함)</option></select> <span class="sep">~</span> <select><option>최대</option></select></td>
-          <th>최저입찰가</th><td><select><option>최소(비공개 포함)</option></select> <span class="sep">~</span> <select><option>최대</option></select></td></tr>
-      <tr><th>절감율</th><td><select><option>최소</option></select> <span class="sep">~</span> <select><option>최대</option></select></td>
-          <th>처분방식</th><td><select id="dpsl"><option value="">전체</option><option value="0001">매각</option><option value="0002">임대</option></select></td></tr>
-      <tr><th>재산종류</th><td><select id="prop"><option>압류재산</option><option>국유재산</option><option>수탁재산</option><option>유입자산</option><option>공유재산</option><option>기타일반재산</option><option value="">전체</option></select></td>
-          <th>정렬방식</th><td><select id="sort"><option>입찰기일▲</option><option>감정가순</option><option>최저가순</option></select></td></tr>
+      <tr><th>감정가</th><td><select id="apprMin"></select> <span class="sep">~</span> <select id="apprMax"></select></td>
+          <th>최저입찰가</th><td><select id="lowMin"></select> <span class="sep">~</span> <select id="lowMax"></select></td></tr>
+      <tr><th>처분방식</th><td><select id="dpsl"><option value="">전체</option><option value="매각">매각</option><option value="임대">임대</option></select></td>
+          <th>재산종류</th><td><select id="prop"><option>압류재산</option><option>국유재산</option><option>수탁재산</option><option>유입자산</option><option>공유재산</option><option>기타일반재산</option><option value="">전체</option></select></td></tr>
+      <tr><th>정렬방식</th><td><select id="sort"><option value="bid_close">입찰마감 빠른순</option><option value="appr">감정가 높은순</option><option value="low">최저가 낮은순</option></select></td>
+          <th>페이지당</th><td><select id="pgRows"><option value="20">20개</option><option value="30" selected>30개</option><option value="50">50개</option><option value="100">100개</option></select></td></tr>
       <tr><th>토지이용계획</th><td colspan="3">국계법에 따른 지역/지구 <select><option>전체</option></select> <span class="sep">(AND 조건)</span> <input type="text" placeholder="예) 개발제한구역" style="max-width:200px"></td></tr>
       <tr><th>특수물건</th><td colspan="3"><select><option>전체</option></select></td></tr>
     </table>
@@ -152,7 +152,12 @@ function caseSearch(){ location.href="/static/auctions.html"; }
 (function(){ const f=document.getElementById("bidFrom"),t=document.getElementById("bidTo"); const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; const a=new Date(),b=new Date(); b.setMonth(b.getMonth()+3); f.value=fmt(a); t.value=fmt(b); })();
 (async function(){ try{ const r=await fetch("/auth/me"); if(!r.ok)return; const u=await r.json(); document.getElementById("util").innerHTML=`<span style="color:var(--primary);font-weight:600">${u.name||u.email}님</span><a href="#" onclick="hl();return false;">로그아웃</a><a href="/static/mypage.html">마이페이지</a><a href="/static/payment.html" class="pay">요금결제</a>`+(u.role==="admin"?`<a href="/static/admin.html" style="color:#fff;background:#e23b3b;padding:2px 9px;border-radius:6px;font-weight:700;margin-left:5px;text-decoration:none">🔧 관리자</a>`:``); }catch(e){} })();
 async function hl(){ await fetch("/auth/logout",{method:"POST"}); location.reload(); }
-function resetForm(){ document.querySelectorAll(".ftbl input").forEach(i=>{if(i.type==='text')i.value="";}); search(); }
+function resetForm(){
+  document.querySelectorAll(".ftbl input").forEach(i=>{if(i.type==='text')i.value="";});
+  ["apprMin","apprMax","lowMin","lowMax"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
+  const so=document.getElementById("sort"); if(so)so.value="bid_close";
+  search();
+}
 let GMFAV=new Set();
 async function loadGmFav(){ try{ const r=await fetch("/gongmae/favorites"); if(r.ok){ const d=await r.json(); GMFAV=new Set((d.items||[]).map(x=>x.manage_no)); } }catch(e){} }
 async function gmFav(i,btn){
@@ -201,9 +206,19 @@ function onLcls(){
   (USAGES[lc]||[]).forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;c2.appendChild(o);});
 }
 
-let GM_PAGE=1, GM_TOTAL=0; const GM_ROWS=30;
+// 감정가·최저입찰가 드롭다운(억 단위) 채우기
+const PRICE_STEPS=[0,1000,3000,5000,7000,10000,15000,20000,30000,50000,70000,100000,150000,200000,300000,500000,1000000]; // 만원
+function fmtEok(man){ if(man===0) return "0"; const e=Math.floor(man/10000), m=man%10000; return (e?e+"억":"")+(m?(e?" ":"")+m.toLocaleString()+"만":(e?"":"")); }
+function fillPriceSelects(){
+  const mk=(sel,isMin)=>{ const el=document.getElementById(sel); if(!el) return;
+    el.innerHTML='<option value="">'+(isMin?"최소":"최대")+'</option>'
+      +PRICE_STEPS.filter(v=>v>0||!isMin).map(v=>'<option value="'+(v*10000)+'">'+fmtEok(v)+'원</option>').join(""); };
+  mk("apprMin",true); mk("apprMax",false); mk("lowMin",true); mk("lowMax",false);
+}
+let GM_PAGE=1, GM_TOTAL=0;
+function gmRows(){ return +(document.getElementById("pgRows")||{}).value || 30; }
 function gmParams(page){
-  const p=new URLSearchParams({rows:String(GM_ROWS),page:String(page)});
+  const p=new URLSearchParams({rows:String(gmRows()),page:String(page)});
   const pr=document.getElementById("prop").value; p.set("prop",pr);   // 빈값=전체(명시 전송)
   const g=document.getElementById("goods").value.trim(); if(g)p.set("goods",g);
   const dp=document.getElementById("dpsl").value; if(dp)p.set("dpsl_mtd",dp);
@@ -211,6 +226,11 @@ function gmParams(page){
   const gg=document.getElementById("gugun").value; if(gg&&gg!=="구/군")p.set("sgg",gg);
   const sc=document.getElementById("ctgr2").value, lc=document.getElementById("ctgr").value;
   if(sc)p.set("usage",sc); else if(lc)p.set("usage",lc);   // 세부용도 우선, 없으면 대분류
+  const am=document.getElementById("apprMin").value, ax=document.getElementById("apprMax").value;
+  if(am)p.set("appr_min",am); if(ax)p.set("appr_max",ax);
+  const lm=document.getElementById("lowMin").value, lx=document.getElementById("lowMax").value;
+  if(lm)p.set("low_min",lm); if(lx)p.set("low_max",lx);
+  const so=document.getElementById("sort").value; if(so)p.set("sort",so);
   return p;
 }
 async function search(){
@@ -258,6 +278,7 @@ function row(L,i){
     <td class="cc">${L.prop_type||"-"}</td>
   </tr>`;
 }
+fillPriceSelects();
 Promise.all([loadRegions(),loadUsages()]).then(search);
 </script>
 <style>

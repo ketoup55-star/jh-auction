@@ -4741,15 +4741,24 @@ def _gm_q(v: str) -> str:
     return '"' + str(v).replace('"', "").replace(",", " ").strip() + '"'
 
 
+_GM_SORTS = {   # 정렬 키 → PostgREST order (감정가·최저가는 nullslast로 비공개(NULL) 뒤로)
+    "bid_close": "bid_close.asc", "appr": "appraisal_price.desc.nullslast",
+    "low": "min_price.asc.nullslast",
+}
+
+
 @app.get("/gongmae")
 def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
                  prop: Optional[str] = "압류재산", dpsl_mtd: Optional[str] = None,
                  usg_lcls: Optional[str] = None, goods: Optional[str] = None,
                  sido: Optional[str] = None, sgg: Optional[str] = None,
-                 usage: Optional[str] = None) -> dict:
-    """온비드 공매물건 목록 — 우리 DB(gongmae_items) 소재지/재산유형/명칭 필터.
+                 usage: Optional[str] = None,
+                 appr_min: Optional[int] = None, appr_max: Optional[int] = None,
+                 low_min: Optional[int] = None, low_max: Optional[int] = None,
+                 sort: Optional[str] = None) -> dict:
+    """온비드 공매물건 목록 — 우리 DB(gongmae_items) 소재지/재산유형/명칭/감정가·최저가/정렬 필터.
     온비드 API가 소재지 검색을 지원하지 않아 전량 적재분을 우리가 필터한다.
-    DB 실패 시 온비드 라이브 API로 폴백."""
+    DB 실패 시 온비드 라이브 API로 폴백. (매수판정·특수물건·유찰수는 공매 데이터 없어 제외)"""
     try:
         conds = []   # (col, op, val)
         if prop:
@@ -4764,10 +4773,22 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
             conds.append(("usage", "ilike", f"*{usage}*"))
         if dpsl_mtd:
             conds.append(("disposal", "ilike", f"*{dpsl_mtd}*"))
-        params = {"select": "data,bid_close", "order": "bid_close.asc",
+        if appr_min is not None:
+            conds.append(("appraisal_price", "gte", str(int(appr_min))))
+        if appr_max is not None:
+            conds.append(("appraisal_price", "lte", str(int(appr_max))))
+        if low_min is not None:
+            conds.append(("min_price", "gte", str(int(low_min))))
+        if low_max is not None:
+            conds.append(("min_price", "lte", str(int(low_max))))
+        order = _GM_SORTS.get(sort or "", "bid_close.asc")
+        params = {"select": "data,bid_close", "order": order,
                   "offset": str(max(0, (page - 1) * rows)), "limit": str(rows)}
         if conds:
-            params["and"] = "(" + ",".join(f"{c}.{op}.{_gm_q(v)}" for c, op, v in conds) + ")"
+            # 가격 조건(gte/lte)은 숫자라 따옴표 없이, 문자열 조건만 _gm_q로 이스케이프
+            def _v(op, val):
+                return val if op in ("gte", "lte") else _gm_q(val)
+            params["and"] = "(" + ",".join(f"{c}.{op}.{_v(op, v)}" for c, op, v in conds) + ")"
         resp = auction_db._get("gongmae_items", params, count=True)
         if resp.status_code >= 400:
             raise RuntimeError(f"db {resp.status_code}")
