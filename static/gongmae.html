@@ -55,6 +55,13 @@
   .favbox{background:#eef3fb;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-bottom:14px;}
   .favbox .h{background:var(--primary);color:#fff;text-align:center;padding:9px;font-weight:600;}
   .favbox .b{padding:14px;color:var(--muted);}.favbox .b b{color:var(--hotred);}
+  .ss-item{display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:7px;padding:8px 10px;margin-bottom:6px;}
+  .ss-item:last-child{margin-bottom:0;}
+  .ss-item .ss-nm{flex:1;min-width:0;color:var(--primary);font-weight:600;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .ss-item .ss-nm:hover{text-decoration:underline;}
+  .ss-item .ss-cond{color:var(--muted);font-weight:400;font-size:11px;margin-left:6px;}
+  .ss-item .ss-del{border:none;background:none;color:#c4c8cf;cursor:pointer;font-size:15px;line-height:1;padding:2px 4px;}
+  .ss-item .ss-del:hover{color:var(--hotred);}
   /* 결과 */
   .cnt{font-size:13px;color:var(--muted);margin:4px 2px 10px;}.cnt b{color:var(--hotred);font-size:15px;}
   .notice{background:#fff7e6;border:1px solid #f0d9a8;border-radius:10px;padding:18px;color:#9a6b0b;font-size:13px;line-height:1.7;}
@@ -133,12 +140,12 @@
 
     <div class="btns">
       <button class="btn b-primary" onclick="search()">검색하기</button>
-      <button class="btn b-ghost" onclick="alert('로그인 후 이용 가능합니다.')">해당조건 저장</button>
+      <button class="btn b-ghost" onclick="saveSearch()">해당조건 저장</button>
       <button class="btn b-gray" onclick="resetForm()">검색 초기화</button>
     </div>
 
     <div class="favbox"><div class="h">즐겨쓰는검색</div>
-      <div class="b">등록된 즐겨쓰는 검색이 없습니다.<br>검색조건을 입력하신 후 <b>해당조건 저장하기</b> 기능을 통해 편리하게 이용하실 수 있습니다.</div></div>
+      <div class="b" id="savedSearches">불러오는 중…</div></div>
 
     <div class="cnt" id="cnt"></div>
     <div id="list"></div>
@@ -158,6 +165,63 @@ function resetForm(){
   const so=document.getElementById("sort"); if(so)so.value="bid_close";
   search();
 }
+
+// ── 즐겨쓰는검색(검색조건 저장) — 로그인 사용자 서버 저장(/gongmae/searches) ──
+const SAVE_IDS=["ctgr","ctgr2","bidmtd","manageNo","sido","gugun","goods","bidFrom","bidTo","result","apprMin","apprMax","lowMin","lowMax","dpsl","prop","sort","pgRows"];
+function collectForm(){ const c={}; SAVE_IDS.forEach(id=>{const e=document.getElementById(id); if(e) c[id]=e.value;}); return c; }
+function applyCond(cond){
+  cond=cond||{};
+  // 종속 드롭다운(구/군·세부용도)은 상위 값 세팅 후 change 발생시켜 채운 뒤 값 지정
+  const sido=document.getElementById("sido"); if(sido&&cond.sido!=null){ sido.value=cond.sido; onSido(); }
+  const ctgr=document.getElementById("ctgr"); if(ctgr&&cond.ctgr!=null){ ctgr.value=cond.ctgr; onLcls(); }
+  SAVE_IDS.forEach(id=>{ if(id==="sido"||id==="ctgr") return; const e=document.getElementById(id); if(e&&cond[id]!=null) e.value=cond[id]; });
+  search();
+}
+function condSummary(c){
+  c=c||{}; const p=[];
+  if(c.sido) p.push((SIDO_LABEL[c.sido]||c.sido)+(c.gugun&&c.gugun!=="구/군"?" "+c.gugun:""));
+  if(c.ctgr2) p.push(c.ctgr2); else if(c.ctgr) p.push(LCLS_LABEL[c.ctgr]||c.ctgr);
+  if(c.goods) p.push('"'+c.goods+'"');
+  if(c.prop) p.push(c.prop);
+  const mk=(mn,mx)=>{ const a=mn?fmtEok(+mn/10000):"", b=mx?fmtEok(+mx/10000):""; return (a||b)?(a||"0")+"~"+(b||"∞"):""; };
+  const ap=mk(c.apprMin,c.apprMax); if(ap) p.push("감정 "+ap);
+  const lo=mk(c.lowMin,c.lowMax); if(lo) p.push("최저 "+lo);
+  return p.length?p.join(" · "):"전체 조건";
+}
+async function saveSearch(){
+  const cond=collectForm();
+  const dflt=condSummary(cond);
+  const name=(prompt("저장할 검색조건 이름을 입력하세요.", dflt.slice(0,40))||"").trim();
+  if(name===null) return;
+  let r; try{
+    r=await fetch("/gongmae/searches",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({name:name||dflt,conditions:cond})});
+  }catch(e){ alert("네트워크 오류로 저장하지 못했습니다."); return; }
+  if(r.status===401){ if(confirm("로그인 후 이용 가능합니다.\n로그인 페이지로 이동하시겠습니까?")) location.href="/static/login.html"; return; }
+  if(!r.ok){ alert("저장에 실패했습니다."); return; }
+  await loadSavedSearches();
+  alert("검색조건을 저장했습니다.");
+}
+async function loadSavedSearches(){
+  const box=document.getElementById("savedSearches"); if(!box) return;
+  let d=null, status=0;
+  try{ const r=await fetch("/gongmae/searches",{cache:"no-store"}); status=r.status; if(r.ok) d=await r.json(); }catch(e){}
+  if(status===401){ box.innerHTML='로그인하시면 검색조건을 저장하고 재사용할 수 있습니다.<br>검색조건 입력 후 <b>해당조건 저장</b> 버튼을 눌러보세요.'; return; }
+  const items=(d&&d.items)||[];
+  if(!items.length){ box.innerHTML='등록된 즐겨쓰는 검색이 없습니다.<br>검색조건을 입력하신 후 <b>해당조건 저장</b> 기능을 통해 편리하게 이용하실 수 있습니다.'; return; }
+  box.innerHTML=items.map((it,i)=>'<div class="ss-item">'
+    +'<span class="ss-nm" onclick="applySavedSearch('+i+')" title="이 조건으로 검색">'+escHtml(it.name||"검색조건")
+    +'<span class="ss-cond">'+escHtml(condSummary(it.conditions))+'</span></span>'
+    +'<button class="ss-del" onclick="delSavedSearch('+it.id+')" title="삭제">✕</button></div>').join("");
+  window.GM_SEARCHES=items;
+}
+function applySavedSearch(i){ const it=(window.GM_SEARCHES||[])[i]; if(it) applyCond(it.conditions); }
+async function delSavedSearch(id){
+  if(!confirm("이 저장검색을 삭제하시겠습니까?")) return;
+  try{ await fetch("/gongmae/searches/"+encodeURIComponent(id),{method:"DELETE"}); }catch(e){}
+  await loadSavedSearches();
+}
+function escHtml(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
 let GMFAV=new Set();
 async function loadGmFav(){ try{ const r=await fetch("/gongmae/favorites"); if(r.ok){ const d=await r.json(); GMFAV=new Set((d.items||[]).map(x=>x.manage_no)); } }catch(e){} }
 async function gmFav(i,btn){
@@ -279,7 +343,7 @@ function row(L,i){
   </tr>`;
 }
 fillPriceSelects();
-Promise.all([loadRegions(),loadUsages()]).then(search);
+Promise.all([loadRegions(),loadUsages()]).then(function(){ search(); loadSavedSearches(); });
 </script>
 <style>
 #aibot-btn{position:fixed;right:22px;bottom:22px;width:60px;height:60px;border-radius:50%;background:#1a73e8;color:#fff;border:none;font-size:22px;font-weight:800;letter-spacing:1px;cursor:pointer;box-shadow:0 6px 20px -4px rgba(26,115,232,.6);z-index:9998;display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:aibotTilt 4.5s ease-in-out infinite,aibotGlow 2.2s ease-in-out infinite;transform-origin:center bottom;}
