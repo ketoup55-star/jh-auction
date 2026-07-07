@@ -5010,6 +5010,45 @@ def gongmae_villa_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
     return r
 
 
+@app.get("/gongmae/expected_bid")
+def gongmae_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
+    """공매 아파트 예상낙찰가 — 경매 백데이터(동일건물 아파트 매각사례)·eb.compute 무수정 재사용. gm_expbid: 캐시."""
+    from auction_analysis import expected_bid as eb
+    ck = "gm_expbid:" + mng
+    try:
+        hit = auction_db.cache_get_many([ck]).get(ck)
+        if isinstance(hit, dict):
+            return hit
+    except Exception:
+        pass
+    e, cur = _gm_cur(mng, cdtn)
+    if not cur:
+        return {"available": False}
+    if "아파트" not in (cur.get("usage") or ""):
+        return {"available": False, "reason": "아파트 아님"}
+    pre, bunji = eb.building_key(cur.get("address"))
+    cases = []
+    if bunji:
+        try:
+            rr = auction_db._get("items", {
+                "select": "item_key,address,area_text,building_area,appraisal_price,sale_price,sale_rate,sell_date,result,bid_count,sale_2nd_price",
+                "usage_name": "ilike.*아파트*", "address": f"ilike.*{bunji}*",
+                "or": "(result.like.매각*,result.like.잔금납부*,result.like.배당종결*)",
+                "sale_price": "gt.0", "limit": "1000"})
+            cases = rr.json() if rr.status_code in (200, 206) else []
+        except Exception:
+            cases = []
+    est = None   # 시세(차익용)는 아파트정보(gongmae_apt_info) 붙일 때 연동 예정
+    r = eb.compute(cur, cases, est_price=est)
+    r["v"] = _EXPBID_V
+    if r.get("available"):
+        try:
+            auction_db.cache_save(ck, r)
+        except Exception:
+            pass
+    return r
+
+
 # ---------- 실거래(국토부 연립다세대 매매) ----------
 from auction_analysis.molit_source import MolitSource, filter_similar  # noqa: E402
 molit = MolitSource()
