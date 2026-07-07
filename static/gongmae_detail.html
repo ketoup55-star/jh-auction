@@ -394,24 +394,34 @@ async function loadGmFeatures(d, e){
   var q="?mng="+encodeURIComponent(d.manage_no)+(d.pbct_cdtn_no?"&cdtn="+encodeURIComponent(d.pbct_cdtn_no):"");
   var gf=function(p){return fetch("/gongmae"+p+q).then(function(r){return r.json();}).catch(function(){return null;});};
   if(isApt){ await loadGmApt(box, d, gf); maybeShortSale(usg); return; }
-  box.innerHTML='<div class="card"><div class="sub">🏗️ 건물정보·시세·예상낙찰가 불러오는 중…</div></div>';
-  var R=await Promise.all([gf("/building_brief"),gf("/villa_est"),gf("/villa_expected_bid"),gf("/nearby_trades")]);
-  var bi=R[0]||{},est=R[1]||{},xb=R[2]||{},nb=R[3]||{};
-  GM_EST=est; GM_XB=xb; GM_NB=nb;
+  box.innerHTML='<div class="card"><div class="sub">🏗️ 건물정보·시세·유사거래 불러오는 중…</div></div>';
+  // ⚡예상낙찰가(villa_expected_bid)는 인근 경매사례 지오코딩이 무거워 최대 수십초 → Promise.all에서 빼고 별도 비동기.
+  //   나머지(건물정보·시세·유사거래)는 즉시 렌더 → 페이지가 안 멈춤.
+  var R=await Promise.all([gf("/building_brief"),gf("/villa_est"),gf("/nearby_trades")]);
+  var bi=R[0]||{},est=R[1]||{},nb=R[2]||{};
+  GM_EST=est; GM_NB=nb;
   var html="";
   if(bi.available){ html+='<div class="card"><div class="cardhd">🏗️ 건물정보 <span class="gtag">건축물대장</span></div><div class="hgrid">'
     +gmHcell("준공년도",bi.build_year?bi.build_year+"년":"")+gmHcell("세대수",bi.units?bi.units+(bi.unit_label||"세대"):"")
     +gmHcell("승강기",(bi.elevator?bi.elevator+"대":"없음"))+gmHcell("층수",bi.floors?bi.floors+"층":"")+'</div></div>'; }
-  var sise=est.available?est.price:null, bid=xb.available?xb.expected_bid:null;
-  if(sise||bid){ html+='<div class="card"><div class="cardhd">💰 시세·예상낙찰가</div><div class="hgrid">';
-    if(sise) html+=gmHcell("추정 시세",won(sise));
-    if(bid) html+=gmHcell("예상 낙찰가",won(bid));
-    if(sise&&bid) html+=gmHcell("예상 차익",won(sise-bid),(sise-bid>0?"low":""));
-    html+='</div><div class="sub" style="margin-top:8px">※ 시세=주변 유사 실거래 · 예상낙찰가=인근 경매 낙찰사례 기준(±면적·층·감정가·낙찰율)</div></div>'; }
+  var sise=est.available?est.price:null;
+  if(sise){ html+='<div class="card"><div class="cardhd">💰 시세·예상낙찰가</div><div class="hgrid">'
+    +gmHcell("추정 시세",won(sise))
+    +'<div class="hcell"><span class="hl">예상 낙찰가</span><span class="hv" id="gm-bidcell">계산 중…</span></div>'
+    +'<div class="hcell"><span class="hl">예상 차익</span><span class="hv" id="gm-profitcell">계산 중…</span></div>'
+    +'</div><div class="sub" style="margin-top:8px">※ 시세=주변 유사 실거래 · 예상낙찰가=인근 경매 낙찰사례 기준(±면적·층·감정가·낙찰율)</div></div>'; }
   // 주변 유사 실거래(지도 + 실거래가 상세) — 경매 loadNearbyMap 1:1 이식
   html+='<div id="gm-nearby"></div>';
-  box.innerHTML=html||'<div class="card"><div class="sub">이 물건은 주변 유사 실거래·경매 사례가 없어 시세/예상낙찰가를 산출할 수 없습니다.</div></div>';
+  box.innerHTML=html||'<div class="card"><div class="sub">이 물건은 주변 유사 실거래·경매 사례가 없어 시세를 산출할 수 없습니다.</div></div>';
   if(nb.available) loadGmNearby(nb);
+  // 예상낙찰가·차익은 준비되면 채움(페이지는 이미 렌더됨)
+  gf("/villa_expected_bid").then(function(xb){
+    GM_XB=xb||{};
+    var bid=(xb&&xb.available)?xb.expected_bid:null;
+    var bc=document.getElementById("gm-bidcell"), pc=document.getElementById("gm-profitcell");
+    if(bc) bc.textContent=bid?won(bid):"인근 경매사례 없음";
+    if(pc){ if(bid&&sise){ pc.textContent=won(sise-bid); if(sise-bid>0) pc.classList.add("low"); } else pc.textContent="-"; }
+  });
 }
 // 아파트/오피스텔: 아파트정보·실거래·예상낙찰가·차익·경쟁매물
 async function loadGmApt(box, d, gf){
