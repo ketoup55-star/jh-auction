@@ -355,8 +355,8 @@ def _git_push():
         subprocess.run(["git", "add", "static/data/home_news.json"], cwd=HERE, timeout=30)
         c = subprocess.run(["git", "commit", "-m", f"홈 뉴스 자동 갱신 {datetime.now(KST).date().isoformat()}"],
                            cwd=HERE, capture_output=True, text=True, timeout=30)
-        if "nothing to commit" in (c.stdout + c.stderr):
-            _log("git: 변경 없음 → 커밋 스킵"); return
+        if c.returncode != 0:   # 커밋 생성 안 됨(변경없음/실패) → push 스킵. 로케일 무관하게 rc로 판정
+            _log(f"git: 커밋 안 함(rc={c.returncode}, 변경없음) → 스킵"); return
         p = subprocess.run(["git", "push", "origin", "main"], cwd=HERE, capture_output=True, text=True, timeout=60)
         _log(f"git push rc={p.returncode}: {((p.stderr or p.stdout) or '').strip()[:150]}")
     except Exception as e:
