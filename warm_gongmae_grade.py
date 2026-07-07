@@ -55,7 +55,7 @@ _SELECT = (
 )
 
 _UPDATE = (
-    "UPDATE gongmae_items SET buy_grade=%s, sise=%s, profit=%s, grade_reason=%s "
+    "UPDATE gongmae_items SET buy_grade=%s, sise=%s, profit=%s, grade_reason=%s, nb_count=%s "
     "WHERE id=%s"
 )
 
@@ -66,7 +66,8 @@ _stat = {"done": 0, "ok": 0, "err": 0, "skip": 0,
 
 
 def _fetch_targets(conn, force: bool, limit):
-    extra = "" if force else "AND buy_grade IS NULL"
+    # resumable: 미워밍(buy_grade NULL) + 기존 워밍분 중 nb_count 미보유(유사거래 건수 추가분)도 채운다.
+    extra = "" if force else "AND (buy_grade IS NULL OR nb_count IS NULL)"
     q = _SELECT.format(extra=extra)
     rows = conn.execute(q, (_USAGE_RE,)).fetchall()
     if limit:
@@ -99,9 +100,10 @@ def _persist(mng_conn, iid, res):
     sise = res.get("sise")
     profit = res.get("profit")
     reason = res.get("reason")
+    nb_count = res.get("nb_count")   # 유사(주변) 실거래 건수(빌라=nearby / 아파트=같은평형 매칭)
     with mng_conn["lock"]:
         with mng_conn["conn"].cursor() as cur:
-            cur.execute(_UPDATE, (grade, sise, profit, reason, iid))
+            cur.execute(_UPDATE, (grade, sise, profit, reason, nb_count, iid))
         mng_conn["conn"].commit()
     return grade or "미적용"
 

@@ -52,7 +52,7 @@ from auction_analysis import (
     analyze, calculate_distribution,
 )
 from auction_analysis.auth import UserStore
-from auction_analysis.supabase_source import SupabaseSource
+from auction_analysis.supabase_source import SupabaseSource, normalize_address, _SIDO_VARIANTS
 from .serializers import (
     listing_summary, analysis_to_dict, distribution_to_dict, compute_stats,
 )
@@ -4747,30 +4747,98 @@ _GM_SORTS = {   # 정렬 키 → PostgREST order (감정가·최저가는 nullsl
 }
 
 
+def _gm_esc_like(v: str) -> str:
+    """PostgREST or=()/and=() ilike 값에 들어갈 소재지·용도 토큰 이스케이프.
+    or/and 그룹 문법( , ( ) )을 깨는 문자를 제거 — 값에 콤마·괄호가 오면 그룹이 오해석되므로."""
+    return str(v).replace(",", " ").replace("(", " ").replace(")", " ").replace('"', "").strip()
+
+
+def _gm_region_usage_filters(*, regions=None, sido=None, sgg=None, usages=None,
+                             usage=None) -> list[tuple]:
+    """공매 소재지(복수)·용도(복수) 필터를 (key,value) 튜플 리스트로.
+    **경매 supabase_source._filters 의 regions/sido/usages 로직을 그대로 이식**:
+      · regions(여러 소재지) = 지역끼리 OR, 각 지역 안 토큰(구군+동)은 AND
+        → or=(and(address.ilike.*구군*,address.ilike.*동*),and(...))
+        · normalize_address 로 도로명주소도 (시도,구군,동) 토큰화 → 비연속 AND 로 매칭
+      · sido(시/도만) = **전방일치**(대구*) + 표기변형(_SIDO_VARIANTS) OR
+        → '%대구%'가 부산 '해운대구'에 오매칭되던 버그 방지(전방일치가 핵심)
+      · usages(여러 용도) = ilike OR
+    호출부(gongmae_list)에서 여러 or 그룹은 and=(or(),or()) 로 병합(PostgREST root or 1개 제한).
+    legacy sgg/usage(단일, 저장검색 호환)도 처리."""
+    f: list[tuple] = []
+
+    # ── 소재지 복수(+버튼) : 지역끼리 OR, 각 지역 토큰 AND ──
+    reg_list = list(regions) if isinstance(regions, (list, tuple)) else ([regions] if regions else [])
+    # legacy 단일(sido+sgg): regions 없을 때만 하나의 지역으로 취급(구군은 토큰 AND, 시도는 아래 전방일치)
+    _legacy_region = None
+    if not reg_list and sgg and sgg not in ("구/군", "구/군 전체"):
+        _legacy_region = ((sido + " ") if sido else "") + sgg  # "대구광역시 수성구" → 토큰 AND
+    if _legacy_region:
+        reg_list = [_legacy_region]
+        sido = None   # 구군까지 지정되면 시도 전방일치는 불필요(토큰 AND에 시도 포함)
+    if reg_list:
+        _rgroups = []
+        for _reg in reg_list:
+            # normalize_address 로 시도표준화+도로명 보정 → 토큰. 실패해도 원문 split 로 폴백.
+            _sd, _gu, _dong = normalize_address(str(_reg))
+            _toks = [t for t in (_sd, _gu, _dong) if t]
+            if not _toks:                                   # normalize 실패 → 원문 토큰
+                _toks = [t for t in str(_reg).split() if t]
+            _toks = [_gm_esc_like(t) for t in _toks if _gm_esc_like(t)]
+            if not _toks:
+                continue
+            if len(_toks) == 1:
+                _rgroups.append(f"address.ilike.*{_toks[0]}*")
+            else:                                           # 비연속 AND(지번·도로명 모두 매칭)
+                _inner = ",".join(f"address.ilike.*{t}*" for t in _toks)
+                _rgroups.append(f"and({_inner})")
+        if _rgroups:
+            f.append(("or", f"({','.join(_rgroups)})"))
+
+    # ── 시/도만 : 전방일치 + 표기변형 OR (해운대구 오매칭 방지) ──
+    if sido:
+        variants = _SIDO_VARIANTS.get(sido, [sido])         # 병합라벨(전남광주통합특별시)은 키 없음 → self 전방일치(DB 저장형이 그 자체)
+        ors = ",".join(f"address.ilike.{_gm_esc_like(v)}*" for v in variants)
+        f.append(("or", f"({ors})"))
+
+    # ── 용도 복수 : ilike OR (세부용도/대분류 문자열 부분일치) ──
+    usg_list = list(usages) if isinstance(usages, (list, tuple)) else ([usages] if usages else [])
+    if not usg_list and usage:                              # legacy 단일 용도
+        usg_list = [usage]
+    usg_list = [u for u in (_gm_esc_like(x) for x in usg_list) if u]
+    if usg_list:
+        if len(usg_list) == 1:
+            f.append(("usage", f"ilike.*{usg_list[0]}*"))
+        else:
+            ors = ",".join(f"usage.ilike.*{u}*" for u in usg_list)
+            f.append(("or", f"({ors})"))
+    return f
+
+
 @app.get("/gongmae")
 def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
                  prop: Optional[str] = "압류재산", dpsl_mtd: Optional[str] = None,
                  usg_lcls: Optional[str] = None, goods: Optional[str] = None,
                  sido: Optional[str] = None, sgg: Optional[str] = None,
                  usage: Optional[str] = None,
+                 regions: Optional[list[str]] = Query(None, description="소재지 다중(+버튼, 각 '시도 구군 동' 문자열, 지역끼리 OR·토큰 AND)"),
+                 usages: Optional[list[str]] = Query(None, description="용도 다중(+버튼, usage 부분일치 OR)"),
                  appr_min: Optional[int] = None, appr_max: Optional[int] = None,
                  low_min: Optional[int] = None, low_max: Optional[int] = None,
                  sort: Optional[str] = None) -> dict:
     """온비드 공매물건 목록 — 우리 DB(gongmae_items) 소재지/재산유형/명칭/감정가·최저가/정렬 필터.
     온비드 API가 소재지 검색을 지원하지 않아 전량 적재분을 우리가 필터한다.
-    DB 실패 시 온비드 라이브 API로 폴백. (매수판정·특수물건·유찰수는 공매 데이터 없어 제외)"""
+    소재지·용도는 **복수 선택**(경매 supabase_source._filters regions/sido/usages 로직 이식):
+      · regions = 지역끼리 OR, 각 지역 토큰 AND / sido = 전방일치+표기변형 OR(해운대구 오매칭 방지)
+      · usages = ilike OR / normalize_address 로 도로명주소도 매칭
+    DB 실패 시 온비드 라이브 API로 폴백. (특수물건·유찰수는 공매 데이터 없어 제외)"""
     try:
+        # ① 스칼라(단일 컬럼) 조건 → and=(...) 그룹
         conds = []   # (col, op, val)
         if prop:
             conds.append(("prop_type", "eq", prop))
-        if sido:
-            conds.append(("address", "ilike", f"*{sido}*"))
-        if sgg:
-            conds.append(("address", "ilike", f"*{sgg}*"))
         if goods:
             conds.append(("name", "ilike", f"*{goods}*"))
-        if usage:
-            conds.append(("usage", "ilike", f"*{usage}*"))
         if dpsl_mtd:
             conds.append(("disposal", "ilike", f"*{dpsl_mtd}*"))
         if appr_min is not None:
@@ -4781,16 +4849,40 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
             conds.append(("min_price", "gte", str(int(low_min))))
         if low_max is not None:
             conds.append(("min_price", "lte", str(int(low_max))))
+        # ② 소재지(복수)·용도(복수) → or 그룹(들) (경매 검증 로직 이식). legacy sido/sgg/usage 도 흡수.
+        ru = _gm_region_usage_filters(regions=regions, sido=sido, sgg=sgg,
+                                      usages=usages, usage=usage)
         order = _GM_SORTS.get(sort or "", "bid_close.asc")
-        # 사전계산 매수판정(warm_gongmae_grade.py) — data JSONB엔 없고 컬럼에 있으니 컬럼도 select해
-        # item에 병합. 목록이 행별 buy_grade/villa_est 라이브 호출 없이 배지·시세·차익을 즉시 렌더.
-        params = {"select": "data,bid_close,buy_grade,sise,profit,grade_reason", "order": order,
-                  "offset": str(max(0, (page - 1) * rows)), "limit": str(rows)}
-        if conds:
-            # 가격 조건(gte/lte)은 숫자라 따옴표 없이, 문자열 조건만 _gm_q로 이스케이프
-            def _v(op, val):
-                return val if op in ("gte", "lte") else _gm_q(val)
-            params["and"] = "(" + ",".join(f"{c}.{op}.{_v(op, v)}" for c, op, v in conds) + ")"
+        # 사전계산(warm_gongmae_grade.py) 컬럼(buy_grade·sise·profit·grade_reason·nb_count)도 select해
+        # item에 병합. 목록이 행별 라이브 호출 없이 배지·시세·차익·유사거래건수를 즉시 렌더.
+        params = {"select": "data,bid_close,buy_grade,sise,profit,grade_reason,nb_count",
+                  "order": order, "offset": str(max(0, (page - 1) * rows)), "limit": str(rows)}
+        # ③ and(스칼라) + or(지역/용도) 병합.
+        #    PostgREST root or= 는 1개만 허용 → or 그룹이 2개↑(복수지역 + 용도복수, 또는 시도 + 용도)면
+        #    and=(or(X),or(Y)) 로 묶는다(경매 _filters 말미 로직과 동일).
+        or_groups = [v for (k, v) in ru if k == "or"]
+        scalar_and = list(conds)   # (col,op,val)
+        # ru 중 or 아닌 것(단일 usage ilike 등)은 scalar_and 로 편입
+        for (k, v) in ru:
+            if k != "or":
+                # v = "ilike.*xxx*" 형태 → (col=k, op·val 통째)
+                _op, _val = v.split(".", 1)
+                scalar_and.append((k, _op, _val))
+
+        def _v(op, val):
+            return val if op in ("gte", "lte") else _gm_q(val)
+        and_parts = [f"{c}.{op}.{_v(op, val)}" for c, op, val in scalar_and]
+        if len(or_groups) >= 2:
+            # 여러 or 그룹 → and 안에 or(...) 들로 결합(+스칼라 조건도 같은 and 에)
+            merged = and_parts + [f"or{g}" for g in or_groups]
+            params["and"] = "(" + ",".join(merged) + ")"
+        elif len(or_groups) == 1:
+            if and_parts:
+                params["and"] = "(" + ",".join(and_parts) + ")"
+            params["or"] = or_groups[0]   # root or 1개는 그대로
+        else:
+            if and_parts:
+                params["and"] = "(" + ",".join(and_parts) + ")"
         resp = auction_db._get("gongmae_items", params, count=True)
         if resp.status_code >= 400:
             raise RuntimeError(f"db {resp.status_code}")
@@ -4807,6 +4899,7 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
             d["sise"] = r.get("sise")
             d["profit"] = r.get("profit")
             d["grade_reason"] = r.get("grade_reason")
+            d["nb_count"] = r.get("nb_count")   # 유사(주변) 실거래 건수(warm 저장값, 없으면 None)
             items.append(d)
         return {"items": items, "total": total, "page": page, "source": "db"}
     except Exception as e:
@@ -5382,30 +5475,46 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
     ck = "gm_grade:" + mng + ((":" + cdtn) if cdtn else "")
     try:
         hit = auction_db.cache_get_many([ck]).get(ck)
-        if isinstance(hit, dict) and hit.get("v") == 1:
+        # v>=2: nb_count(유사거래 건수) 포함 결과. v==1(구버전)은 nb_count 없어 재계산.
+        if isinstance(hit, dict) and hit.get("v", 0) >= 2:
             return {**hit, "_cache": "hit"}
     except Exception:
         pass
     e, cur = _gm_cur(mng, cdtn)
     if not cur:
-        return {"applicable": False, "reason": "물건 없음", "v": 1}
+        return {"applicable": False, "reason": "물건 없음", "v": 2}
     usage = cur.get("usage") or ""
     is_villa = _is_villa_usage(usage)
     is_apt = ("아파트" in usage) or ("오피스텔" in usage)
     if not (is_villa or is_apt):
         return {"applicable": False, "reason": "매수판정 대상 아님(빌라류·아파트만)",
-                "usage": usage, "v": 1}
-    # ① 추정 시세(용도별 소스 분기)
+                "usage": usage, "v": 2}
+    # ① 추정 시세(용도별 소스 분기) + 유사(주변) 실거래 건수(nb_count)
     sise = None
+    nb_count = None   # 빌라=nearby_trades 건수 / 아파트=같은평형 매칭 실거래 수
     try:
         if is_villa:
             ev = gongmae_villa_est(mng, cdtn)
             if isinstance(ev, dict) and ev.get("available"):
                 sise = _to_int(ev.get("price"))
+            # 유사거래 건수 = nearby_trades 의 trades 수(villa_est가 이미 조회 → 캐시 히트, 추가호출 저렴)
+            try:
+                nb = gongmae_nearby_trades(mng, cdtn)
+                if isinstance(nb, dict) and nb.get("available"):
+                    nb_count = len(nb.get("trades") or [])
+            except Exception:
+                nb_count = None
         else:
             ai = gongmae_apt_info(mng, cdtn)
-            if isinstance(ai, dict) and isinstance(ai.get("est"), dict) and ai["est"].get("price"):
-                sise = _to_int(ai["est"]["price"])
+            if isinstance(ai, dict):
+                if isinstance(ai.get("est"), dict) and ai["est"].get("price"):
+                    sise = _to_int(ai["est"]["price"])
+                # 아파트 유사거래 = 같은평형 매칭 실거래(summary.count), 없으면 trades 길이
+                _sm = ai.get("summary")
+                if isinstance(_sm, dict) and _sm.get("count") is not None:
+                    nb_count = _to_int(_sm.get("count"))
+                elif isinstance(ai.get("trades"), list):
+                    nb_count = len(ai["trades"])
     except Exception:
         sise = None
     # ② 마지막회차 최저가(bid_schedule) — 없으면 물건 자체 최저가 폴백
@@ -5417,14 +5526,15 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
     if not sise:
         out = {"applicable": True, "grade": "매수금지", "kind": kind,
                "reason": "수요 없음 · 매수세 없음",
-               "sise": None, "last_min": last_min, "profit": None, "v": 1}
+               "sise": None, "last_min": last_min, "profit": None, "nb_count": nb_count, "v": 2}
     elif last_min is None:
         return {"applicable": False, "reason": "최저입찰가 확인 불가",
-                "sise": sise, "kind": kind, "v": 1}
+                "sise": sise, "kind": kind, "nb_count": nb_count, "v": 2}
     elif last_min > sise:
         out = {"applicable": True, "grade": "매수금지", "kind": kind,
                "reason": "최저입찰가가 추정시세보다 높음",
-               "sise": sise, "last_min": last_min, "profit": sise - last_min, "v": 1}
+               "sise": sise, "last_min": last_min, "profit": sise - last_min,
+               "nb_count": nb_count, "v": 2}
     else:
         profit = sise - last_min
         if profit >= 30000000:
@@ -5432,7 +5542,8 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
         else:
             grade, reason = "매수검토", "차익 3천만원 미만"
         out = {"applicable": True, "grade": grade, "kind": kind, "reason": reason,
-               "sise": sise, "last_min": last_min, "profit": profit, "v": 1}
+               "sise": sise, "last_min": last_min, "profit": profit,
+               "nb_count": nb_count, "v": 2}
     try:
         auction_db.cache_save(ck, out)
     except Exception:

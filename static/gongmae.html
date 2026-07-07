@@ -49,6 +49,13 @@
   .ftbl select,.ftbl input{height:30px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;background:#fff;}
   .ftbl input[type=text]{width:100%;}
   .sep{color:var(--muted);}
+  /* 소재지·용도 복수선택(+버튼·칩) — 경매 auctions.html 패턴 */
+  .loc-add{width:26px;height:26px;border:1px solid var(--primary);background:#eef3fb;color:var(--primary);border-radius:6px;cursor:pointer;font-weight:700;font-size:14px;line-height:1;padding:0;vertical-align:middle;}
+  .loc-add:hover{background:var(--primary);color:#fff;}
+  .loc-chips{display:inline-flex;flex-wrap:wrap;gap:4px;margin-left:2px;vertical-align:middle;}
+  .loc-chip{display:inline-flex;align-items:center;gap:5px;background:#eef3fb;border:1px solid var(--primary);border-radius:13px;padding:2px 4px 2px 9px;font-size:12px;color:var(--primary);font-weight:600;}
+  .loc-chip b{cursor:pointer;color:var(--danger);font-weight:700;font-size:13px;padding:0 3px;line-height:1;}
+  .loc-chip b:hover{color:#fff;background:var(--danger);border-radius:50%;}
   .btns{display:flex;justify-content:center;gap:8px;margin:14px 0;}
   .btn{height:42px;padding:0 28px;border-radius:8px;border:1px solid var(--primary);font-size:14px;font-weight:700;cursor:pointer;}
   .b-primary{background:var(--primary);color:#fff;}.b-ghost{background:#fff;color:var(--primary);}.b-gray{background:#eef1f5;color:var(--muted);border-color:var(--line);}
@@ -98,6 +105,9 @@
   .ecsi .lbl,.eprofit .lbl,.eloss .lbl{flex:0 0 auto;}.ecsi .amt,.eprofit .amt,.eloss .amt{flex:1 1 auto;text-align:right;}
   .nosise{color:#9aa0a6;font-weight:600;}
   .villaest:empty,.aptest:empty{display:none;}
+  /* 유사거래 N건 칩(경매 '실거래 N건' 대응) */
+  .nbchip{display:inline-block;margin-top:3px;font-size:11px;font-weight:600;color:#2c5db0;background:#eef3fb;border:1px solid #cfe0f5;border-radius:4px;padding:0 6px;line-height:16px;white-space:nowrap;}
+  .nbchip:empty{display:none;}
   /* PREMIUM 스티커(auctions.html 1:1) */
   .prem-badge{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#7a5c00;
     background:linear-gradient(180deg,#ffe38a,#ffcf45);border:1px solid #e8b830;border-radius:4px;
@@ -167,10 +177,10 @@
       <div class="crumb">🏠 › 공매 › <b>공매종합검색</b></div></div>
 
     <table class="ftbl">
-      <tr><th>용도</th><td colspan="3"><select id="ctgr"><option value="">전체</option></select> <span class="sep">⊕</span> <select id="ctgr2"><option value="">세부용도 전체</option></select></td></tr>
+      <tr><th>용도</th><td colspan="3"><select id="ctgr"><option value="">전체</option></select> <span class="sep">⊕</span> <select id="ctgr2"><option value="">세부용도 전체</option></select> <button type="button" class="loc-add" onclick="addUsage()" title="용도 추가">＋</button> <span id="usgChips" class="loc-chips"></span></td></tr>
       <tr><th>입찰방식</th><td><select id="bidmtd"><option value="">전체</option><option>일반경쟁</option><option>지명경쟁</option></select></td>
           <th>물건관리번호</th><td><input type="text" id="manageNo" placeholder="물건관리번호"></td></tr>
-      <tr><th>소재지</th><td><select id="sido"><option value="">전체</option></select> <select id="gugun"><option>구/군</option></select> <select id="dong"><option>동/읍</option></select></td>
+      <tr><th>소재지</th><td><select id="sido"><option value="">전체</option></select> <select id="gugun"><option>구/군</option></select> <select id="dong"><option>동/읍</option></select> <button type="button" class="loc-add" onclick="addLocation()" title="소재지 추가">＋</button> <span id="locChips" class="loc-chips"></span></td>
           <th>물건명</th><td><input type="text" id="goods" placeholder="물건명"></td></tr>
       <tr><th>입찰일자</th><td><input type="date" id="bidFrom"> <span class="sep">~</span> <input type="date" id="bidTo"></td>
           <th>입찰결과</th><td><select id="result"><option>진행물건</option><option>전체</option><option>종결물건</option></select></td></tr>
@@ -263,6 +273,8 @@ function resetForm(){
   document.querySelectorAll(".ftbl input").forEach(i=>{if(i.type==='text')i.value="";});
   ["apprMin","apprMax","lowMin","lowMax"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
   const so=document.getElementById("sort"); if(so)so.value="bid_close";
+  _locations=[]; renderLocChips();   // 소재지 복수칩 초기화
+  _usages=[]; renderUsgChips();       // 용도 복수칩 초기화
   search();
 }
 
@@ -370,6 +382,48 @@ function onLcls(){
   (USAGES[lc]||[]).forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;c2.appendChild(o);});
 }
 
+// ── 소재지 복수선택(+버튼으로 여러 지역 추가 · 경매 auctions.html 패턴) ──
+//   q = "시도 구군 동" 문자열(백엔드가 normalize_address 로 토큰화 → 지역끼리 OR·토큰 AND).
+//   병합라벨(전남광주통합특별시)은 DB 저장형 그대로 전방일치되므로 값 그대로 전송.
+var _locations=[];
+function addLocation(){
+  var sdE=document.getElementById('sido'), guE=document.getElementById('gugun'), deE=document.getElementById('dong');
+  var sd=sdE.value, gu=(guE.value&&guE.value!=='구/군')?guE.value:'', de=(deE.value&&deE.value!=='동/읍')?deE.value:'';
+  if(!sd && !gu && !de){ alert('시/도·구/군·동을 선택한 뒤 ＋를 눌러 추가하세요.'); return; }
+  var sdT=sd?(SIDO_LABEL[sd]||sdE.options[sdE.selectedIndex].text):'';
+  var guT=gu||''; var deT=de||'';
+  var label=[sdT,guT,deT].filter(Boolean).join(' ');
+  var q=[sd,gu,de].filter(Boolean).join(' ');    // 백엔드 regions용(토큰 AND)
+  if(_locations.some(function(l){return l.q===q;})) return;   // 중복 방지
+  _locations.push({label:label, q:q});
+  renderLocChips();
+}
+function removeLocation(i){ _locations.splice(i,1); renderLocChips(); }
+function renderLocChips(){
+  document.getElementById('locChips').innerHTML=_locations.map(function(l,i){
+    return '<span class="loc-chip">'+escHtml(l.label)+'<b onclick="removeLocation('+i+')" title="삭제">×</b></span>';
+  }).join('');
+}
+
+// ── 용도 복수선택(+버튼으로 여러 용도 추가) ── 값 = 세부용도 우선, 없으면 대분류(백엔드 usage ilike OR)
+var _usages=[];
+function addUsage(){
+  var lcE=document.getElementById('ctgr'), scE=document.getElementById('ctgr2');
+  var lc=lcE.value, sc=scE.value;
+  var val=sc||lc;
+  if(!val){ alert('용도(대분류 또는 세부용도)를 선택한 뒤 ＋를 눌러 추가하세요.'); return; }
+  var label=sc?sc:(LCLS_LABEL[lc]||lc);
+  if(_usages.some(function(u){return u.q===val;})) return;   // 중복 방지
+  _usages.push({label:label, q:val});
+  renderUsgChips();
+}
+function removeUsage(i){ _usages.splice(i,1); renderUsgChips(); }
+function renderUsgChips(){
+  document.getElementById('usgChips').innerHTML=_usages.map(function(u,i){
+    return '<span class="loc-chip">'+escHtml(u.label)+'<b onclick="removeUsage('+i+')" title="삭제">×</b></span>';
+  }).join('');
+}
+
 // 감정가·최저입찰가 드롭다운(억 단위) 채우기
 const PRICE_STEPS=[0,1000,3000,5000,7000,10000,15000,20000,30000,50000,70000,100000,150000,200000,300000,500000,1000000]; // 만원
 function fmtEok(man){ if(man===0) return "0"; const e=Math.floor(man/10000), m=man%10000; return (e?e+"억":"")+(m?(e?" ":"")+m.toLocaleString()+"만":(e?"":"")); }
@@ -387,10 +441,20 @@ function gmParams(page){
   const pr=document.getElementById("prop").value; p.set("prop",pr);   // 빈값=전체(명시 전송)
   const g=document.getElementById("goods").value.trim(); if(g)p.set("goods",g);
   const dp=document.getElementById("dpsl").value; if(dp)p.set("dpsl_mtd",dp);
-  const sido=document.getElementById("sido").value; if(sido)p.set("sido",sido);
-  const gg=document.getElementById("gugun").value; if(gg&&gg!=="구/군")p.set("sgg",gg);
-  const sc=document.getElementById("ctgr2").value, lc=document.getElementById("ctgr").value;
-  if(sc)p.set("usage",sc); else if(lc)p.set("usage",lc);   // 세부용도 우선, 없으면 대분류
+  // 소재지: +버튼 칩(복수)이 있으면 regions[](지역끼리 OR), 없으면 단일 드롭다운 폴백(sido/sgg)
+  if(_locations.length){
+    _locations.forEach(function(l){ p.append('regions', l.q); });
+  } else {
+    const sido=document.getElementById("sido").value; if(sido)p.set("sido",sido);
+    const gg=document.getElementById("gugun").value; if(gg&&gg!=="구/군")p.set("sgg",gg);
+  }
+  // 용도: +버튼 칩(복수)이 있으면 usages[](OR), 없으면 단일 드롭다운 폴백(세부용도 우선)
+  if(_usages.length){
+    _usages.forEach(function(u){ p.append('usages', u.q); });
+  } else {
+    const sc=document.getElementById("ctgr2").value, lc=document.getElementById("ctgr").value;
+    if(sc)p.set("usage",sc); else if(lc)p.set("usage",lc);
+  }
   const am=document.getElementById("apprMin").value, ax=document.getElementById("apprMax").value;
   if(am)p.set("appr_min",am); if(ax)p.set("appr_max",ax);
   const lm=document.getElementById("lowMin").value, lx=document.getElementById("lowMax").value;
@@ -447,6 +511,9 @@ function row(L,i){
   //    buy_grade 없는 미워밍 물건만 빈 placeholder로 남겨 fillGmGrades/fillGmEstimates가 소수 폴백.
   const warmed=graded && L.buy_grade;
   let gradechip="", estcell="", trGrade="", trProfit="", trSise="";
+  // 유사거래 N건 칩 — 사전계산 nb_count(있으면 즉시), 없으면 fillGmGrades 폴백이 data-nbkey로 채움
+  const nbTxt=(n)=>(n!=null&&+n>0)?('유사거래 '+(+n).toLocaleString()+'건'):"";
+  const nbchip=graded?`<span class="nbchip" data-nbkey="${escAttr(key)}"${L.nb_count!=null?' data-done="1"':''}>${warmed?nbTxt(L.nb_count):""}</span>`:"";
   if(warmed){
     const cls=GM_GCLS[L.buy_grade]||"g-mid";
     gradechip=`<span class="gradechip" data-key="${escAttr(key)}" data-done="1"><span class="gbadge ${cls}" title="${escAttr(L.grade_reason||"")}">${L.buy_grade}</span></span>`;
@@ -464,10 +531,10 @@ function row(L,i){
       ehtml='<div class="ecsi"><span class="lbl nosise">시세 없음</span></div>';
     }
     const cellcls=GM_APT_RE.test(usg)?'aptest':'villaest';
-    estcell=`<div class="${cellcls}" data-key="${escAttr(key)}" data-base="${base||''}" data-done="1">${ehtml}</div>`;
+    estcell=`<div class="${cellcls}" data-key="${escAttr(key)}" data-base="${base||''}" data-done="1">${ehtml}</div>`+nbchip;
   } else if(graded){
     gradechip=`<span class="gradechip" data-key="${escAttr(key)}"></span>`;
-    estcell=`<div class="${GM_APT_RE.test(usg)?'aptest':'villaest'}" data-key="${escAttr(key)}" data-base="${L.min_price||''}"></div>`;
+    estcell=`<div class="${GM_APT_RE.test(usg)?'aptest':'villaest'}" data-key="${escAttr(key)}" data-base="${L.min_price||''}"></div>`+nbchip;
   }
   return `<tr data-idx="${i}"${trGrade}${trProfit}${trSise} data-mng="${escAttr(mng)}" data-cdtn="${escAttr(cdtn)}" onclick="gmOpen(${i})">
     <td class="cc"><input type="checkbox" class="rowchk" value="${escAttr(mng)}" onclick="event.stopPropagation()"></td>
@@ -562,6 +629,9 @@ async function fillGmGrades(){
     const cls=GM_GCLS[g.grade]||"g-mid";
     el.innerHTML='<span class="gbadge '+cls+'" title="'+escAttr(g.reason||"")+'">'+g.grade+'</span>';
     const tr=el.closest('tr'); if(tr){ tr.dataset.grade=g.grade; if(g.profit!=null)tr.dataset.profit=g.profit; if(g.sise!=null)tr.dataset.sise=g.sise; }
+    // 유사거래 N건 칩도 buy_grade 응답의 nb_count로 채움(같은 물건, 별도 호출 없음)
+    if(g.nb_count!=null){ const nc=el.closest('tr').querySelector('.nbchip[data-nbkey="'+CSS.escape(key)+'"]');
+      if(nc && !nc.dataset.done){ nc.dataset.done="1"; if(+g.nb_count>0) nc.textContent='유사거래 '+(+g.nb_count).toLocaleString()+'건'; } }
   });
   applyGradeFilter();   // 등급 도착 후 필터 재적용
   applyGmSort();        // 정렬도 재적용(등급/차익 기준 정렬 반영)
