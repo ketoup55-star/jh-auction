@@ -72,6 +72,52 @@
   .num{text-align:right;font-variant-numeric:tabular-nums;}.cc{text-align:center;}
   .low{color:var(--hotred);font-weight:600;}
   .gmfav{border:none;background:none;cursor:pointer;font-size:16px;line-height:1;color:#c4c8cf;padding:0 0 2px;}.gmfav.on{color:var(--hotred);}
+  /* ── 목록 툴바(경매 auctions.html 1:1) ── */
+  .statbox{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:12px;}
+  .statbox .sh{font-size:13px;font-weight:600;color:var(--primary);margin:0 0 8px;}
+  .statgrid{display:flex;flex-wrap:wrap;gap:7px 20px;}
+  .stat{font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap;}
+  .stat:hover{color:var(--primary);}
+  .stat.on{color:var(--danger);font-weight:600;}
+  .toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 8px;flex-wrap:wrap;}
+  .toolbar select{height:32px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;background:#fff;}
+  .toolbar label.ck{display:inline-flex;align-items:center;gap:4px;font-size:12px;white-space:nowrap;cursor:pointer;}
+  .tbtn{height:32px;padding:0 12px;font-size:13px;font-weight:600;border-radius:8px;border:1px solid var(--primary);background:#fff;color:var(--primary);cursor:pointer;}
+  .tbtn:hover{background:var(--label);}
+  /* 매수판정 배지(auctions.html .gbadge 1:1) */
+  .gbadge{display:inline-block;font-size:11px;font-weight:700;border-radius:5px;padding:1px 7px;}
+  .gbadge.g-ok{background:#e7f7ee;color:#138a4e;border:1px solid #b6e6cb;}
+  .gbadge.g-mid{background:#fdf3e2;color:#b9770f;border:1px solid #f3dcb0;}
+  .gbadge.g-no{background:#fdecec;color:#d23030;border:1px solid #f4c4c4;}
+  .gradechip:empty{display:none;}
+  /* 시세·차익 셀(auctions.html 1:1) */
+  .ecsi,.eprofit,.eloss{display:flex;justify-content:space-between;align-items:baseline;gap:6px;font-size:12px;margin-top:3px;white-space:nowrap;}
+  .ecsi{color:var(--primary);font-weight:600;}
+  .eprofit{color:#1a9e4b;font-weight:700;}
+  .eloss{color:#e11414;font-weight:700;}
+  .ecsi .lbl,.eprofit .lbl,.eloss .lbl{flex:0 0 auto;}.ecsi .amt,.eprofit .amt,.eloss .amt{flex:1 1 auto;text-align:right;}
+  .nosise{color:#9aa0a6;font-weight:600;}
+  .villaest:empty,.aptest:empty{display:none;}
+  /* PREMIUM 스티커(auctions.html 1:1) */
+  .prem-badge{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#7a5c00;
+    background:linear-gradient(180deg,#ffe38a,#ffcf45);border:1px solid #e8b830;border-radius:4px;
+    padding:0 5px;line-height:15px;vertical-align:middle;white-space:nowrap;animation:premBlink 1.5s ease-in-out infinite;transform-origin:center;}
+  @keyframes premBlink{0%,100%{opacity:1}50%{opacity:.4}}
+  @keyframes premWobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg)}55%{transform:rotate(9deg)}80%{transform:rotate(-4deg)}}
+  .premwrap:hover .prem-badge{animation:premWobble .55s ease-in-out;}
+  @media(prefers-reduced-motion:reduce){.prem-badge{animation:none!important;}}
+  /* 프리미엄 게이트 모달(auctions.html 1:1) */
+  .gate-overlay{position:fixed;inset:0;background:rgba(15,30,60,.5);display:none;align-items:center;justify-content:center;z-index:9999;padding:16px;}
+  .gate-overlay.on{display:flex;}
+  .gate-card{background:#fff;border-radius:16px;padding:46px 30px;max-width:480px;width:100%;text-align:center;box-shadow:0 24px 70px -20px rgba(0,0,0,.45);}
+  .gate-card .lk{font-size:44px;line-height:1;}
+  .gate-card h2{color:#1f4fa3;font-size:22px;margin:14px 0 8px;font-weight:800;}
+  .gate-card p{color:#6b7280;line-height:1.7;margin:0 0 24px;font-size:15px;}
+  .gate-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+  .gate-btns .ghost{padding:11px 22px;border:1px solid #d0d7e2;background:#fff;color:#555;border-radius:8px;font-weight:700;cursor:pointer;font-size:14px;}
+  .gate-btns .prim{padding:11px 22px;border:none;background:#1f4fa3;color:#fff;border-radius:8px;font-weight:700;text-decoration:none;font-size:14px;cursor:pointer;}
+  .pager{display:flex;justify-content:center;gap:10px;margin-top:18px;align-items:center;}
+  .pager button{height:34px;padding:0 16px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;}.pager button:disabled{opacity:.4;cursor:default;}
   @media(max-width:900px){ .wrap{grid-template-columns:1fr;} }
   /* 부동산DB '전국' 스티커 — 점멸 + hover 시 좌우 기울기(프리미엄 스티커와 동일 형식) */
   @keyframes natlBlink{0%,100%{opacity:1}50%{opacity:.35}}
@@ -148,7 +194,61 @@
       <div class="b" id="savedSearches">불러오는 중…</div></div>
 
     <div class="cnt" id="cnt"></div>
+    <div class="toolbar">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <label class="ck"><input type="checkbox" id="selectAll" onchange="toggleAll(this)"> 전체선택</label>
+        <select id="pageSize" onchange="changePageSize()">
+          <option value="20">20개씩 보기</option>
+          <option value="30" selected>30개씩 보기</option>
+          <option value="50">50개씩 보기</option>
+          <option value="100">100개씩 보기</option>
+        </select>
+        <select id="gradeSel" onchange="pickGrade(this.value)" title="매수판정으로 거르기(현재 목록 기준)">
+          <option value="">매수판정 전체</option>
+          <option value="매수양호">매수양호</option>
+          <option value="매수검토">매수검토</option>
+          <option value="매수금지">매수금지</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span class="premwrap" style="position:relative;display:inline-flex;align-items:center">
+        <span class="prem-badge" style="position:absolute;top:-9px;right:-8px;box-shadow:0 1px 4px rgba(120,90,10,.45);z-index:2">PREMIUM</span>
+        <select id="gmSort1" onmousedown="return gatePremium(event)" onchange="onGmSort()" title="1차 정렬(매수판정·차익·시세)">
+          <option value="">정렬순서1</option>
+          <option value="grade_good">매수양호 우선</option>
+          <option value="profit_desc">차익 높은순</option>
+          <option value="sise_desc">추정시세 높은순</option>
+        </select>
+        </span>
+        <span class="premwrap" style="position:relative;display:inline-flex;align-items:center">
+        <span class="prem-badge" style="position:absolute;top:-9px;right:-8px;box-shadow:0 1px 4px rgba(120,90,10,.45);z-index:2">PREMIUM</span>
+        <select id="gmSort2" onmousedown="return gatePremium(event)" onchange="onGmSort()" title="2차 정렬(동점 시)">
+          <option value="">정렬순서2</option>
+          <option value="grade_good">매수양호 우선</option>
+          <option value="profit_desc">차익 높은순</option>
+          <option value="sise_desc">추정시세 높은순</option>
+        </select>
+        </span>
+        <button class="tbtn" onclick="saveFavsBulk()">♡ 관심물건 저장</button>
+      </div>
+    </div>
     <div id="list"></div>
+    <div class="pager">
+      <button id="prev" onclick="gmPage(-1)">← 이전</button>
+      <span id="pageno" class="kv"></span>
+      <button id="next" onclick="gmPage(1)">다음 →</button>
+    </div>
+  </div>
+</div>
+<div id="gateModal" class="gate-overlay" onclick="if(event.target===this)closeGateModal()">
+  <div class="gate-card">
+    <div class="lk">🔒</div>
+    <h2 id="gateTitle">프리미엄 등급 이상 회원 전용입니다</h2>
+    <p id="gateDesc"></p>
+    <div class="gate-btns">
+      <button class="ghost" onclick="closeGateModal()">닫기</button>
+      <a class="prim" href="/static/payment.html">이용권 안내 · 결제</a>
+    </div>
   </div>
 </div>
 
@@ -280,7 +380,8 @@ function fillPriceSelects(){
   mk("apprMin",true); mk("apprMax",false); mk("lowMin",true); mk("lowMax",false);
 }
 let GM_PAGE=1, GM_TOTAL=0;
-function gmRows(){ return +(document.getElementById("pgRows")||{}).value || 30; }
+// pageSize(툴바) 우선, 없으면 pgRows(폼). 경매 auctions.html의 15~150 대응(공매는 20~100).
+function gmRows(){ return +(document.getElementById("pageSize")||{}).value || +(document.getElementById("pgRows")||{}).value || 30; }
 function gmParams(page){
   const p=new URLSearchParams({rows:String(gmRows()),page:String(page)});
   const pr=document.getElementById("prop").value; p.set("prop",pr);   // 빈값=전체(명시 전송)
@@ -297,52 +398,171 @@ function gmParams(page){
   const so=document.getElementById("sort").value; if(so)p.set("sort",so);
   return p;
 }
-async function search(){
-  GM_PAGE=1; window.GM=[];
+async function search(){ GM_PAGE=1; return loadPage(); }
+async function loadPage(){
+  window.GM=[];
   const cnt=document.getElementById("cnt"), box=document.getElementById("list");
   box.innerHTML='<div class="notice">공매물건을 불러오는 중…</div>'; cnt.textContent="";
   await loadGmFav();
-  let d; try{ d=await (await fetch("/gongmae?"+gmParams(1))).json(); }catch(e){ d={error:"요청 실패"}; }
+  let d; try{ d=await (await fetch("/gongmae?"+gmParams(GM_PAGE))).json(); }catch(e){ d={error:"요청 실패"}; }
   if(d.error){
     box.innerHTML=`<div class="notice"><b>온비드 공매 데이터를 불러올 수 없습니다.</b><br>${d.error}<br><br>
       ※ data.go.kr에서 <b>온비드 부동산 물건목록 OpenAPI 활용신청 승인</b> 및 키 활성화 후 자동으로 표시됩니다.</div>`;
-    cnt.textContent=""; return;
+    cnt.textContent=""; updatePager(); return;
   }
   window.GM=d.items||[]; GM_TOTAL=d.total||0;
   cnt.innerHTML=`총 <b>${GM_TOTAL.toLocaleString()}</b>건`;
-  if(!window.GM.length){ box.innerHTML='<div class="notice">검색 결과가 없습니다.</div>'; return; }
+  if(!window.GM.length){ box.innerHTML='<div class="notice">검색 결과가 없습니다.</div>'; updatePager(); return; }
   render();
+  applyGradeFilter();   // 매수판정 필터 활성 시 즉시 적용(등급 도착 후 fillGmGrades가 재적용)
+  fillGmEstimates();    // 빌라/아파트 행 추정시세·차익 비동기 채움
+  fillGmGrades();       // 빌라/아파트 행 매수판정 배지 비동기 채움
+  const sa=document.getElementById("selectAll"); if(sa) sa.checked=false;
+  updatePager();
 }
+function updatePager(){
+  const pages=Math.max(1,Math.ceil(GM_TOTAL/gmRows()));
+  const pn=document.getElementById("pageno"); if(pn) pn.textContent=GM_PAGE+" / "+pages;
+  const pv=document.getElementById("prev"), nx=document.getElementById("next");
+  if(pv) pv.disabled=GM_PAGE<=1; if(nx) nx.disabled=GM_PAGE>=pages;
+}
+function gmPage(dir){ const pages=Math.max(1,Math.ceil(GM_TOTAL/gmRows())); GM_PAGE=Math.min(pages,Math.max(1,GM_PAGE+dir)); loadPage(); window.scrollTo(0,0); }
+function changePageSize(){ GM_PAGE=1; try{localStorage.setItem('gm_pageSize',gmRows());}catch(e){} loadPage(); }
+const GM_VILLA_RE=/다세대|연립|빌라|도시형/, GM_APT_RE=/아파트|오피스텔/;
+function gmIsGraded(u){ u=u||""; return GM_VILLA_RE.test(u)||GM_APT_RE.test(u); }
 function render(){
   const rows=window.GM.map((L,i)=>row(L,i)).join("");
-  const more=(window.GM.length<GM_TOTAL)
-    ? `<div style="text-align:center;margin:16px 0"><button class="btn b-ghost" onclick="loadMore()">더 보기 (${window.GM.length.toLocaleString()} / ${GM_TOTAL.toLocaleString()})</button></div>` : "";
   document.getElementById("list").innerHTML=`<table class="gtbl"><thead><tr>
-    <th style="width:120px">물건관리번호</th><th>물건명 / 소재지</th><th style="width:90px">용도</th>
-    <th style="width:110px">감정가<br>최저입찰가</th><th style="width:130px">입찰기간</th><th style="width:64px">처분방식</th><th style="width:72px">재산종류</th>
-  </tr></thead><tbody>${rows}</tbody></table>${more}`;
-}
-async function loadMore(){
-  GM_PAGE++;
-  let d; try{ d=await (await fetch("/gongmae?"+gmParams(GM_PAGE))).json(); }catch(e){ return; }
-  window.GM=window.GM.concat(d.items||[]); render();
+    <th style="width:34px"></th><th style="width:118px">물건관리번호</th><th>물건명 / 소재지</th><th style="width:82px">용도</th>
+    <th style="width:150px">감정가 / 최저입찰가<br>[시세 · 차익]</th><th style="width:120px">입찰기간</th><th style="width:60px">처분방식</th><th style="width:66px">재산종류</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+  applyGmSort();   // 정렬순서(정렬1/2) 활성 시 현재 페이지 재정렬
 }
 function gmOpen(i){ var it=window.GM[i]||{}; var k=it.id||it.manage_no||String(i); try{localStorage.setItem("gm_"+k,JSON.stringify(it));}catch(e){} window.open("/static/gongmae_detail.html?id="+encodeURIComponent(k),"_blank"); }
 function row(L,i){
-  return `<tr onclick="gmOpen(${i})">
+  const mng=L.manage_no||"", cdtn=L.pbct_cdtn_no||"", usg=L.usage||"";
+  const graded=gmIsGraded(usg);
+  const key=mng+(cdtn?("|"+cdtn):"");
+  // 매수판정 배지 칩 + 추정시세/차익 셀(빌라·아파트만 · 경매 목록과 동일 구조)
+  const gradechip=graded?`<span class="gradechip" data-key="${escAttr(key)}"></span>`:"";
+  const estcell=graded?`<div class="${GM_APT_RE.test(usg)?'aptest':'villaest'}" data-key="${escAttr(key)}" data-base="${L.min_price||''}"></div>`:"";
+  return `<tr data-idx="${i}" data-mng="${escAttr(mng)}" data-cdtn="${escAttr(cdtn)}" onclick="gmOpen(${i})">
+    <td class="cc"><input type="checkbox" class="rowchk" value="${escAttr(mng)}" onclick="event.stopPropagation()"></td>
     <td class="cc"><button class="gmfav${GMFAV.has(L.manage_no)?' on':''}" onclick="event.stopPropagation();gmFav(${i},this)" title="관심등록/해제">${GMFAV.has(L.manage_no)?'♥':'♡'}</button><br>${L.manage_no||"-"}</td>
     <td><div style="display:flex;gap:9px;align-items:center;">
       ${L.thumb?`<img src="${L.thumb}" referrerpolicy="no-referrer" loading="lazy" style="width:66px;height:50px;object-fit:cover;border-radius:5px;flex:0 0 auto;background:#eef1f5;border:1px solid var(--line)" onerror="this.style.display='none'">`:""}
-      <div style="min-width:0"><b>${L.name||"-"}</b><div style="color:var(--muted);margin-top:2px">${L.org||""}</div></div>
+      <div style="min-width:0"><b>${L.name||"-"}</b><div style="color:var(--muted);margin-top:2px">${L.org||""}</div><div style="margin-top:3px">${gradechip}</div></div>
     </div></td>
     <td class="cc">${(L.usage||"").split(" ").pop()||"-"}</td>
-    <td class="num">${won(L.appraisal_price)}<br><span class="low">${won(L.min_price)}${L.bid_ratio!=null?` (${L.bid_ratio}%)`:""}</span></td>
+    <td class="num"><div class="price">${won(L.appraisal_price)}</div><span class="low">${won(L.min_price)}${L.bid_ratio!=null?` (${L.bid_ratio}%)`:""}</span>${estcell}</td>
     <td class="cc">${(L.bid_begin||"").slice(0,10)}<br>~ ${(L.bid_close||"").slice(0,10)}</td>
     <td class="cc">${L.disposal||"-"}</td>
     <td class="cc">${L.prop_type||"-"}</td>
   </tr>`;
 }
+function escAttr(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+// ── 전체선택 / 관심물건 일괄 저장(경매 saveFavs 대응) ──
+function toggleAll(el){ document.querySelectorAll(".rowchk").forEach(c=>c.checked=el.checked); }
+async function saveFavsBulk(){
+  const sel=[...document.querySelectorAll(".rowchk:checked")].map(c=>c.value);
+  if(!sel.length){ alert("관심물건으로 저장할 물건을 선택하세요."); return; }
+  const byMng={}; (window.GM||[]).forEach(L=>{ if(L.manage_no) byMng[L.manage_no]=L; });
+  let ok=0, unauth=false;
+  for(const mng of sel){ const L=byMng[mng]; if(!L) continue;
+    try{ const r=await fetch("/gongmae/favorites",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({manage_no:mng,data:L,folder:"기타",memo:""})});
+      if(r.status===401){ unauth=true; break; } if(r.ok){ ok++; GMFAV.add(mng); } }catch(e){}
+  }
+  if(unauth){ alert("로그인 후 이용 가능합니다."); return; }
+  document.getElementById("selectAll").checked=false;
+  document.querySelectorAll(".rowchk").forEach(c=>c.checked=false);
+  render();
+  alert(ok+"건을 관심물건에 저장했습니다.");
+}
+// ── 프리미엄 게이트(경매 auctions.html 1:1) ──
+let ME_RANK=0, IS_ADMIN=false;
+function canPremium(){ return IS_ADMIN || ME_RANK>=20; }
+function showGateModal(t,d){ document.getElementById("gateTitle").textContent=t; document.getElementById("gateDesc").textContent=d; document.getElementById("gateModal").classList.add("on"); }
+function closeGateModal(){ document.getElementById("gateModal").classList.remove("on"); }
+function premiumMsg(){ showGateModal("이 기능은 프리미엄 등급 이상 회원 전용입니다","정렬순서 등 고급 기능은 프리미엄 등급(이용권) 회원만 이용할 수 있습니다."); }
+function gatePremium(e){ if(!canPremium()){ if(e&&e.preventDefault)e.preventDefault(); premiumMsg(); if(e&&e.target&&e.target.blur)e.target.blur(); return false; } return true; }
+(async function(){ try{ const u=await (await fetch("/auth/me",{cache:"no-store"})).json(); ME_RANK=u.grade_rank||0; IS_ADMIN=(u.role==="admin"); }catch(e){} })();
+// ── 매수판정 필터(현재 목록 기준 클라이언트 필터, 경매 pickGrade 대응) ──
+let gradeFilter="";
+function pickGrade(v){ gradeFilter=v||""; try{localStorage.setItem('gm_grade',gradeFilter);}catch(e){} applyGradeFilter(); }
+function applyGradeFilter(){
+  document.querySelectorAll('.gtbl tbody tr').forEach(tr=>{
+    if(!gradeFilter){ tr.style.display=""; return; }
+    const g=tr.dataset.grade||"";   // fillGmGrades가 채움
+    tr.style.display=(g===gradeFilter)?"":"none";
+  });
+}
+// ── 정렬순서(정렬1/2, 클라이언트 현재 페이지 정렬 · 경매 onAptSort 대응) ──
+function onGmSort(){ applyGmSort(); }
+function _gmCmp(key,a,b){
+  if(!key) return 0;
+  if(key==="grade_good"){ const rank={"매수양호":0,"매수검토":1,"매수금지":2}; const av=rank[a.dataset.grade], bv=rank[b.dataset.grade];
+    if(av==null&&bv==null)return 0; if(av==null)return 1; if(bv==null)return -1; return av-bv; }
+  const f=key.startsWith("profit")?"profit":"sise";
+  const g=tr=>{ const x=tr.dataset[f]; return (x===undefined||x==="")?null:+x; };
+  const av=g(a), bv=g(b);
+  if(av==null&&bv==null)return 0; if(av==null)return 1; if(bv==null)return -1;
+  return bv-av;   // desc(차익/시세 높은순)
+}
+function applyGmSort(){
+  const s1=document.getElementById("gmSort1"), s2=document.getElementById("gmSort2");
+  const tbody=document.querySelector(".gtbl tbody"); if(!tbody) return;
+  const k1=s1?s1.value:"", k2=s2?s2.value:"";
+  const rows=[...tbody.children], idx=tr=>+(tr.dataset.idx||0);
+  if(!k1&&!k2){ rows.sort((a,b)=>idx(a)-idx(b)); rows.forEach(r=>tbody.appendChild(r)); return; }
+  rows.sort((a,b)=>{ let c=_gmCmp(k1,a,b); if(c)return c; c=_gmCmp(k2,a,b); if(c)return c; return idx(a)-idx(b); });
+  rows.forEach(r=>tbody.appendChild(r));
+}
+// ── 매수판정 배지 비동기 채움(행별 /gongmae/buy_grade) ──
+const GM_GCLS={"매수양호":"g-ok","매수검토":"g-mid","매수금지":"g-no"};
+async function fillGmGrades(){
+  const els=[...document.querySelectorAll('.gradechip[data-key]')].filter(e=>!e.dataset.done);
+  await Promise.all(els.map(async el=>{
+    const key=el.dataset.key, p=key.split("|"), mng=p[0], cdtn=p[1]||"";
+    let g; try{ g=await (await fetch("/gongmae/buy_grade?mng="+encodeURIComponent(mng)+(cdtn?"&cdtn="+encodeURIComponent(cdtn):""))).json(); }catch(e){ return; }
+    el.dataset.done="1";
+    if(!g||!g.applicable||!g.grade) return;
+    const cls=GM_GCLS[g.grade]||"g-mid";
+    el.innerHTML='<span class="gbadge '+cls+'" title="'+escAttr(g.reason||"")+'">'+g.grade+'</span>';
+    const tr=el.closest('tr'); if(tr){ tr.dataset.grade=g.grade; if(g.profit!=null)tr.dataset.profit=g.profit; if(g.sise!=null)tr.dataset.sise=g.sise; }
+  }));
+  applyGradeFilter();   // 등급 도착 후 필터 재적용
+  applyGmSort();        // 정렬도 재적용(등급/차익 기준 정렬 반영)
+}
+// ── 추정시세·차익 비동기 채움(빌라=villa_est · 아파트=apt_info.est) ──
+async function fillGmEstimates(){
+  const els=[...document.querySelectorAll('.villaest[data-key],.aptest[data-key]')].filter(e=>!e.dataset.done);
+  await Promise.all(els.map(async el=>{
+    const key=el.dataset.key, p=key.split("|"), mng=p[0], cdtn=p[1]||"";
+    const isApt=el.classList.contains("aptest");
+    const url=isApt?("/gongmae/apt_info?mng="+encodeURIComponent(mng)+(cdtn?"&cdtn="+encodeURIComponent(cdtn):""))
+                   :("/gongmae/villa_est?mng="+encodeURIComponent(mng)+(cdtn?"&cdtn="+encodeURIComponent(cdtn):""));
+    let r; try{ r=await (await fetch(url)).json(); }catch(e){ return; }
+    el.dataset.done="1";
+    let price=null;
+    if(isApt){ if(r&&r.est&&r.est.price)price=r.est.price; }
+    else { if(r&&r.available&&r.price)price=r.price; }
+    if(price==null){ el.innerHTML='<div class="ecsi"><span class="lbl nosise">시세 없음</span></div>'; return; }
+    const base=+el.dataset.base;
+    let html='<div class="ecsi"><span class="lbl">시세 :</span><span class="amt">'+won(price)+'</span></div>';
+    if(base){ const diff=price-base;
+      html+='<div class="'+(diff>=0?'eprofit':'eloss')+'"><span class="lbl">차익 :</span><span class="amt">'+(diff>=0?'+':'−')+won(Math.abs(diff))+'</span></div>';
+      const tr=el.closest('tr'); if(tr) tr.dataset.sise=price;   // 정렬용(차익은 grade에서 채움)
+    }
+    el.innerHTML=html;
+  }));
+  applyGmSort();
+}
+function restoreGmToolbar(){
+  try{ const ps=+localStorage.getItem('gm_pageSize')||0; if([20,30,50,100].includes(ps)){ const s=document.getElementById('pageSize'); if(s)s.value=ps; } }catch(e){}
+  try{ gradeFilter=localStorage.getItem('gm_grade')||""; const s=document.getElementById('gradeSel'); if(s)s.value=gradeFilter; }catch(e){}
+}
 fillPriceSelects();
+restoreGmToolbar();
 Promise.all([loadRegions(),loadUsages()]).then(function(){ search(); loadSavedSearches(); });
 </script>
 <style>
