@@ -48,9 +48,9 @@
   .hcell .hl{font-size:11px;color:var(--labeltx);font-weight:700;}
   .hcell .hv{font-weight:600;font-size:13px;word-break:break-all;}
   .hcell .hv.low{color:var(--hotred);font-weight:700;}
-  .gm-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
-  .gm-gal img{width:100%;height:180px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;background:#eef1f5;transition:border-color .12s,transform .12s;}
-  @media(max-width:560px){ .gm-gal{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));} .gm-gal img{height:140px;} }
+  .gm-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:12px;}
+  .gm-gal img{width:100%;height:400px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;background:#eef1f5;transition:border-color .12s,transform .12s;}
+  @media(max-width:560px){ .gm-gal{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));} .gm-gal img{height:280px;} }
   .gm-gal img:hover{border-color:var(--primary);transform:scale(1.02);}
   /* 사진 라이트박스(캐러셀) */
   .lb-ov{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:10000;display:none;align-items:center;justify-content:center;}
@@ -268,6 +268,7 @@ function load(){
       <h1>${d.name||"-"}</h1>
       <div class="addrrow"><span class="sub">${d.address||""}</span><a class="obtn-inline" href="${onbid}" target="_blank" rel="noopener">온비드에서 보기 ↗</a></div>
     </div>
+    <div id="gm-grade-top"></div>
     <div id="gm-gallery"></div>
     <div class="card"><div class="hgrid" id="hgrid">
       ${hc("용도", d.usage)}
@@ -360,8 +361,8 @@ function loadGmFiles(e){
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
 function gmHcell(k,v,cls){return v?'<div class="hcell"><span class="hl">'+k+'</span><span class="hv'+(cls?' '+cls:'')+'">'+v+'</span></div>':'';}
 // ─────────────────────────── 입찰정보(공고정보·입찰일정·공고문·첨부파일) ───────────────────────────
-// 레이아웃(주인님 지정): 세부정보 → 공고정보 → 입찰일정 및 장소 → [유사거래·실거래상세] → 건물정보·시세·매수판정 → 공고문 → 계산기.
-//   유사거래(#gm-nearby)·기능(#gm-features)이 입찰일정과 공고문 사이에 오도록 컨테이너를 분리 렌더한다.
+// 레이아웃(주인님 지정): [시세·예상낙찰가·매수판정](#gm-grade-top, 물건사진 위) → 사진 → 세부정보 → 공고정보 → 입찰일정 및 장소 → [유사거래·실거래상세] → 건물정보 → 공고문 → 계산기.
+//   유사거래(#gm-nearby)는 입찰일정 아래, 시세·매수판정 카드(#gm-grade-top)는 사진 위, 건물정보(#gm-features)는 유사거래 아래로 컨테이너 분리 렌더.
 async function loadGmBidInfo(d, e){
   var q="?mng="+encodeURIComponent(d.manage_no);
   var bs=null; try{ bs=await (await fetch("/gongmae/bid_schedule"+q)).json(); }catch(err){}
@@ -423,23 +424,27 @@ async function loadGmFeatures(d, e){
   GM_EST=est; GM_NB=nb;
   // ① 유사거래(지도+실거래상세)는 입찰일정 바로 아래 = 독립 컨테이너(#gm-nearby)에 렌더(레이아웃 순서: 주인님 지정)
   if(nb.available) loadGmNearby(nb);
-  // ② 건물정보 + 시세·예상낙찰가·매수판정 배지 = #gm-features(유사거래 아래)
+  // ② 건물정보 = #gm-features(유사거래 아래)
   var html="";
   if(bi.available){ html+='<div class="card"><div class="cardhd">🏗️ 건물정보 <span class="gtag">건축물대장</span></div><div class="hgrid">'
     +gmHcell("준공년도",bi.build_year?bi.build_year+"년":"")+gmHcell("세대수",bi.units?bi.units+(bi.unit_label||"세대"):"")
     +gmHcell("승강기",(bi.elevator?bi.elevator+"대":"없음"))+gmHcell("층수",bi.floors?bi.floors+"층":"")+'</div></div>'; }
+  box.innerHTML=html;
+  // ③ 시세·예상낙찰가·매수판정 카드 = #gm-grade-top(물건사진 위 — 주인님 지정)
   var sise=est.available?est.price:null;
-  if(sise){ html+='<div class="card"><div class="gradehd"><div class="cardhd">💰 시세·예상낙찰가·매수판정</div><span id="gm-gradebadge"></span></div><div class="hgrid">'
+  var gradeHtml="";
+  if(sise){ gradeHtml='<div class="card"><div class="gradehd"><div class="cardhd">💰 시세·예상낙찰가·매수판정</div><span id="gm-gradebadge"></span></div><div class="hgrid">'
     +gmHcell("추정 시세",won(sise))
     +'<div class="hcell"><span class="hl">예상 낙찰가</span><span class="hv" id="gm-bidcell">계산 중…</span></div>'
     +'<div class="hcell"><span class="hl">예상 차익</span><span class="hv" id="gm-profitcell">계산 중…</span></div>'
     +'</div><div id="gm-gradecmt" class="gradecmt"></div><div class="sub" style="margin-top:8px">※ 시세=주변 유사 실거래 · 예상낙찰가=인근 경매 낙찰사례 기준(±면적·층·감정가·낙찰율) · 매수판정=마지막회차 최저가 vs 추정시세</div></div>';
   } else {
     // 시세 산출불가 → 매수판정은 '금지'(수요 없음)로 표기(배지 카드 단독)
-    html+='<div class="card"><div class="gradehd"><div class="cardhd">💰 시세·매수판정</div><span id="gm-gradebadge"></span></div>'
+    gradeHtml='<div class="card"><div class="gradehd"><div class="cardhd">💰 시세·매수판정</div><span id="gm-gradebadge"></span></div>'
       +'<div class="sub">이 물건은 주변 유사 실거래가 없어 추정시세를 산출할 수 없습니다.</div><div id="gm-gradecmt" class="gradecmt"></div></div>';
   }
-  box.innerHTML=html;
+  var topBox=document.getElementById("gm-grade-top");
+  if(topBox) topBox.innerHTML=gradeHtml;
   // 매수판정 배지·코멘트(공용 헬퍼) — 빌라/도생/아파트 동일
   loadGmGrade(d);
   // 예상낙찰가·차익은 준비되면 채움(페이지는 이미 렌더됨)
@@ -448,7 +453,8 @@ async function loadGmFeatures(d, e){
     var bid=(xb&&xb.available)?xb.expected_bid:null;
     var bc=document.getElementById("gm-bidcell"), pc=document.getElementById("gm-profitcell");
     if(bc) bc.textContent=bid?won(bid):"인근 경매사례 없음";
-    if(pc){ if(bid&&sise){ pc.textContent=won(sise-bid); if(sise-bid>0) pc.classList.add("low"); } else pc.textContent="-"; }
+    // 차익 기준가 = 예상낙찰가(있으면) / 없으면 현재 회차 최저입찰가(주인님 규칙)
+    if(pc){ var _base=bid||(+d.min_price||0); if(_base&&sise){ var _pf=sise-_base; pc.textContent=(_pf<0?'−':'+')+won(Math.abs(_pf)); if(_pf>0) pc.classList.add("low"); } else pc.textContent="-"; }
   });
 }
 // ─── 매수판정 배지+코멘트(빌라/다세대/도시형 + 아파트 공용) — 마지막회차 최저가 vs 추정시세 ───
@@ -467,7 +473,7 @@ async function loadGmGrade(d){
     var b={"매수양호":"ok","매수검토":"mid","매수금지":"no"}[g.grade]||"mid";
     var parts=['<b class="'+b+'">'+esc(g.grade)+'</b> · '+esc(g.reason||"")];
     if(g.sise!=null) parts.push('추정시세 '+won(g.sise));
-    if(g.last_min!=null) parts.push('마지막회차 최저가 '+won(g.last_min));
+    if(g.base!=null) parts.push((g.base_src||'기준가')+' '+won(g.base));
     if(g.profit!=null) parts.push('차익 '+(g.profit>=0?'+':'−')+won(Math.abs(g.profit)));
     cmt.innerHTML=parts.join(' · ');
   }
@@ -494,11 +500,13 @@ async function loadGmApt(box, d, gf){
     +'</div>';
   var sise=(ai.est&&ai.est.price)?ai.est.price:(s&&s.recent?s.recent:null);
   var bid=(xb&&xb.available)?xb.expected_bid:null;
+  var apBase=bid||(+d.min_price||0);   // 차익 기준가 = 예상낙찰가(있으면)/없으면 현재 최저입찰가
+  var apPf=(sise&&apBase)?sise-apBase:null;
   if(sise||bid){
     html+='<div class="qbox4">'
       +'<div class="qb"><div class="ql">추정 시세</div><div class="qv hot">'+(sise?won(sise):"-")+'</div></div>'
-      +'<div class="qb"><div class="ql">예상 낙찰가</div><div class="qv">'+(bid?won(bid):"-")+'</div></div>'
-      +'<div class="qb"><div class="ql">예상 차익</div><div class="qv'+((sise&&bid&&sise-bid>0)?' hot':'')+'">'+((sise&&bid)?won(sise-bid):"-")+'</div></div>'
+      +'<div class="qb"><div class="ql">예상 낙찰가</div><div class="qv">'+(bid?won(bid):"인근 경매사례 없음")+'</div></div>'
+      +'<div class="qb"><div class="ql">예상 차익</div><div class="qv'+((apPf!=null&&apPf>0)?' hot':'')+'">'+((apPf!=null)?((apPf<0?'−':'+')+won(Math.abs(apPf))):"-")+'</div></div>'
       +'<div class="qb"><div class="ql">매수세(6개월)</div><div class="qv">'+((ai.demand&&ai.demand.count6!=null)?ai.demand.count6+'건':"-")+'</div></div>'
       +'</div>';
   }

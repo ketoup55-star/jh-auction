@@ -5464,19 +5464,41 @@ def _gm_last_min(mng: str) -> Optional[int]:
     return _to_int(lp) if lp is not None else None
 
 
+def _gm_cur_min(mng: str, cdtn: Optional[str]) -> Optional[int]:
+    """이 회차(cdtn)의 최저입찰가 = 현재 회차 최저가(목록 행에 표시되는 값과 일치).
+    bid_schedule에서 cdtn_no 일치 회차 → 미발견/미지정 시 첫 회차(가장 안 저감된 현재) 폴백.
+    (enrich에는 최저입찰가가 없어 bid_schedule을 정본으로 사용.)"""
+    try:
+        bs = gongmae_bid_schedule(mng)
+    except Exception:
+        return None
+    rounds = (bs or {}).get("rounds") or []
+    if not rounds:
+        return None
+    if cdtn:
+        for r in rounds:
+            if str(r.get("cdtn_no")) == str(cdtn):
+                m = r.get("min_price")
+                if m is not None:
+                    return _to_int(m)
+    m = rounds[0].get("min_price")   # 폴백: 첫 회차(마지막 저감회차 아님 — fantasy 차익 방지)
+    return _to_int(m) if m is not None else None
+
+
 @app.get("/gongmae/buy_grade")
 def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
-    """공매 매수판정(빌라·다세대·도시형생활주택 + 아파트) — 마지막회차 최저가 vs 추정시세.
+    """공매 매수판정(빌라·다세대·도시형생활주택 + 아파트) — 기준가(base) vs 추정시세.
     · 시세 소스: 빌라류=villa_est.price / 아파트·오피스텔=apt_info.est.price
+    · 기준가 base = 예상낙찰가(villa_expected_bid/expected_bid, 있으면) / 없으면 현재 회차 최저입찰가(e.min_price)
     · 시세 산출불가 → 매수금지("수요 없음 · 매수세 없음")
-    · 마지막회차 최저가 > 시세 → 매수금지
-    · 차익(시세−마지막회차최저가) ≥ 3,000만 → 매수양호 · 0~3,000만 → 매수검토
-    gm_grade: 캐시(온디맨드). 대상 아닌 용도(토지·상가·단독 등)는 applicable:False."""
+    · 기준가 > 시세 → 매수금지
+    · 차익(시세−기준가) ≥ 3,000만 → 매수양호 · 0~3,000만 → 매수검토
+    gm_grade: 캐시(온디맨드, v3). 대상 아닌 용도(토지·상가·단독 등)는 applicable:False."""
     ck = "gm_grade:" + mng + ((":" + cdtn) if cdtn else "")
     try:
         hit = auction_db.cache_get_many([ck]).get(ck)
-        # v>=2: nb_count(유사거래 건수) 포함 결과. v==1(구버전)은 nb_count 없어 재계산.
-        if isinstance(hit, dict) and hit.get("v", 0) >= 2:
+        # v>=3: 기준가(base=예상낙찰가/현재최저) 반영. v<3(구버전)은 profit 기준 달라 재계산.
+        if isinstance(hit, dict) and hit.get("v", 0) >= 3:
             return {**hit, "_cache": "hit"}
     except Exception:
         pass
@@ -5517,33 +5539,47 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
                     nb_count = len(ai["trades"])
     except Exception:
         sise = None
-    # ② 마지막회차 최저가(bid_schedule) — 없으면 물건 자체 최저가 폴백
-    last_min = _gm_last_min(mng)
-    if last_min is None:
-        last_min = _to_int(e.get("min_price")) if isinstance(e, dict) else None
+    # ② 판정 기준가(base) = 예상낙찰가(있으면) / 없으면 현재 회차 최저입찰가.  (주인님 지정 2026-07-08)
+    #    · 예상낙찰가: villa_expected_bid(빌라)/expected_bid(아파트) — 인근 경매 낙찰사례(표본상 ~20% 물건 존재).
+    #    · 현재 최저입찰가: 이 회차(cdtn)의 최저입찰가(e.min_price) = 목록 행에 표시되는 값과 일치.
+    #    (구 '마지막회차 최저가(_gm_last_min)' 방식은 목록에 100% 최저가를 보이며 차익은 가장 저감된
+    #     마지막회차로 계산 → 최저입찰가와 차익 기준 불일치 버그. 회차 무관하게 현재 회차 기준으로 통일.)
+    exp_bid = None
+    try:
+        xb = gongmae_villa_expected_bid(mng, cdtn) if is_villa else gongmae_expected_bid(mng, cdtn)
+        if isinstance(xb, dict) and xb.get("available"):
+            exp_bid = _to_int(xb.get("expected_bid"))
+    except Exception:
+        exp_bid = None
+    cur_min = _gm_cur_min(mng, cdtn)   # 현재 회차 최저입찰가(bid_schedule cdtn 매칭) — 목록 표시값과 일치
+    base = exp_bid if exp_bid else cur_min
+    base_src = "예상낙찰가" if exp_bid else "현재 최저입찰가"
     kind = "villa" if is_villa else "apt"
-    # ③ 판정(주인님 지정 규칙)
+    # ③ 판정(주인님 지정 규칙) — 기준가 base 사용
     if not sise:
         out = {"applicable": True, "grade": "매수금지", "kind": kind,
                "reason": "수요 없음 · 매수세 없음",
-               "sise": None, "last_min": last_min, "profit": None, "nb_count": nb_count, "v": 2}
-    elif last_min is None:
-        return {"applicable": False, "reason": "최저입찰가 확인 불가",
-                "sise": sise, "kind": kind, "nb_count": nb_count, "v": 2}
-    elif last_min > sise:
+               "sise": None, "base": None, "base_src": base_src, "expected_bid": exp_bid,
+               "cur_min": cur_min, "last_min": base, "profit": None, "nb_count": nb_count, "v": 3}
+    elif base is None:
+        return {"applicable": False, "reason": "기준가(예상낙찰가/최저입찰가) 확인 불가",
+                "sise": sise, "kind": kind, "nb_count": nb_count, "v": 3}
+    elif base > sise:
         out = {"applicable": True, "grade": "매수금지", "kind": kind,
-               "reason": "최저입찰가가 추정시세보다 높음",
-               "sise": sise, "last_min": last_min, "profit": sise - last_min,
-               "nb_count": nb_count, "v": 2}
+               "reason": base_src + "가 추정시세보다 높음",
+               "sise": sise, "base": base, "base_src": base_src, "expected_bid": exp_bid,
+               "cur_min": cur_min, "last_min": base, "profit": sise - base,
+               "nb_count": nb_count, "v": 3}
     else:
-        profit = sise - last_min
+        profit = sise - base
         if profit >= 30000000:
             grade, reason = "매수양호", "차익 3천만원 이상"
         else:
             grade, reason = "매수검토", "차익 3천만원 미만"
         out = {"applicable": True, "grade": grade, "kind": kind, "reason": reason,
-               "sise": sise, "last_min": last_min, "profit": profit,
-               "nb_count": nb_count, "v": 2}
+               "sise": sise, "base": base, "base_src": base_src, "expected_bid": exp_bid,
+               "cur_min": cur_min, "last_min": base, "profit": profit,
+               "nb_count": nb_count, "v": 3}
     try:
         auction_db.cache_save(ck, out)
     except Exception:
@@ -7179,12 +7215,51 @@ gongsi = GongsiPrice()
 _gongsi_cache: dict[str, object] = {}
 
 
+_pnu_geo_cache: dict = {}   # addr -> PNU(19) : V-World 지오코더 폴백(bjd_codes.tsv 미수록 주소 = 2022+ 신설 법정동 등)
+
+
 def _addr_to_pnu(addr: str):
     r = resolve_bjd(addr)
-    if not r:
+    if r:
+        sgg, bjd, bun, ji = r
+        return addr_to_pnu(sgg, bjd, bun, ji, mountain=bool(re.search(r"\s산\s*\d", addr)))
+    # 폴백: TSV가 못 잡는 주소(신설 법정동 등) → V-World 지오코더 level4LC(19자리 PNU) 직접 사용.
+    #       성공분만 메모리+DB(pnu_geo:) 영구 캐시. 경매·공매 공용(둘 다 공시가격 보강). 실패=None(오염 방지).
+    if not addr:
         return None
-    sgg, bjd, bun, ji = r
-    return addr_to_pnu(sgg, bjd, bun, ji, mountain=bool(re.search(r"\s산\s*\d", addr)))
+    key = addr.strip()
+    if key in _pnu_geo_cache:
+        return _pnu_geo_cache[key]
+    ck = "pnu_geo:" + key
+    try:
+        hit = auction_db.cache_get_many([ck]).get(ck)
+        if isinstance(hit, dict) and hit.get("pnu"):
+            _pnu_geo_cache[key] = hit["pnu"]
+            return hit["pnu"]
+    except Exception:
+        pass
+    pnu = None
+    try:
+        vk = os.environ.get("VWORLD_KEY", "")
+        if vk:
+            rr = httpx.get("https://api.vworld.kr/req/address", params={
+                "service": "address", "request": "getcoord", "version": "2.0", "crs": "epsg:4326",
+                "address": key, "type": "parcel", "format": "json", "key": vk,
+                "domain": os.environ.get("VWORLD_DOMAIN", "http://localhost:4011"), "refine": "true"}, timeout=8)
+            js = (rr.json() or {}).get("response", {})
+            if js.get("status") == "OK":
+                lc = ((js.get("refined", {}) or {}).get("structure", {}) or {}).get("level4LC") or ""
+                if len(lc) == 19 and lc.isdigit():
+                    pnu = lc
+    except Exception:
+        pnu = None
+    _pnu_geo_cache[key] = pnu   # None도 캐시(같은 주소 반복 지오코딩 방지) — 단 DB엔 성공분만 영구
+    if pnu:
+        try:
+            auction_db.cache_save(ck, {"pnu": pnu})
+        except Exception:
+            pass
+    return pnu
 
 
 @app.get("/auction/building_vat")
