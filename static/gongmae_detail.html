@@ -45,6 +45,8 @@
   .hcell .hl{font-size:11px;color:var(--labeltx);font-weight:700;}
   .hcell .hv{font-weight:600;font-size:13px;word-break:break-all;}
   .hcell .hv.low{color:var(--hotred);font-weight:700;}
+  .gm-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;}
+  .gm-gal img{width:100%;height:100px;object-fit:cover;border-radius:6px;border:1px solid var(--line);cursor:zoom-in;background:#eef1f5;}
   /* 부동산DB '전국' 스티커 — 점멸 + hover 시 좌우 기울기(프리미엄 스티커와 동일 형식) */
   @keyframes natlBlink{0%,100%{opacity:1}50%{opacity:.35}}
   @keyframes natlWobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg)}55%{transform:rotate(9deg)}80%{transform:rotate(-4deg)}}
@@ -113,7 +115,8 @@ function load(){
       <div class="addrrow"><span class="sub">${d.address||""}</span><a class="obtn-inline" href="${onbid}" target="_blank" rel="noopener">온비드에서 보기 ↗</a></div>
     </div>
     ${d.thumb?`<div class="card" style="text-align:center"><a href="${onbid}" target="_blank" rel="noopener" title="온비드에서 전체 사진 보기"><img src="${d.thumb}" referrerpolicy="no-referrer" style="width:100%;max-width:460px;border-radius:8px;border:1px solid var(--line);cursor:zoom-in" onerror="this.parentNode.parentNode.style.display='none'"></a><div class="sub" style="margin-top:8px">※ 대표 이미지 — 클릭하면 온비드에서 전체 사진 확인</div></div>`:""}
-    <div class="card"><div class="hgrid">
+    <div id="gm-gallery"></div>
+    <div class="card"><div class="hgrid" id="hgrid">
       ${hc("용도", d.usage)}
       ${hc("재산종류", d.prop_type)}
       ${hc("감정가", won(d.appraisal_price))}
@@ -123,6 +126,29 @@ function load(){
       ${hc("입찰기간", (d.bid_begin||"")+(d.bid_close?` ~ ${d.bid_close}`:""))}
       ${hc("집행기관", d.org)}
     </div></div>`;
+  enrichDetail(d);
+}
+async function enrichDetail(d){
+  if(!d||!d.manage_no) return;
+  var q="mng="+encodeURIComponent(d.manage_no)+(d.pbct_cdtn_no?"&cdtn="+encodeURIComponent(d.pbct_cdtn_no):"");
+  let e; try{ e=await (await fetch("/gongmae/enrich?"+q)).json(); }catch(err){ return; }
+  if(!e||e.error) return;
+  window.GM_E=e;   // 2단계 기능(유사거래·시세·예상낙찰가·계산기)이 쓸 면적·주소
+  var py=function(a){return (a/3.305785).toFixed(1);};
+  var g=document.getElementById("hgrid");
+  if(g){
+    var cells="";
+    if(e.bld_area) cells+='<div class="hcell"><span class="hl">전용면적</span><span class="hv">'+e.bld_area+'㎡ ('+py(e.bld_area)+'평)</span></div>';
+    if(e.land_area) cells+='<div class="hcell"><span class="hl">대지면적</span><span class="hv">'+e.land_area+'㎡ ('+py(e.land_area)+'평)</span></div>';
+    if(cells) g.insertAdjacentHTML("afterbegin", cells);
+  }
+  if(e.photos&&e.photos.length){
+    var box=document.getElementById("gm-gallery");
+    if(box){ box.className="card";
+      box.innerHTML='<div style="font-weight:700;margin-bottom:10px">📷 물건 사진 '+e.photos.length+'장</div>'
+        +'<div class="gm-gal">'+e.photos.map(function(u){return '<a href="'+u+'" target="_blank" rel="noopener"><img src="'+u+'" referrerpolicy="no-referrer" loading="lazy" onerror="this.parentNode.style.display=\'none\'"></a>';}).join("")+'</div>';
+    }
+  }
 }
 load();
 </script>
