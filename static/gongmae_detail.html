@@ -48,8 +48,9 @@
   .hcell .hl{font-size:11px;color:var(--labeltx);font-weight:700;}
   .hcell .hv{font-weight:600;font-size:13px;word-break:break-all;}
   .hcell .hv.low{color:var(--hotred);font-weight:700;}
-  .gm-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;}
-  .gm-gal img{width:100%;height:92px;object-fit:cover;border-radius:6px;border:1px solid var(--line);cursor:zoom-in;background:#eef1f5;transition:border-color .12s,transform .12s;}
+  .gm-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+  .gm-gal img{width:100%;height:180px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;background:#eef1f5;transition:border-color .12s,transform .12s;}
+  @media(max-width:560px){ .gm-gal{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));} .gm-gal img{height:140px;} }
   .gm-gal img:hover{border-color:var(--primary);transform:scale(1.02);}
   /* 사진 라이트박스(캐러셀) */
   .lb-ov{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:10000;display:none;align-items:center;justify-content:center;}
@@ -85,6 +86,15 @@
     position:absolute;top:3px;right:-15px;box-shadow:0 1px 5px rgba(20,60,120,.45);z-index:3;}
   .natllink:hover>.natl-badge{animation:natlWobble .55s ease-in-out;}
   @media(prefers-reduced-motion:reduce){.natl-badge{animation:none!important;}}
+  /* 매수판정 배지(경매 auctions.html .gbadge 1:1) */
+  .gbadge{display:inline-block;font-size:12px;font-weight:800;border-radius:6px;padding:2px 10px;vertical-align:middle;}
+  .gbadge.g-ok{background:#e7f7ee;color:#138a4e;border:1px solid #b6e6cb;}
+  .gbadge.g-mid{background:#fdf3e2;color:#b9770f;border:1px solid #f3dcb0;}
+  .gbadge.g-no{background:#fdecec;color:#d23030;border:1px solid #f4c4c4;}
+  .gradehd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;}
+  .gradehd .cardhd{margin-bottom:0;}
+  .gradecmt{font-size:12.5px;color:var(--muted);margin-top:2px;}
+  .gradecmt b.no{color:var(--danger);}.gradecmt b.ok{color:#138a4e;}.gradecmt b.mid{color:#b9770f;}
   /* 카드 소제목·표 공통 */
   .cardhd{font-weight:700;margin-bottom:10px;font-size:15px;}
   .gtag{display:inline-block;font-size:11px;font-weight:700;color:#2c5db0;background:#eef2fb;border-radius:5px;padding:1px 8px;margin-left:6px;vertical-align:middle;}
@@ -269,8 +279,11 @@ function load(){
       ${hc("입찰기간", (d.bid_begin||"")+(d.bid_close?` ~ ${d.bid_close}`:""))}
       ${hc("집행기관", d.org)}
     </div></div>
-    <div id="gm-bidinfo"></div>
-    <div id="gm-features"></div>`;
+    <div id="gm-notice-info"></div>
+    <div id="gm-bid-schedule"></div>
+    <div id="gm-nearby"></div>
+    <div id="gm-features"></div>
+    <div id="gm-notice-doc"></div>`;
   enrichDetail(d);
 }
 async function enrichDetail(d){
@@ -346,43 +359,51 @@ function loadGmFiles(e){
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
 function gmHcell(k,v,cls){return v?'<div class="hcell"><span class="hl">'+k+'</span><span class="hv'+(cls?' '+cls:'')+'">'+v+'</span></div>':'';}
-// ─────────────────────────── 입찰정보(일정·공고정보·공고문·첨부파일) ───────────────────────────
+// ─────────────────────────── 입찰정보(공고정보·입찰일정·공고문·첨부파일) ───────────────────────────
+// 레이아웃(주인님 지정): 세부정보 → 공고정보 → 입찰일정 및 장소 → [유사거래·실거래상세] → 건물정보·시세·매수판정 → 공고문 → 계산기.
+//   유사거래(#gm-nearby)·기능(#gm-features)이 입찰일정과 공고문 사이에 오도록 컨테이너를 분리 렌더한다.
 async function loadGmBidInfo(d, e){
-  var box=document.getElementById("gm-bidinfo"); if(!box) return;
   var q="?mng="+encodeURIComponent(d.manage_no);
   var bs=null; try{ bs=await (await fetch("/gongmae/bid_schedule"+q)).json(); }catch(err){}
-  var ni=e.notice_info||{}, notice=e.notice||[], files=e.files||[];
-  var html="";
-  // ① 공고 정보(공고보기)
+  var ni=e.notice_info||{}, notice=e.notice||[];
+  // ① 공고 정보(공고보기) → #gm-notice-info
   var niItems=[["공고번호",ni.pbanc_no],["재산유형",ni.prop_type],["공고기관",ni.org],
     ["입찰방식",ni.bid_type],["입찰구분",ni.bid_div],["입찰금액",ni.amt_open],
     ["공고회차",ni.round?ni.round+"회차":""],["공고일",ni.notice_ymd]]
     .filter(function(x){return x[1];})
     .map(function(x){return '<div class="ni"><span class="nk">'+x[0]+'</span><span class="nv">'+esc(x[1])+'</span></div>';}).join("");
-  if(niItems){
-    html+='<div class="card"><div class="cardhd">📢 공고 정보</div><div class="niinfo">'+niItems+'</div>'
-      +'<div class="sub" style="margin-top:8px">※ 담당부점·상세 공고문(PDF)은 <a href="'+onbidUrl(d)+'" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600">온비드 공고에서 확인 ↗</a></div></div>';
+  var niBox=document.getElementById("gm-notice-info");
+  if(niBox){
+    niBox.innerHTML=niItems
+      ? '<div class="card"><div class="cardhd">📢 공고 정보</div><div class="niinfo">'+niItems+'</div>'
+        +'<div class="sub" style="margin-top:8px">※ 담당부점·상세 공고문(PDF)은 <a href="'+onbidUrl(d)+'" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600">온비드 공고에서 확인 ↗</a></div></div>'
+      : "";
   }
-  // ② 입찰일정 및 장소(회차별 유찰 저감)
-  if(bs&&bs.available&&bs.rounds&&bs.rounds.length){
-    var curCdtn=d.pbct_cdtn_no||"";
-    var rows=bs.rounds.map(function(r){
-      var on=(String(r.cdtn_no)===String(curCdtn));
-      return '<tr'+(on?' style="background:#fff3d6"':'')+'><td>'+esc(r.cdtn_no||"-")+'</td><td>'+(r.round!=null?r.round+"회":"-")+(on?' <b style="color:#9a6b0b">◀현재</b>':'')+'</td>'
-        +'<td>'+esc(r.bid_div||"-")+'</td><td>'+esc((r.bid_begin||"")+" ~ "+(r.bid_close||""))+'</td>'
-        +'<td class="low amt">'+won(r.min_price)+'</td><td>'+esc(r.open_dt||"-")+'</td><td>'+esc(r.open_place||"온비드")+'</td></tr>';
-    }).join("");
-    html+='<div class="card"><div class="cardhd">🗓️ 입찰일정 및 장소 <span class="gtag">회차별</span></div>'
-      +'<div class="scrollx"><table class="tbl" style="min-width:660px"><tr><th>입찰관리번호</th><th>회차</th><th>입찰구분</th><th>입찰기간</th><th>최저입찰가</th><th>개찰일시</th><th>개찰장소</th></tr>'+rows+'</table></div>'
-      +'<div class="sub" style="margin-top:7px">※ 공매는 유찰 시 회차별로 최저입찰가가 저감됩니다. 개찰일시는 입찰마감시각 기준(온비드 전자개찰).</div></div>';
+  // ② 입찰일정 및 장소(회차별 유찰 저감) → #gm-bid-schedule
+  var schBox=document.getElementById("gm-bid-schedule");
+  if(schBox){
+    if(bs&&bs.available&&bs.rounds&&bs.rounds.length){
+      var curCdtn=d.pbct_cdtn_no||"";
+      var rows=bs.rounds.map(function(r){
+        var on=(String(r.cdtn_no)===String(curCdtn));
+        return '<tr'+(on?' style="background:#fff3d6"':'')+'><td>'+esc(r.cdtn_no||"-")+'</td><td>'+(r.round!=null?r.round+"회":"-")+(on?' <b style="color:#9a6b0b">◀현재</b>':'')+'</td>'
+          +'<td>'+esc(r.bid_div||"-")+'</td><td>'+esc((r.bid_begin||"")+" ~ "+(r.bid_close||""))+'</td>'
+          +'<td class="low amt">'+won(r.min_price)+'</td><td>'+esc(r.open_dt||"-")+'</td><td>'+esc(r.open_place||"온비드")+'</td></tr>';
+      }).join("");
+      schBox.innerHTML='<div class="card"><div class="cardhd">🗓️ 입찰일정 및 장소 <span class="gtag">회차별</span></div>'
+        +'<div class="scrollx"><table class="tbl" style="min-width:660px"><tr><th>입찰관리번호</th><th>회차</th><th>입찰구분</th><th>입찰기간</th><th>최저입찰가</th><th>개찰일시</th><th>개찰장소</th></tr>'+rows+'</table></div>'
+        +'<div class="sub" style="margin-top:7px">※ 공매는 유찰 시 회차별로 최저입찰가가 저감됩니다. 개찰일시는 입찰마감시각 기준(온비드 전자개찰).</div></div>';
+    } else schBox.innerHTML="";
   }
-  // ③ 공고문(세부내용)
-  if(notice.length){
-    var nrows=notice.map(function(n){return '<div class="nrow"><span class="nlab">'+esc(n.label)+'</span>'+esc(n.text)+'</div>';}).join("");
-    html+='<div class="card"><div class="cardhd">📄 공고문 (물건 세부내용)</div><div class="noticebox">'+nrows+'</div></div>';
+  // ③ 공고문(세부내용) → #gm-notice-doc (유사거래·기능 카드 아래에 위치)
+  var docBox=document.getElementById("gm-notice-doc");
+  if(docBox){
+    if(notice.length){
+      var nrows=notice.map(function(n){return '<div class="nrow"><span class="nlab">'+esc(n.label)+'</span>'+esc(n.text)+'</div>';}).join("");
+      docBox.innerHTML='<div class="card"><div class="cardhd">📄 공고문 (물건 세부내용)</div><div class="noticebox">'+nrows+'</div></div>';
+    } else docBox.innerHTML="";
   }
   // ④ 첨부파일 → loadGmFiles가 우측 세로 패널(#gm-files-panel)에 렌더
-  box.innerHTML=html;
 }
 var GM_D=null, GM_APT=null, GM_EST=null, GM_XB=null, GM_NB=null;   // 계산기·지도 프리필용
 async function loadGmFeatures(d, e){
@@ -393,27 +414,34 @@ async function loadGmFeatures(d, e){
   if(!isVilla && !isApt){ box.innerHTML=""; maybeShortSale(usg); return; }
   var q="?mng="+encodeURIComponent(d.manage_no)+(d.pbct_cdtn_no?"&cdtn="+encodeURIComponent(d.pbct_cdtn_no):"");
   var gf=function(p){return fetch("/gongmae"+p+q).then(function(r){return r.json();}).catch(function(){return null;});};
-  if(isApt){ await loadGmApt(box, d, gf); maybeShortSale(usg); return; }
-  box.innerHTML='<div class="card"><div class="sub">🏗️ 건물정보·시세·유사거래 불러오는 중…</div></div>';
+  if(isApt){ await loadGmApt(box, d, gf); loadGmGrade(d); maybeShortSale(usg); return; }
+  box.innerHTML='<div class="card"><div class="sub">🏗️ 건물정보·시세 불러오는 중…</div></div>';
   // ⚡예상낙찰가(villa_expected_bid)는 인근 경매사례 지오코딩이 무거워 최대 수십초 → Promise.all에서 빼고 별도 비동기.
   //   나머지(건물정보·시세·유사거래)는 즉시 렌더 → 페이지가 안 멈춤.
   var R=await Promise.all([gf("/building_brief"),gf("/villa_est"),gf("/nearby_trades")]);
   var bi=R[0]||{},est=R[1]||{},nb=R[2]||{};
   GM_EST=est; GM_NB=nb;
+  // ① 유사거래(지도+실거래상세)는 입찰일정 바로 아래 = 독립 컨테이너(#gm-nearby)에 렌더(레이아웃 순서: 주인님 지정)
+  if(nb.available) loadGmNearby(nb);
+  // ② 건물정보 + 시세·예상낙찰가·매수판정 배지 = #gm-features(유사거래 아래)
   var html="";
   if(bi.available){ html+='<div class="card"><div class="cardhd">🏗️ 건물정보 <span class="gtag">건축물대장</span></div><div class="hgrid">'
     +gmHcell("준공년도",bi.build_year?bi.build_year+"년":"")+gmHcell("세대수",bi.units?bi.units+(bi.unit_label||"세대"):"")
     +gmHcell("승강기",(bi.elevator?bi.elevator+"대":"없음"))+gmHcell("층수",bi.floors?bi.floors+"층":"")+'</div></div>'; }
   var sise=est.available?est.price:null;
-  if(sise){ html+='<div class="card"><div class="cardhd">💰 시세·예상낙찰가</div><div class="hgrid">'
+  if(sise){ html+='<div class="card"><div class="gradehd"><div class="cardhd">💰 시세·예상낙찰가·매수판정</div><span id="gm-gradebadge"></span></div><div class="hgrid">'
     +gmHcell("추정 시세",won(sise))
     +'<div class="hcell"><span class="hl">예상 낙찰가</span><span class="hv" id="gm-bidcell">계산 중…</span></div>'
     +'<div class="hcell"><span class="hl">예상 차익</span><span class="hv" id="gm-profitcell">계산 중…</span></div>'
-    +'</div><div class="sub" style="margin-top:8px">※ 시세=주변 유사 실거래 · 예상낙찰가=인근 경매 낙찰사례 기준(±면적·층·감정가·낙찰율)</div></div>'; }
-  // 주변 유사 실거래(지도 + 실거래가 상세) — 경매 loadNearbyMap 1:1 이식
-  html+='<div id="gm-nearby"></div>';
-  box.innerHTML=html||'<div class="card"><div class="sub">이 물건은 주변 유사 실거래·경매 사례가 없어 시세를 산출할 수 없습니다.</div></div>';
-  if(nb.available) loadGmNearby(nb);
+    +'</div><div id="gm-gradecmt" class="gradecmt"></div><div class="sub" style="margin-top:8px">※ 시세=주변 유사 실거래 · 예상낙찰가=인근 경매 낙찰사례 기준(±면적·층·감정가·낙찰율) · 매수판정=마지막회차 최저가 vs 추정시세</div></div>';
+  } else {
+    // 시세 산출불가 → 매수판정은 '금지'(수요 없음)로 표기(배지 카드 단독)
+    html+='<div class="card"><div class="gradehd"><div class="cardhd">💰 시세·매수판정</div><span id="gm-gradebadge"></span></div>'
+      +'<div class="sub">이 물건은 주변 유사 실거래가 없어 추정시세를 산출할 수 없습니다.</div><div id="gm-gradecmt" class="gradecmt"></div></div>';
+  }
+  box.innerHTML=html;
+  // 매수판정 배지·코멘트(공용 헬퍼) — 빌라/도생/아파트 동일
+  loadGmGrade(d);
   // 예상낙찰가·차익은 준비되면 채움(페이지는 이미 렌더됨)
   gf("/villa_expected_bid").then(function(xb){
     GM_XB=xb||{};
@@ -423,6 +451,27 @@ async function loadGmFeatures(d, e){
     if(pc){ if(bid&&sise){ pc.textContent=won(sise-bid); if(sise-bid>0) pc.classList.add("low"); } else pc.textContent="-"; }
   });
 }
+// ─── 매수판정 배지+코멘트(빌라/다세대/도시형 + 아파트 공용) — 마지막회차 최저가 vs 추정시세 ───
+var GM_GRADE=null;
+async function loadGmGrade(d){
+  if(!d||!d.manage_no) return;
+  var q="?mng="+encodeURIComponent(d.manage_no)+(d.pbct_cdtn_no?"&cdtn="+encodeURIComponent(d.pbct_cdtn_no):"");
+  var g=null; try{ g=await (await fetch("/gongmae/buy_grade"+q)).json(); }catch(e){ return; }
+  GM_GRADE=g;
+  if(!g||!g.applicable) return;
+  var cls={"매수양호":"g-ok","매수검토":"g-mid","매수금지":"g-no"}[g.grade]||"g-mid";
+  var badge=document.getElementById("gm-gradebadge");
+  if(badge) badge.innerHTML='<span class="gbadge '+cls+'">'+esc(g.grade)+'</span>';
+  var cmt=document.getElementById("gm-gradecmt");
+  if(cmt){
+    var b={"매수양호":"ok","매수검토":"mid","매수금지":"no"}[g.grade]||"mid";
+    var parts=['<b class="'+b+'">'+esc(g.grade)+'</b> · '+esc(g.reason||"")];
+    if(g.sise!=null) parts.push('추정시세 '+won(g.sise));
+    if(g.last_min!=null) parts.push('마지막회차 최저가 '+won(g.last_min));
+    if(g.profit!=null) parts.push('차익 '+(g.profit>=0?'+':'−')+won(Math.abs(g.profit)));
+    cmt.innerHTML=parts.join(' · ');
+  }
+}
 // 아파트/오피스텔: 아파트정보·실거래·예상낙찰가·차익·경쟁매물
 async function loadGmApt(box, d, gf){
   box.innerHTML='<div class="card"><div class="sub">🏢 아파트 정보·실거래·경쟁매물 불러오는 중…</div></div>';
@@ -431,7 +480,7 @@ async function loadGmApt(box, d, gf){
   GM_APT=ai; GM_XB=xb;
   var cd=ai.complex_detail, s=ai.summary;
   var yearVal=(cd&&cd.approved)?String(cd.approved).slice(0,4):(ai.build_year||"");
-  var html='<div class="card"><div class="cardhd">🏢 아파트 정보 / 실거래가'+(ai.area_matched?' <span class="gtag">같은 평형</span>':(ai.trades&&ai.trades.length?' <span class="gtag">단지 전체</span>':''))+'</div>';
+  var html='<div class="card"><div class="gradehd"><div class="cardhd">🏢 아파트 정보 / 실거래가'+(ai.area_matched?' <span class="gtag">같은 평형</span>':(ai.trades&&ai.trades.length?' <span class="gtag">단지 전체</span>':''))+'</div><span id="gm-gradebadge"></span></div>';
   html+='<div class="hgrid">'
     +gmHcell("단지명",ai.complex?esc(ai.complex):"")
     +gmHcell("전용면적",ai.area?ai.area+"㎡":"")
@@ -453,6 +502,7 @@ async function loadGmApt(box, d, gf){
       +'<div class="qb"><div class="ql">매수세(6개월)</div><div class="qv">'+((ai.demand&&ai.demand.count6!=null)?ai.demand.count6+'건':"-")+'</div></div>'
       +'</div>';
   }
+  html+='<div id="gm-gradecmt" class="gradecmt"></div>';   // 매수판정 코멘트(loadGmGrade가 채움) — 마지막회차 최저가 vs 아파트 추정시세
   if(s){
     html+='<div class="qbox4">'
       +'<div class="qb"><div class="ql">최근 실거래</div><div class="qv">'+won(s.recent)+'</div></div>'
