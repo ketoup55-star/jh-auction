@@ -5066,8 +5066,9 @@ def gongmae_villa_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
             cases = rr.json() if rr.status_code in (200, 206) else []
         except Exception:
             cases = []
+    _geo_preload([eb.geo_addr(c.get("address")) for c in cases])   # ⚡Supabase geo: 배치 프리로드 → 2000건 개별 라이브 지오코딩 회피(클라우드 52초→수초)
     for c in cases:
-        c["ll"] = _geocode(eb.geo_addr(c.get("address")))   # 대부분 경매 워밍 캐시 적중
+        c["ll"] = _geocode(eb.geo_addr(c.get("address")))   # 프리로드로 대부분 메모리 적중
     est = None
     try:
         ev = gongmae_villa_est(mng, cdtn)
