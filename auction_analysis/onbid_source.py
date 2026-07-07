@@ -135,11 +135,10 @@ class OnbidSource:
             "ho": mho.group(1) if mho else None,              # 호(물건명 파싱)
         }
 
-    def detail(self, cltr_mng_no: str, pbct_cdtn_no: Optional[str] = None) -> dict:
-        """물건상세(면적·전체주소·PNU·사진URL·임대차). cltrMngNo 필수, pbctCdtnNo로 회차 특정.
-        경매 재사용 기능(유사거래·시세·예상낙찰가 등)에 필요한 {면적·주소·감정가}를 제공한다."""
+    def _fetch_detail_root(self, cltr_mng_no: str, pbct_cdtn_no: Optional[str] = None):
+        """물건상세 XML root + resultCode 확인. (detail·bid_schedule 공용)"""
         if not self.key or not cltr_mng_no:
-            return {}
+            return None, "키/물건번호 없음"
         p = {"serviceKey": self.key, "cltrMngNo": cltr_mng_no,
              "resultType": "xml", "numOfRows": "50", "pageNo": "1"}
         if pbct_cdtn_no:
@@ -148,9 +147,32 @@ class OnbidSource:
             r = httpx.get(_OP_DTL, params=p, headers=_UA, timeout=30)
             root = ET.fromstring(r.text)
         except Exception as e:
-            return {"error": f"온비드 상세 호출 실패: {type(e).__name__}"}
+            return None, f"온비드 상세 호출 실패: {type(e).__name__}"
         if (root.findtext(".//resultCode") or "") not in ("00", "000"):
-            return {"error": root.findtext(".//resultMsg") or "온비드 상세 오류"}
+            return None, (root.findtext(".//resultMsg") or "온비드 상세 오류")
+        return root, None
+
+    @staticmethod
+    def _urls_of(el, tag: str) -> list:
+        """<tag><listItem><urlAdr>URL</urlAdr>...  → [URL,...] (온비드 첨부/사진은 listItem/urlAdr 중첩구조).
+        평면 텍스트(콤마·파이프 구분)도 폴백 파싱."""
+        out = []
+        lst = el.find(tag)
+        if lst is not None:
+            for li in lst.findall("listItem"):
+                u = (li.findtext("urlAdr") or "").strip()
+                if u.startswith("http"):
+                    out.append(u)
+            if not out and (lst.text or "").strip():   # 평면 텍스트 폴백
+                out = [u.strip() for u in re.split(r"[,\|]", lst.text) if u.strip().startswith("http")]
+        return list(dict.fromkeys(out))                # 중복 제거(순서 유지)
+
+    def detail(self, cltr_mng_no: str, pbct_cdtn_no: Optional[str] = None) -> dict:
+        """물건상세(면적·전체주소·PNU·사진URL·임대차 + 공고문·첨부파일·공고정보). cltrMngNo 필수, pbctCdtnNo로 회차 특정.
+        경매 재사용 기능(유사거래·시세·예상낙찰가 등)에 필요한 {면적·주소·감정가}를 제공한다."""
+        root, err = self._fetch_detail_root(cltr_mng_no, pbct_cdtn_no)
+        if root is None:
+            return {"error": err} if err and "없음" not in err else {}
         items = root.findall(".//item")
         it = None
         if pbct_cdtn_no:
@@ -162,7 +184,41 @@ class OnbidSource:
         def T(tag):
             c = it.findtext(tag)
             return (c or "").strip() if c else ""
-        photos = [u.strip() for u in re.split(r"[,\|]", T("potoUrlList")) if u.strip().startswith("http")]
+        photos = self._urls_of(it, "potoUrlList")
+
+        # ── 첨부파일: 감정평가서(apslEvlClgList)·정정공고(crtnLstClgList)·일괄입찰(batcBidCltrClgList)·도면(lmapUrlAdrList) ──
+        files = []
+        for u in self._urls_of(it, "apslEvlClgList"):
+            files.append({"name": "감정평가서", "url": u})
+        for u in self._urls_of(it, "crtnLstClgList"):
+            files.append({"name": "정정공고", "url": u})
+        for u in self._urls_of(it, "batcBidCltrClgList"):
+            files.append({"name": "일괄입찰물건", "url": u})
+        for u in self._urls_of(it, "lmapUrlAdrList"):
+            files.append({"name": "위치도/도면", "url": u})
+
+        # ── 공고문(공고 내용 텍스트): 물건상세 API의 세부내용 필드들을 라벨과 함께 묶음 ──
+        notice_parts = []
+        for tag, label in [("cltrEtcCont", "물건세부"), ("locVntyPscdCont", "위치·부근현황"),
+                           ("utlzPscdCont", "이용현황"), ("icdlCdtnCont", "부대조건"),
+                           ("evcRsbyTrgtCont", "명도책임"), ("dsplVldCont", "처분효력"),
+                           ("purrQlfcCont", "매수인자격"), ("pytnMtrsCont", "유의사항")]:
+            v = T(tag)
+            if v:
+                notice_parts.append({"label": label, "text": v})
+
+        # ── 공고 정보(공고보기): 물건상세 API에서 얻을 수 있는 항목만(공고 전용 API는 이 키로 미제공). ──
+        pbanc = T("onbidPbancNo")
+        notice_info = {
+            "pbanc_no": pbanc,                                   # 공고번호
+            "prop_type": T("prptDivNm"),                        # 재산유형
+            "org": T("rqstOrgNm") or T("orgNm"),                # 공고기관/집행기관
+            "bid_type": " ".join(x for x in [T("cptnMthodNm"), T("bidMthodNm")] if x),  # 입찰방식(일반경쟁 최고가방식)
+            "bid_div": T("bidDivNm"),                           # 입찰구분(일반경쟁)
+            "amt_open": T("totalamtUnpcDivNm"),                 # 총액/단가 구분
+            "round": T("pbctNsq"),                              # 공고회차(회차)
+            "notice_ymd": _dt(T("frstPbancYmd")) or _dt(T("mdfcnDt")),  # 공고일(없으면 수정일)
+        }
         return {
             "bld_area": _f(T("bldSqms")),          # 건물/전용 면적 ㎡
             "land_area": _f(T("landSqms")),        # 대지 면적 ㎡
@@ -174,4 +230,34 @@ class OnbidSource:
             "rent_method": T("rentMthodNm"),
             "rent_period": T("rentPerdCont"),
             "usage_scls": T("cltrUsgSclsCtgrNm"),  # 세부용도(다세대주택/아파트 등)
+            "notice": notice_parts,                # 공고문(세부내용 텍스트 블록)
+            "files": files,                        # 첨부파일([{name,url}])
+            "notice_info": notice_info,            # 공고 정보(공고보기)
         }
+
+    def bid_schedule(self, cltr_mng_no: str) -> dict:
+        """입찰일정 및 장소 — cltrMngNo만으로 호출 시 반환되는 회차별 item(유찰 저감)을 표로.
+        컬럼: 입찰관리번호(pbctCdtnNo)·회차(pbctNsq)·입찰구분(bidDivNm)·입찰기간·최저입찰가(lowstBidPrcIndctCont).
+        개찰일시/개찰장소 필드는 물건상세 API에 없어 개찰=입찰마감시각·장소='온비드(전자입찰)'로 표기."""
+        root, err = self._fetch_detail_root(cltr_mng_no, None)
+        if root is None:
+            return {"available": False, "reason": err or "조회 실패", "rounds": []}
+        rounds = []
+        for it in root.findall(".//item"):
+            def T(tag, _it=it):
+                c = _it.findtext(tag)
+                return (c or "").strip() if c else ""
+            end = T("cltrBidEndDt")
+            rounds.append({
+                "cdtn_no": T("pbctCdtnNo"),                     # 입찰관리번호
+                "round": _num(T("pbctNsq")) or None,            # 회차
+                "bid_div": T("bidDivNm"),                       # 입찰구분
+                "bid_begin": _dt(T("cltrBidBgngDt")),
+                "bid_close": _dt(end),
+                "min_price": _num(T("lowstBidPrcIndctCont")),   # 최저입찰가(원)
+                "open_dt": _dt(end),                            # 개찰일시(≈입찰마감 — 별도필드 없음)
+                "open_place": "온비드(전자입찰)",                 # 개찰장소(기본값)
+                "status": T("pbctStatNm"),                      # 공매상태(입찰준비/진행 등)
+            })
+        rounds.sort(key=lambda x: (x["round"] is None, x["round"] or 0))   # 회차 오름차순(문자열정렬 방지)
+        return {"available": bool(rounds), "rounds": rounds, "manage_no": cltr_mng_no}

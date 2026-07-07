@@ -4795,7 +4795,8 @@ def gongmae_enrich(mng: str = Query(..., description="물건관리번호 cltrMng
     ckey = "gm_enrich:" + mng + ((":" + cdtn) if cdtn else "")
     try:
         hit = auction_db.cache_get_many([ckey]).get(ckey)
-        if hit:
+        # notice_info 키 없으면 공고문·첨부·공고정보 추가 전 옛 캐시 → stale로 재조회(스키마 진화)
+        if hit and "notice_info" in hit:
             return {**hit, "_cache": "hit"}
     except Exception:
         pass
@@ -5038,7 +5039,13 @@ def gongmae_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
             cases = rr.json() if rr.status_code in (200, 206) else []
         except Exception:
             cases = []
-    est = None   # 시세(차익용)는 아파트정보(gongmae_apt_info) 붙일 때 연동 예정
+    est = None   # 시세(차익용) = 아파트정보 추정시세 연동(gongmae_apt_info.est.price)
+    try:
+        ai = gongmae_apt_info(mng, cdtn)
+        if isinstance(ai, dict) and isinstance(ai.get("est"), dict) and ai["est"].get("price"):
+            est = ai["est"]["price"]
+    except Exception:
+        pass
     r = eb.compute(cur, cases, est_price=est)
     r["v"] = _EXPBID_V
     if r.get("available"):
@@ -5047,6 +5054,207 @@ def gongmae_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
         except Exception:
             pass
     return r
+
+
+@app.get("/gongmae/apt_info")
+def gongmae_apt_info(mng: str, cdtn: Optional[str] = None,
+                     months: int = Query(12, le=24)) -> dict:
+    """공매 아파트/오피스텔 정보·실거래 — 경매 `_apt_info_compute` 로직을 cur(합성 dict)로 복제.
+    resolve_lawd·_apt_trades(시군구캐시)·match_apt(같은평형±5%)·_estimate_price·_complex_detail_for 재사용.
+    item_key 없는 공매라 _brief_as_detail 폴백 대신 building.info(주소)로 단지 최소정보 보완. gm_apt: 캐시(온디맨드)."""
+    ck = "gm_apt:" + mng
+    try:
+        hit = auction_db.cache_get_many([ck]).get(ck)
+        if isinstance(hit, dict) and hit.get("v", 0) >= APT_VER:
+            return hit
+    except Exception:
+        pass
+    e, cur = _gm_cur(mng, cdtn)
+    if not cur:
+        return {"available": False, "reason": "물건 없음", "v": APT_VER}
+    usage = cur.get("usage") or ""
+    if "아파트" not in usage and "오피스텔" not in usage:
+        return {"available": False, "reason": "아파트/오피스텔 물건이 아님", "usage": usage}
+    address = cur.get("address") or ""
+    lawd = resolve_lawd(address)
+    if not lawd:
+        return {"available": False, "reason": "주소에서 법정동코드를 찾지 못함", "address": address}
+    area = _area_num(cur.get("building_area"), cur.get("area_text"))
+
+    def _brief_detail():
+        """공매엔 item_key가 없으므로 건축물대장(building.info) 주소조회로 준공·세대·승강기 최소 단지정보 구성."""
+        try:
+            b = building.info(address)
+        except Exception:
+            b = None
+        if not (isinstance(b, dict) and (b.get("build_year") or b.get("households") or b.get("elevator") is not None)):
+            return None
+        return {"name": _apt_name_from_addr(address) or "", "households": b.get("households"),
+                "approved": (str(b.get("build_year")) if b.get("build_year") else None),
+                "elevator": b.get("elevator"), "_src": "건축물대장"}
+
+    trades = _apt_trades(lawd, months)
+    if not trades:
+        nm = _apt_name_from_addr(address)
+        cd = None
+        if nm:
+            try:
+                cd = kapt.complex_detail(lawd, nm)
+            except Exception:
+                cd = None
+        cd = cd or _brief_detail()
+        out = {"available": False, "reason": "해당 시군구 아파트 실거래 없음",
+               "lawd_cd": lawd, "address": address, "area": area,
+               "complex": nm or "", "complex_detail": cd, "v": APT_VER}
+        if cd:                                   # 단지정보라도 확보되면 캐시(실거래는 다음에 재시도되도록 available=False여도 저장)
+            try:
+                auction_db.cache_save(ck, out)
+            except Exception:
+                pass
+        return out
+    mt = match_apt(trades, address, area=area, area_pct=0.05)   # 같은 평형 ±5%
+    same = mt["same_area"] if mt["area_matched"] else []
+    from datetime import timedelta
+    cutoff = (date.today() - timedelta(days=183)).isoformat()
+    pool6 = mt["same_area"] if mt["area_matched"] else mt["trades"]
+    c6 = sum(1 for t in pool6 if t.get("deal_date", "") >= cutoff)
+    demand = {"count6": c6, "per_month": round(c6 / 6, 1),
+              "status": "양호" if c6 >= 3 else "검토",
+              "scope": "같은평형" if mt["area_matched"] else "단지전체"}
+    fm = re.search(r"(\d+)\s*층", address)
+    auction_floor = int(fm.group(1)) if fm else None
+    est = _estimate_price(same, auction_floor)
+    amounts = [t["amount"] for t in same if t.get("amount")]
+    summary = None
+    if amounts:
+        summary = {"count": len(same), "recent": same[0]["amount"],
+                   "recent_date": same[0]["deal_date"],
+                   "min": min(amounts), "max": max(amounts),
+                   "avg": round(sum(amounts) / len(amounts))}
+    out = {
+        "available": bool(mt["trades"]),
+        "lawd_cd": lawd, "address": address, "area": area,
+        "complex": mt["complex"] or "", "build_year": mt["build_year"] or "",
+        "summary": summary, "trades": same[:100],
+        "complex_trades_total": len(mt["trades"]),
+        "area_matched": mt["area_matched"], "demand": demand, "est": est,
+        "months": months, "v": APT_VER,
+    }
+    out["complex_detail"] = _complex_detail_for(out) or _brief_detail()
+    if not out.get("complex"):
+        out["complex"] = (out.get("complex_detail") or {}).get("name") or _apt_name_from_addr(address) or ""
+    if out.get("available"):
+        try:
+            auction_db.cache_save(ck, out)
+        except Exception:
+            pass
+    return out
+
+
+@app.get("/gongmae/competing_listings")
+def gongmae_competing_listings(mng: str, cdtn: Optional[str] = None) -> dict:
+    """공매 아파트 경쟁매물보기 — kb_crawler.match_address(주소)로 KB 단지를 찾고 kb_listing 동일평형(전용±3㎡) 매매를 조회.
+    ⚠️KB 인증(KB_SITE_TOKEN) 미설정/무효 시 match_address가 예외 → {matched:False} 우아하게 반환(크래시 금지). gm_kbmatch: 캐시."""
+    e, cur = _gm_cur(mng, cdtn)
+    if not cur:
+        return {"matched": False, "count": 0, "listings": []}
+    if "아파트" not in (cur.get("usage") or "") and "오피스텔" not in (cur.get("usage") or ""):
+        return {"matched": False, "count": 0, "listings": []}
+    # KB 단지 매칭(도로명 우선, 없으면 지번). 결과(complex_no·region_ok)만 캐시.
+    ck = "gm_kbmatch:" + mng
+    cno = None
+    m = None
+    try:
+        m = auction_db.cache_get_many([ck]).get(ck)
+    except Exception:
+        m = None
+    if not isinstance(m, dict):
+        addr_for_kb = (e.get("addr_road") or e.get("addr_jibun") or cur.get("address") or "")
+        try:
+            import kb_crawler as _kb
+            m = _kb.match_address(addr_for_kb)
+        except Exception as ex:
+            # KB 미가용(토큰 없음/무효/네트워크) — 우아하게 미매칭 반환(재시도 위해 캐시 안 함)
+            return {"matched": False, "count": 0, "listings": [], "reason": f"KB 미가용({type(ex).__name__})"}
+        if isinstance(m, dict):
+            try:
+                auction_db.cache_save(ck, {"complex_no": m.get("complex_no"),
+                                           "region_ok": m.get("region_ok"),
+                                           "kb_name": m.get("kb_name")})
+            except Exception:
+                pass
+    cno = m.get("complex_no") if isinstance(m, dict) else None
+    if not cno or (isinstance(m, dict) and m.get("region_ok") is False):
+        return {"matched": False, "count": 0, "listings": []}
+    # kb_listing 동일평형(전용±3㎡) 매매 — auction_competing_listings 쿼리 복제
+    area = _area_num(cur.get("building_area"))
+    params = [("select", "listing_id,area_excl,price,floor,dong,ho,unit_price,"
+                         "direction,room_cnt,bath_cnt,feature,agent_name,confirm_date"),
+              ("complex_no", f"eq.{cno}"), ("trade_type", "eq.매매"),
+              ("order", "price.asc"), ("limit", "300")]
+    if area:
+        params += [("area_excl", f"gte.{round(area - 3, 2)}"),
+                   ("area_excl", f"lte.{round(area + 3, 2)}")]
+    try:
+        lr = auction_db._get("kb_listing", params)
+        listings = lr.json() if lr.status_code in (200, 206) else []
+    except Exception:
+        listings = []
+    cname = (m.get("kb_name") if isinstance(m, dict) else None)
+    if not cname:
+        try:
+            cr = auction_db._get("kb_complex", [("select", "name"),
+                                                ("complex_no", f"eq.{cno}"), ("limit", "1")])
+            cj = cr.json() if cr.status_code in (200, 206) else []
+            cname = cj[0].get("name") if cj else None
+        except Exception:
+            pass
+    photo_map: dict = {}
+    ids = [x.get("listing_id") for x in listings if x.get("listing_id")]
+    for i in range(0, len(ids), 100):
+        chunk = ",".join(str(v) for v in ids[i:i + 100])
+        try:
+            pr = auction_db._get("kb_listing_photo",
+                                 [("select", "listing_id,url,title"),
+                                  ("listing_id", f"in.({chunk})"), ("order", "seq.asc")])
+            for p in (pr.json() if pr.status_code in (200, 206) else []):
+                photo_map.setdefault(p["listing_id"], []).append(
+                    {"url": p.get("url"), "title": p.get("title")})
+        except Exception:
+            pass
+    return {"matched": True, "count": len(listings), "area": area,
+            "complex_no": cno, "complex_name": cname,
+            "listings": [{"area_excl": x.get("area_excl"), "price": x.get("price"),
+                          "floor": x.get("floor"), "dong": x.get("dong"),
+                          "ho": x.get("ho"), "unit_price": x.get("unit_price"),
+                          "direction": x.get("direction"), "room_cnt": x.get("room_cnt"),
+                          "bath_cnt": x.get("bath_cnt"), "feature": x.get("feature"),
+                          "agent_name": x.get("agent_name"), "confirm_date": x.get("confirm_date"),
+                          "photos": photo_map.get(x.get("listing_id"), [])}
+                         for x in listings]}
+
+
+@app.get("/gongmae/bid_schedule")
+def gongmae_bid_schedule(mng: str = Query(..., description="물건관리번호 cltrMngNo")) -> dict:
+    """공매 입찰일정 및 장소 — 회차별(유찰 저감) 입찰기간·최저입찰가·개찰. onbid.bid_schedule 래퍼. gm_bidsch: 캐시.
+    ⚠️진행중 물건은 회차가 남아 캐시하되, 회차표는 예정일정이라 사실상 불변(온디맨드·1회 온비드 호출)."""
+    ck = "gm_bidsch:" + mng
+    try:
+        hit = auction_db.cache_get_many([ck]).get(ck)
+        if isinstance(hit, dict) and hit.get("available"):
+            return {**hit, "_cache": "hit"}
+    except Exception:
+        pass
+    try:
+        out = onbid.bid_schedule(mng)
+    except Exception as e:
+        return {"available": False, "reason": type(e).__name__, "rounds": []}
+    if isinstance(out, dict) and out.get("available"):
+        try:
+            auction_db.cache_save(ck, out)
+        except Exception:
+            pass
+    return out
 
 
 # ---------- 실거래(국토부 연립다세대 매매) ----------
