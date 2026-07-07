@@ -4784,6 +4784,18 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
         return out
 
 
+@app.get("/gongmae/enrich")
+def gongmae_enrich(mng: str = Query(..., description="물건관리번호 cltrMngNo"),
+                   cdtn: Optional[str] = Query(None, description="공매조건번호 pbctCdtnNo")) -> dict:
+    """공매 물건상세 보강 — 온비드 상세 API로 면적·전체주소(도로명/지번)·PNU·사진·임대차 조회.
+    경매 재사용 기능(유사거래·시세·예상낙찰가·아파트정보·경쟁매물·단기매도계산기)에 필요한
+    {전용면적·전체주소·감정가}를 프론트에 제공한다."""
+    try:
+        return onbid.detail(mng, cdtn) or {}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}"}
+
+
 # ---------- 실거래(국토부 연립다세대 매매) ----------
 from auction_analysis.molit_source import MolitSource, filter_similar  # noqa: E402
 molit = MolitSource()

@@ -22,6 +22,7 @@ from typing import Optional
 import httpx
 
 _OP = "https://apis.data.go.kr/B010003/OnbidRlstListSrvc2/getRlstCltrList2"
+_OP_DTL = "https://apis.data.go.kr/B010003/OnbidRlstDtlSrvc2/getRlstDtlInf2"  # 물건상세(면적·전체주소·PNU·사진)
 _UA = {"User-Agent": "Mozilla/5.0"}
 
 # 재산종류명 → prptDivCd
@@ -37,6 +38,14 @@ def _t(el, tag: str) -> str:
 def _num(s: str) -> int:
     s = re.sub(r"[^0-9]", "", s or "")
     return int(s) if s else 0
+
+
+def _f(s: str):
+    s = re.sub(r"[^0-9.]", "", s or "")
+    try:
+        return float(s) if s else None
+    except ValueError:
+        return None
 
 
 def _dt(s: str) -> str:
@@ -124,4 +133,45 @@ class OnbidSource:
             "onbid_url": onbid_url,                           # 물건별 온비드 상세 링크
             "floor": int(mfl.group(1)) if mfl else None,      # 층(물건명 파싱)
             "ho": mho.group(1) if mho else None,              # 호(물건명 파싱)
+        }
+
+    def detail(self, cltr_mng_no: str, pbct_cdtn_no: Optional[str] = None) -> dict:
+        """물건상세(면적·전체주소·PNU·사진URL·임대차). cltrMngNo 필수, pbctCdtnNo로 회차 특정.
+        경매 재사용 기능(유사거래·시세·예상낙찰가 등)에 필요한 {면적·주소·감정가}를 제공한다."""
+        if not self.key or not cltr_mng_no:
+            return {}
+        p = {"serviceKey": self.key, "cltrMngNo": cltr_mng_no,
+             "resultType": "xml", "numOfRows": "50", "pageNo": "1"}
+        if pbct_cdtn_no:
+            p["pbctCdtnNo"] = pbct_cdtn_no
+        try:
+            r = httpx.get(_OP_DTL, params=p, headers=_UA, timeout=30)
+            root = ET.fromstring(r.text)
+        except Exception as e:
+            return {"error": f"온비드 상세 호출 실패: {type(e).__name__}"}
+        if (root.findtext(".//resultCode") or "") not in ("00", "000"):
+            return {"error": root.findtext(".//resultMsg") or "온비드 상세 오류"}
+        items = root.findall(".//item")
+        it = None
+        if pbct_cdtn_no:
+            it = next((x for x in items if (x.findtext("pbctCdtnNo") or "") == str(pbct_cdtn_no)), None)
+        it = it or (items[0] if items else None)
+        if it is None:
+            return {}
+
+        def T(tag):
+            c = it.findtext(tag)
+            return (c or "").strip() if c else ""
+        photos = [u.strip() for u in re.split(r"[,\|]", T("potoUrlList")) if u.strip().startswith("http")]
+        return {
+            "bld_area": _f(T("bldSqms")),          # 건물/전용 면적 ㎡
+            "land_area": _f(T("landSqms")),        # 대지 면적 ㎡
+            "addr_road": T("cltrRadr"),            # 도로명 전체주소(번지·호)
+            "addr_jibun": T("zadrNm"),             # 지번 전체주소
+            "pnu": T("ltnoPnu"),
+            "appraisal_price": _num(T("apslEvlAmt")),
+            "photos": photos,
+            "rent_method": T("rentMthodNm"),
+            "rent_period": T("rentPerdCont"),
+            "usage_scls": T("cltrUsgSclsCtgrNm"),  # 세부용도(다세대주택/아파트 등)
         }
