@@ -51,7 +51,7 @@ _USAGE_RE = "(아파트|오피스텔|다세대|연립|빌라|도시형)"
 _SELECT = (
     "SELECT id, manage_no, data->>'pbct_cdtn_no' AS cdtn "
     "FROM gongmae_items WHERE usage ~ %s {extra} "
-    "ORDER BY updated_at DESC NULLS LAST, id"
+    "ORDER BY bid_close ASC NULLS LAST, id"   # 목록 기본정렬(입찰마감 임박순)과 동일 → 첫 페이지부터 워밍
 )
 
 _UPDATE = (
