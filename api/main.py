@@ -4859,22 +4859,73 @@ def _gm_cur(mng: str, cdtn: Optional[str] = None):
     return e, cur
 
 
+def _gm_attach_gongsi(result: dict, mng: str, cdtn: Optional[str], top: int = 20) -> dict:
+    """공매 유사실거래 결과에 공시가격·요율 부여(경매 _villa_est_value와 동일 방식).
+    ①물건 자체 공시가격(prop_gongsi) ②상위 top개 거래에 gongsi(공시가격)·yul(거래가/공시가격) 부착.
+    V-World 쿼터/도로명 실패는 해당 항목만 공란(크래시 금지). base 'nearby:' 캐시는 오염 안 됨(별도 gm_gongsi: 캐시)."""
+    if not (isinstance(result, dict) and result.get("available") and result.get("trades")):
+        return result
+    sgg = result.get("sigungu_prefix") or ""
+    trades = result["trades"]
+    picked = sorted(trades, key=lambda t: t.get("deal_date", ""), reverse=True)[:top]
+    # ① 물건 자체 공시가격(gm_gongsi_prop:<mng> 캐시 — 성공분만 영구)
+    pgk = "gm_gongsi_prop:" + mng
+    prop_g = None
+    try:
+        hit = auction_db.cache_get_many([pgk]).get(pgk)
+        if isinstance(hit, dict) and hit.get("price"):
+            prop_g = hit
+    except Exception:
+        prop_g = None
+    if prop_g is None:
+        # 물건 전체 지번주소(끝 'N층' 제거 — resolve_bjd 지번 파싱 방해 방지). addr_jibun은 지번 숫자만이라 부적합.
+        paddr = re.sub(r"\s*\d+\s*층\s*$", "", result.get("address") or "").strip()
+        try:
+            prop_g = _compute_prop_gongsi(None, paddr,
+                                          result.get("prop_area"), result.get("prop_floor"))
+        except Exception:
+            prop_g = None
+        if isinstance(prop_g, dict) and prop_g.get("price"):
+            try:
+                auction_db.cache_save(pgk, prop_g)
+            except Exception:
+                pass
+    if isinstance(prop_g, dict) and prop_g.get("price"):
+        result["prop_gongsi"] = prop_g
+    # ② 거래별 공시가격·요율(auction_gongsi 캐시 공유)
+    keys = [f"{(sgg + ' ' + (t.get('umd') or '') + ' ' + (t.get('jibun') or '')).strip()}"
+            f"|{t.get('area') or ''}|{t.get('floor') or ''}" for t in picked]
+    try:
+        gmap = auction_gongsi(";".join(keys))
+    except Exception:
+        gmap = {}
+    for t, gk in zip(picked, keys):
+        g = gmap.get(gk)
+        if isinstance(g, dict) and g.get("price"):
+            t["gongsi"] = int(g["price"])
+            amt = _to_int(t.get("amount"))
+            if amt:
+                t["yul"] = round(amt / g["price"], 4)
+    return result
+
+
 @app.get("/gongmae/nearby_trades")
 def gongmae_nearby_trades(mng: str, cdtn: Optional[str] = None,
                           months: int = Query(12, le=24)) -> dict:
-    """공매 빌라/도생 주변 유사실거래 — 경매 `_nearby_filtered` 그대로 재사용(온디맨드·gm_nearby: 캐시)."""
+    """공매 빌라/도생 주변 유사실거래 — 경매 `_nearby_filtered` 그대로 재사용(온디맨드·gm_nearby: 캐시).
+    반환 각 거래에 공시가격(gongsi)·요율(yul=거래가/공시가격) 부여(경매 표와 동일, V-World 실패분은 공란)."""
     if not isinstance(months, int):   # 내부에서 함수로 호출 시 Query 기본값 객체가 넘어옴 → 결과·캐시 오염(직렬화 500) 방지
         months = 12
     ck = "gm_nearby:" + mng
     if ck in _gm_nearby_cache:
-        return _trim_to_radius(_gm_nearby_cache[ck])
+        return _gm_attach_gongsi(_trim_to_radius(_gm_nearby_cache[ck]), mng, cdtn)
     try:
         db = auction_db.cache_get_many([ck]).get(ck)
     except Exception:
         db = None
     if isinstance(db, dict) and db.get("available"):
         _gm_nearby_cache[ck] = db
-        return _trim_to_radius(db)
+        return _gm_attach_gongsi(_trim_to_radius(db), mng, cdtn)
     e, cur = _gm_cur(mng, cdtn)
     if not cur:
         return {"available": False}
@@ -4913,7 +4964,7 @@ def gongmae_nearby_trades(mng: str, cdtn: Optional[str] = None,
             auction_db.cache_save(ck, result)
         except Exception:
             pass
-    return _trim_to_radius(result)
+    return _gm_attach_gongsi(_trim_to_radius(result), mng, cdtn)
 
 
 @app.get("/gongmae/building_brief")
@@ -8395,6 +8446,45 @@ def del_gongmae_favorite(manage_no: str, user: dict = Depends(require_user)) -> 
 @app.get("/gongmae/favorites/status")
 def gongmae_favorite_status(manage_no: str, user: dict = Depends(require_user)) -> dict:
     return {"favorite": user_store.is_gongmae_fav(user["id"], manage_no)}
+
+
+# ---------- 공매 즐겨쓰는검색(검색조건 저장) ----------
+
+class GongmaeSearchIn(BaseModel):
+    name: str = ""
+    conditions: dict = {}
+
+
+@app.get("/gongmae/searches")
+def list_gongmae_searches(user: dict = Depends(require_user)) -> dict:
+    """로그인 사용자의 저장된 공매 검색조건 목록."""
+    out = []
+    for r in user_store.list_gongmae_searches(user["id"]):
+        try:
+            cond = _json.loads(r.get("conditions") or "{}")
+        except Exception:
+            cond = {}
+        if not isinstance(cond, dict):
+            cond = {}
+        out.append({"id": r["id"], "name": r.get("name") or "",
+                    "conditions": cond, "created_at": r.get("created_at")})
+    return {"count": len(out), "items": out}
+
+
+@app.post("/gongmae/searches")
+def add_gongmae_search(body: GongmaeSearchIn, user: dict = Depends(require_user)) -> dict:
+    """공매 검색조건 저장(로그인 필수). conditions=폼 필터값 dict."""
+    cond = body.conditions if isinstance(body.conditions, dict) else {}
+    new_id = user_store.add_gongmae_search(
+        user["id"], (body.name or "").strip(),
+        _json.dumps(cond, ensure_ascii=False))
+    return {"ok": True, "id": new_id}
+
+
+@app.delete("/gongmae/searches/{search_id}")
+def del_gongmae_search(search_id: int, user: dict = Depends(require_user)) -> dict:
+    user_store.remove_gongmae_search(user["id"], search_id)
+    return {"ok": True}
 
 
 # ---------- 모의입찰(연습) ----------

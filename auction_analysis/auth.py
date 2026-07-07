@@ -285,6 +285,13 @@ class UserStore:
                 created_at TEXT,
                 PRIMARY KEY(user_id, name)
             )""",
+            """CREATE TABLE IF NOT EXISTS gongmae_saved_searches(
+                id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                name TEXT DEFAULT '',
+                conditions TEXT NOT NULL,
+                created_at TEXT
+            )""",
         ]
         for s in stmts:
             self._ex(s)
@@ -509,6 +516,25 @@ class UserStore:
         return self._ex(
             "SELECT 1 FROM gongmae_favorites WHERE user_id=%s AND manage_no=%s",
             (user_id, manage_no), fetch="one") is not None
+
+    # ---- 공매 즐겨쓰는검색(검색조건 저장) ----
+    def add_gongmae_search(self, user_id: int, name: str, conditions: str) -> int:
+        """공매 검색조건 저장. conditions=필터조건 JSON 문자열. 반환=새 id."""
+        return self._ex(
+            "INSERT INTO gongmae_saved_searches(user_id,name,conditions,created_at) "
+            "VALUES(%s,%s,%s,%s) RETURNING id",
+            (user_id, name or "", conditions or "{}", _now()), fetch="id")
+
+    def list_gongmae_searches(self, user_id: int) -> list:
+        rows = self._ex(
+            "SELECT id, name, conditions, created_at FROM gongmae_saved_searches "
+            "WHERE user_id=%s ORDER BY created_at DESC", (user_id,), fetch="all")
+        return [dict(r) for r in rows]
+
+    def remove_gongmae_search(self, user_id: int, search_id: int) -> None:
+        self._ex(
+            "DELETE FROM gongmae_saved_searches WHERE user_id=%s AND id=%s",
+            (user_id, search_id))
 
     # ---- 모의입찰(연습) ----
     def add_mock_bid(self, user_id: int, item_key: str, bid_amount: int,
