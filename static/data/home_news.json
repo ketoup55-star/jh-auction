@@ -2,104 +2,77 @@
  "items": [
   {
    "keyword": "부동산 세금",
-   "title": "수원시, 자체 개발 ‘빌드체크’로 숨은 세원 21억5000만원 발굴",
-   "link": "https://www.kairnews.com/news/502195",
-   "image": "https://www.ehom.kr/news/2026/07/06/cf24d930cd15bfa3154c327d79ce212d090905.jpg",
-   "source": "수원시, 자체 개발 ‘빌드체크’로 숨은 세원 21억5000만원 발굴",
-   "published": "2026-07-06T09:12:44+09:00",
+   "title": "종부세 87% 상위 10%가 냈다…개인은 60세 이상이 절반 넘어",
+   "link": "https://www.sankyungtoday.com/news/articleView.html?idxno=61894",
+   "image": "https://cdn.sankyungtoday.com/news/photo/202607/61894_27851_427.jpg",
+   "source": "산경투데이",
+   "published": "2026-07-07T09:07:10+09:00",
    "has_time": true
   },
   {
-   "keyword": "집값",
-   "title": "공장보다 집값이 먼저 뛴다…호남 반도체 숨은 변수",
-   "link": "https://economist.co.kr/article/view/ecn202607010043",
-   "image": "https://economist.co.kr/data/ecn/image/2026/07/01/ecn20260701000053.800x.0.jpg",
-   "source": "이코노미스트",
-   "published": "2026-07-06T08:30:03+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "[프로필] 오상훈 신임 부산국세청장…부동산 투기 ‘고강도 검증’의 주역",
-   "link": "https://www.sejungilbo.com/news/articleView.html?idxno=59083",
-   "image": "https://cdn.sejungilbo.com/news/thumbnail/202607/59083_93756_1230_v150.jpg",
-   "source": "세정일보",
-   "published": "2026-07-06T07:48:33+09:00",
+   "keyword": "대출규제",
+   "title": "전세대출 규제론 재부상… 보증·DSR 손질에 임차시장 촉각",
+   "link": "https://www.rcast.co.kr/news/articleView.html?idxno=31202",
+   "image": "https://cdn.rcast.co.kr/news/thumbnail/202607/31202_60297_4256_v150.jpg",
+   "source": "리얼캐스트",
+   "published": "2026-07-07T09:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "이재명 대통령 지지율 54%...부동산 정책은 여전히 '부정'",
-   "link": "https://www.newswhoplus.com/news/articleView.html?idxno=63861",
-   "image": "https://cdn.newswhoplus.com/news/thumbnail/202607/63861_99223_457_v150.jpg",
-   "source": "뉴스후플러스",
-   "published": "2026-07-06T07:30:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "가계대출 옥죄다 기업대출 터질라…연쇄 부실 부추기는 규제 잔혹사",
-   "link": "https://www.dailian.co.kr/news/view/1663204",
-   "image": "https://cdnimage.dailian.co.kr/news/202504/news_1745287491_1488687_m_1.jpeg",
-   "source": "데일리안",
-   "published": "2026-07-06T07:07:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "주택·빌딩 상속 ‘반값 신고’…국세청, 감정평가 정조준",
-   "link": "https://www.edaily.co.kr/News/Read?newsId=01433366645511896&mediaCodeNo=257",
-   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/07/PS26070600026.jpg",
-   "source": "이데일리",
-   "published": "2026-07-06T06:10:03+09:00",
+   "title": "구윤철 \"부동산 세제개편안 이달 말 발표…보유세·거래세 균형 중요\"",
+   "link": "https://news.einfomax.co.kr/news/articleView.html?idxno=4423654",
+   "image": "https://cdn.news.einfomax.co.kr/news/thumbnail/202607/4423654_327492_562_v150.jpg",
+   "source": "연합인포맥스",
+   "published": "2026-07-07T08:55:32+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "\"집값 상승세 안 꺾인다\" 전문가 입 모은 이유...전월세까지 '비상' - 머니투데이",
-   "link": "https://www.mt.co.kr/estate/2026/07/06/2026070515161114557",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026070515161114557_7.jpg",
-   "source": "머니투데이",
-   "published": "2026-07-06T06:00:00+09:00",
+   "title": "GTX 개통 지역 집값 상승세… GTX 정차역 인근 아파트 신고가 릴레이",
+   "link": "http://www.ikld.kr/news/articleView.html?idxno=337155",
+   "image": "http://www.ikld.kr/news/thumbnail/202607/337155_184095_5212_v150.jpg",
+   "source": "국토일보",
+   "published": "2026-07-07T08:52:32+09:00",
    "has_time": true
   },
   {
-   "keyword": "대출규제",
-   "title": "삼성전자 사내 주택대출, '국평' 85㎡ 이하로 제한",
-   "link": "https://www.hankyung.com/article/2026070565981",
-   "image": "https://static.hankyung.com/img/logo/logo-news-sns.png?v=20201130",
+   "keyword": "부동산 세금",
+   "title": "종부세 상위 10%가 87%를 부담...개인 납세자 중 절반은 60대 이상",
+   "link": "https://www.chosun.com/economy/economy_general/2026/07/07/XA7MHNJIAJEGXFM6JOI7OKGNDE/",
+   "image": "https://www.chosun.com/resizer/v2/GY2TMN3EGQ3DSOJWHBTGKYLBMY.jpg?auth=88271160cbbd1e51ad91f19b36fa6152b71e0d9166a47fb615373c0e514790e6&width=1200&height=630&smart=true",
+   "source": "조선일보",
+   "published": "2026-07-07T08:15:50.934000+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "250억 vs 7000만원…같은 서울인데 집값 357배 차이 [시장톡]",
+   "link": "https://www.hankyung.com/article/2026070679206",
+   "image": "https://img.hankyung.com/photo/202607/01.37926474.1.jpg",
    "source": "한국경제",
-   "published": "2026-07-06T00:07:13+09:00",
+   "published": "2026-07-07T06:30:12+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "“지방 국평인데 18억이라고?” … 절대 비싸지 않은 이유는",
+   "link": "https://www.mk.co.kr/news/realestate/12091579",
+   "image": "https://pimg.mk.co.kr/news/cms/202607/06/news-p.v1.20260705.b0e943e0aec84818a01b44efb3f9912f_R.jpg",
+   "source": "매일경제",
+   "published": "2026-07-07T05:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "수억씩 뛰는 서울 아파트값의 미스터리, 왜? [서울 집값 미스터리①]",
-   "link": "https://v.daum.net/v/20260706043151805",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/06/kedbiz/20260706043153083culc.jpg",
+   "title": "규제 1년, 집값은 더 뛰었다…전문가들이 꼽은 실패 이유 [서울 집값 미스터리③]",
+   "link": "https://v.daum.net/v/20260707050307652",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/07/kedbiz/20260707050309743ksqg.jpg",
    "source": "Daum",
-   "published": "2026-07-06T00:00:00+09:00",
-   "has_time": false
-  },
-  {
-   "keyword": "대출규제",
-   "title": "\"대출 규제에 삼성도 손봤다\"…무주택 직원 사내대출 '국민평형'으로 제한",
-   "link": "https://news.nate.com/view/20260706n02145",
-   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/mk/2026/07/06/news-p.v1.20260706.162de33e56f24c778722cf85972e4731_P1.png",
-   "source": "네이트 뉴스",
-   "published": "2026-07-06T00:00:00+09:00",
-   "has_time": false
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "악화된 부동산 민심, 국민이 체감할 공급 속도전 펴길",
-   "link": "https://marketin.edaily.co.kr/News/ReadE?newsId=01377606645511896",
-   "image": "https://marketin.edaily.co.kr/_next/static/media/marketin02_thumb_400x226.c6833b9d.png",
-   "source": "marketin.edaily.co.kr",
-   "published": "2026-07-06T00:00:00+09:00",
+   "published": "2026-07-07T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 11,
- "date": "2026-07-06"
+ "count": 8,
+ "date": "2026-07-07"
 }
