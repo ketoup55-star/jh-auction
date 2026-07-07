@@ -4842,6 +4842,8 @@ def _gm_cur(mng: str, cdtn: Optional[str] = None):
 def gongmae_nearby_trades(mng: str, cdtn: Optional[str] = None,
                           months: int = Query(12, le=24)) -> dict:
     """공매 빌라/도생 주변 유사실거래 — 경매 `_nearby_filtered` 그대로 재사용(온디맨드·gm_nearby: 캐시)."""
+    if not isinstance(months, int):   # 내부에서 함수로 호출 시 Query 기본값 객체가 넘어옴 → 결과·캐시 오염(직렬화 500) 방지
+        months = 12
     ck = "gm_nearby:" + mng
     if ck in _gm_nearby_cache:
         return _trim_to_radius(_gm_nearby_cache[ck])
@@ -5062,6 +5064,8 @@ def gongmae_apt_info(mng: str, cdtn: Optional[str] = None,
     """공매 아파트/오피스텔 정보·실거래 — 경매 `_apt_info_compute` 로직을 cur(합성 dict)로 복제.
     resolve_lawd·_apt_trades(시군구캐시)·match_apt(같은평형±5%)·_estimate_price·_complex_detail_for 재사용.
     item_key 없는 공매라 _brief_as_detail 폴백 대신 building.info(주소)로 단지 최소정보 보완. gm_apt: 캐시(온디맨드)."""
+    if not isinstance(months, int):   # 내부 함수호출 시 Query 기본값 객체 유입 → 결과·캐시 오염 방지
+        months = 12
     ck = "gm_apt:" + mng
     try:
         hit = auction_db.cache_get_many([ck]).get(ck)
