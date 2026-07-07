@@ -206,6 +206,25 @@ def mask_name(value: Optional[str]) -> str:
     return v[0] + "○" * (len(v) - 2) + v[-1]
 
 
+def _reconciled_result(row: dict) -> Optional[str]:
+    """낡은 소스목록 result 교정.
+    매물이 소스 활성목록에서 이탈하면 `result`('신건 (100%)' 등)가 갱신을 멈춰 굳는데,
+    크롤러는 `data_class`='백데이터'와 `status_reason`('매각 2회 …')은 파생·갱신한다.
+    → result가 '신건/유찰'(미매각)인데 백데이터 & status_reason이 매각확정이면 '매각'으로 교정.
+    (신건 오표시 중 백데이터분 즉시 정상화 — 크롤러 재수집 의존 X.
+     status_reason이 취하/취소/기각 등이면 트리거 안 돼 오교정 방지. 현황 2건 재경매는 크롤러 _relist 과제)"""
+    raw = row.get("result")
+    r = (raw or "").strip()
+    if not (r.startswith("신건") or r.startswith("유찰")):
+        return raw
+    if row.get("data_class") != "백데이터":
+        return raw
+    sr = (row.get("status_reason") or "").strip()
+    if any(sr.startswith(k) for k in ("매각", "잔금납부", "배당", "재매각")):
+        return "매각"
+    return raw
+
+
 class SupabaseSource:
     def __init__(self, url: Optional[str] = None, key: Optional[str] = None,
                  r2_url: Optional[str] = None, mask_personal: Optional[bool] = None):
@@ -417,7 +436,7 @@ class SupabaseSource:
             # 매각·종결(과거) 상태 OR 매각기일 날짜범위 OR **사건번호 검색** 시 백데이터(과거 매각분)도 함께 노출
             #  ('전체'로 특정 날짜 조회 시 그날 매각된 물건이 백데이터라 빠지던 버그 + 사건번호로 검색해도
             #   매각완료 물건(백데이터)이 안 나오던 버그 픽스 — 특정 사건번호는 상태 무관하게 찾아야 함)
-            f: list[tuple] = [("data_class", "in.(현황,백데이터)")]
+            f: list[tuple] = []   # 전 행이 현황∪백데이터(그외 0건)라 in.(현황,백데이터)는 100%매치=무의미인데 12만행 IN평가로 3배 느림 → 필터 생략(결과 동일·caseno/과거검색 속도개선)
         else:
             f: list[tuple] = [("data_class", f"eq.{data_class}")]
         if buy_grade:                          # 매수판정 컬럼 직접필터(빠름; buy_grade 컬럼 존재 시 main이 전달)
@@ -695,7 +714,7 @@ class SupabaseSource:
         cols = ("item_key,case_no,obj_no,court_name,usage_name,search_group,address,"
                 "area_text,land_area,building_area,tags,appraisal_price,min_price,"
                 "sale_price,sale_rate,fail_count,sell_date,result,status_reason,"
-                "bid_count,sale_2nd_price,hit_count,thumb_url,buy_grade")
+                "bid_count,sale_2nd_price,hit_count,thumb_url,buy_grade,data_class")
         iks = kw.get("item_keys")
         if iks is not None and len(iks) > 600:
             # 큰 item_keys 집합 → 청크별 상위(offset+limit) 조회 후 병합·정렬·슬라이스(분산 top-k).
@@ -908,7 +927,7 @@ class SupabaseSource:
             "sale_rate": row.get("sale_rate"),
             "fail_count": row.get("fail_count"),
             "sell_date": row.get("sell_date"),
-            "result": row.get("result"),
+            "result": _reconciled_result(row),   # 낡은 소스 result('신건') vs 파생 status_reason('매각') 모순 교정
             "status": row.get("status_reason"),
             "bid_count": row.get("bid_count"),
             "sale_2nd_price": row.get("sale_2nd_price"),   # 2등가(목록 표시; items 컬럼)
