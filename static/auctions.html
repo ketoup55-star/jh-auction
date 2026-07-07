@@ -1020,8 +1020,8 @@ async function fillSimilar(my, attempt){
     if(c===undefined||c===null) return;   // 미계산(아직 null) → simdone 안 찍어 재시도 대상으로 남김
     el.dataset.simdone="1";
     el.dataset.sim=c;
-    const base=el.innerHTML.replace(/\s*<span class="simcnt">.*?<\/span>/,"");
-    el.innerHTML=base+(base?" ":"")+`<span class="simcnt">유사거래 ${c}건</span>`;
+    const row=el.parentNode; const oldc=row&&row.querySelector(".simcnt"); if(oldc) oldc.remove();  // 유사거래는 .kapt(준공줄) 밖, .kaptrow 배지줄에 pill로
+    if(row) row.insertAdjacentHTML("beforeend", `<span class="simcnt">${c>0?("유사거래 "+c+"건"):'<span class="nodemand">수요 없음</span>'}</span>`);
   });
   applyAptSort();
   if(attempt<5 && my===briefSeq && document.querySelectorAll('.kapt[data-key]:not([data-simdone])').length){
@@ -1095,9 +1095,9 @@ function prefillFromResponse(list){
     }
     if(L.similar!=null){
       el.dataset.sim=L.similar; el.dataset.simdone="1";
-      const base=el.innerHTML.replace(/\s*<span class="simcnt">.*?<\/span>/,"");
+      const row=el.parentNode; const oldc=row&&row.querySelector(".simcnt"); if(oldc) oldc.remove();  // 유사거래 pill을 .kaptrow 배지줄로(준공줄 밖)
       const simTxt = L.similar>0 ? `유사거래 ${L.similar}건` : `<span class="nodemand">수요 없음</span>`;
-      el.innerHTML=base+(base?" ":"")+`<span class="simcnt">${simTxt}</span>`;
+      if(row) row.insertAdjacentHTML("beforeend", `<span class="simcnt">${simTxt}</span>`);
     }
   });
   // ② 시세·차익 → .villaest / .aptest (동일 렌더 재사용)
