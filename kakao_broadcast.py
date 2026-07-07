@@ -113,7 +113,7 @@ def _pick_type(kind, date, tparam, est_kind, n=2):
     """한 유형에서 매수양호+시세있음+차익순 상위 n. kind=upcoming(예상낙찰/최저)·sold(낙찰가)."""
     from api import main as M
     sel = "item_key,address,buy_grade,min_price,building_area,case_no,court_name,deposit,appraisal_price,thumb_url"
-    params = {"select": sel + (",sale_price,result" if kind == "sold" else ""),
+    params = {"select": sel + (",sale_price,result,bid_count" if kind == "sold" else ""),
               "sell_date": f"like.{date}*", "limit": "300"}
     params.update(tparam)
     if kind == "upcoming":
@@ -155,7 +155,7 @@ def _pick_type(kind, date, tparam, est_kind, n=2):
                     "thumb": x.get("thumb_url") or "",
                     "price": price, "bid": bid, "bid_lbl": bid_lbl, "diff": price - bid,
                     "appraisal": M._to_int(x.get("appraisal_price")), "deposit": _dep(x.get("deposit")),
-                    "area": _area(x.get("building_area"))})
+                    "area": _area(x.get("building_area")), "bid_count": M._to_int(x.get("bid_count"))})
     out.sort(key=lambda r: r["diff"], reverse=True)
     return out[:n]
 
@@ -187,7 +187,7 @@ def _prop_block(p, usage="", sold=False):
     loan_src = "감정60%" if r["use_appr"] else "낙찰80%"
     yld = f" (자본대비 {r['yld']}%)" if r["yld"] is not None else ""
     rows = [
-        ("낙찰가", r["bid"], ""),
+        ("낙찰가", r["bid"], (f" ({p.get('bid_count') or 1}명 입찰)" if sold else "")),
         ("매도가", r["sell"], ""),
         ("차익", r["diff"], ""),
         None,
