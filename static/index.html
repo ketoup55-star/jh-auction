@@ -459,9 +459,11 @@ function goSearch(){
     if(dots)dots.style.display=single?"none":"";
     go(0);
   }
-  fetch("/static/data/home_news.json").then(function(r){return r.json();}).then(function(d){
-    var items=(d&&d.items)||[]; if(items.length) render(items);
-  }).catch(function(){});
+  // 뉴스는 매일 09:30 로컬수집→자동 git push→GitHub raw 갱신. 클라우드는 raw에서 직접 읽어 '배포 없이' 최신 반영(실패 시 배포본 폴백).
+  var _NEWS_RAW="https://raw.githubusercontent.com/ketoup55-star/jh-auction/main/static/data/home_news.json";
+  fetch(_NEWS_RAW,{cache:"no-store"}).then(function(r){if(!r.ok)throw 0;return r.json();})
+    .catch(function(){return fetch("/static/data/home_news.json").then(function(r){return r.json();});})
+    .then(function(d){ var items=(d&&d.items)||[]; if(items.length) render(items); }).catch(function(){});
 })();
 </script>
 <style>

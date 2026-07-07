@@ -348,12 +348,28 @@ def main():
         _log("⚠️ 최종 0건 — 오늘 발행 기사를 못 찾았거나 검색 실패 가능")
 
 
+def _git_push():
+    """수집분 home_news.json 자동 커밋·푸시 → GitHub raw 갱신(클라우드가 raw로 읽어 배포 불필요)."""
+    import subprocess
+    try:
+        subprocess.run(["git", "add", "static/data/home_news.json"], cwd=HERE, timeout=30)
+        c = subprocess.run(["git", "commit", "-m", f"홈 뉴스 자동 갱신 {datetime.now(KST).date().isoformat()}"],
+                           cwd=HERE, capture_output=True, text=True, timeout=30)
+        if "nothing to commit" in (c.stdout + c.stderr):
+            _log("git: 변경 없음 → 커밋 스킵"); return
+        p = subprocess.run(["git", "push", "origin", "main"], cwd=HERE, capture_output=True, text=True, timeout=60)
+        _log(f"git push rc={p.returncode}: {((p.stderr or p.stdout) or '').strip()[:150]}")
+    except Exception as e:
+        _log(f"git push 실패(무시, 로컬엔 저장됨): {type(e).__name__}: {e}")
+
+
 if __name__ == "__main__":
     import traceback
     _log("─────── 수집 시작 ───────")
     try:
         main()
         _log("─────── 수집 완료 ───────")
+        _git_push()   # 자동 커밋·푸시 → GitHub raw 갱신 → 배포 없이 클라우드 반영
     except Exception as e:
         _log(f"❌❌ 실패: {type(e).__name__}: {e}")
         _log(traceback.format_exc().strip())
