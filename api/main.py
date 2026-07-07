@@ -4789,11 +4789,27 @@ def gongmae_enrich(mng: str = Query(..., description="물건관리번호 cltrMng
                    cdtn: Optional[str] = Query(None, description="공매조건번호 pbctCdtnNo")) -> dict:
     """공매 물건상세 보강 — 온비드 상세 API로 면적·전체주소(도로명/지번)·PNU·사진·임대차 조회.
     경매 재사용 기능(유사거래·시세·예상낙찰가·아파트정보·경쟁매물·단기매도계산기)에 필요한
-    {전용면적·전체주소·감정가}를 프론트에 제공한다."""
+    {전용면적·전체주소·감정가}를 프론트에 제공한다.
+    **온디맨드 캐시**: 결과를 api_cache('gm_enrich:*' 영구저장)에 저장 → 재조회는 온비드 호출 없이 즉답
+    (예열 아님·요청 시 1회만 온비드 호출). 물건상세(면적·주소)는 경매 진행중 불변이라 영구캐시 안전."""
+    ckey = "gm_enrich:" + mng + ((":" + cdtn) if cdtn else "")
     try:
-        return onbid.detail(mng, cdtn) or {}
+        hit = auction_db.cache_get_many([ckey]).get(ckey)
+        if hit:
+            return {**hit, "_cache": "hit"}
+    except Exception:
+        pass
+    try:
+        d = onbid.detail(mng, cdtn) or {}
     except Exception as e:
         return {"error": f"{type(e).__name__}"}
+    # 성공(면적 또는 주소 확보)만 캐시 — 에러·빈결과는 캐시 안 함(다음에 재시도)
+    if d and not d.get("error") and (d.get("bld_area") or d.get("addr_jibun")):
+        try:
+            auction_db.cache_save(ckey, d)
+        except Exception:
+            pass
+    return d
 
 
 # ---------- 실거래(국토부 연립다세대 매매) ----------
