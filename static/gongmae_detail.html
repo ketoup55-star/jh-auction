@@ -348,7 +348,13 @@ document.addEventListener("keydown",function(ev){
 function loadGmFiles(e){
   var panel=document.getElementById("gm-files-panel"); if(!panel) return;
   var files=(e&&e.files)||[];
-  if(!files.length){ panel.innerHTML=""; return; }   // 첨부 없으면 패널 숨김(공간 미점유)
+  if(!files.length){
+    // 첨부 없음(신탁공매 등 기타일반재산은 감정평가서·공고문이 온비드 물건상세 API에 미제공 — 신탁사 별도관리) → 온비드 공고 링크 안내
+    panel.innerHTML='<div class="fpanel"><div class="fphd">📁 첨부파일</div>'
+      +'<div class="fpempty">온비드 물건상세에 등록된 첨부파일이 없습니다.<br>신탁공매(기타일반재산) 등은 감정평가서·공고문을 신탁사가 별도 관리합니다. 서류는 '
+      +'<a href="'+onbidUrl(GM_D||{})+'" target="_blank" rel="noopener" style="color:var(--primary);font-weight:600">온비드 공고 ↗</a> 에서 확인하세요.</div></div>';
+    return;
+  }
   var items=files.map(function(f){
     var nm=esc(f.name||"첨부파일");
     var ext=(nm.split(".").pop()||"").toUpperCase(); if(ext.length>4||/\s/.test(ext)) ext="FILE";
