@@ -513,8 +513,8 @@ function row(L,i){
   let gradechip="", estcell="", trGrade="", trProfit="", trSise="";
   // 유사거래 N건 칩 — 사전계산 nb_count(있으면 즉시), 없으면 fillGmGrades 폴백이 data-nbkey로 채움
   const nbTxt=(n)=>(n!=null&&+n>0)?('유사거래 '+(+n).toLocaleString()+'건'):"";
-  const nbchip=graded?`<span class="nbchip" data-nbkey="${escAttr(key)}"${L.nb_count!=null?' data-done="1"':''}>${warmed?nbTxt(L.nb_count):""}</span>`:"";
-  const trNb=(graded&&L.nb_count!=null)?` data-nb="${+L.nb_count}"`:"";   // 유사거래 많은순 정렬용
+  const nbchip=(graded&&GM_VILLA_RE.test(usg))?`<span class="nbchip" data-nbkey="${escAttr(key)}"${L.nb_count!=null?' data-done="1"':''}>${warmed?nbTxt(L.nb_count):""}</span>`:"";   // 아파트/오피스텔은 유사거래 칩 없음(주인님 지시)
+  const trNb=(GM_VILLA_RE.test(usg)&&L.nb_count!=null)?` data-nb="${+L.nb_count}"`:"";   // 유사거래 많은순 정렬용(빌라류만)
   if(warmed){
     const cls=GM_GCLS[L.buy_grade]||"g-mid";
     gradechip=`<span class="gradechip" data-key="${escAttr(key)}" data-done="1"><span class="gbadge ${cls}" title="${escAttr(L.grade_reason||"")}">${L.buy_grade}</span></span>`;
@@ -631,9 +631,10 @@ async function fillGmGrades(){
     el.innerHTML='<span class="gbadge '+cls+'" title="'+escAttr(g.reason||"")+'">'+g.grade+'</span>';
     const tr=el.closest('tr'); if(tr){ tr.dataset.grade=g.grade; if(g.profit!=null)tr.dataset.profit=g.profit; if(g.sise!=null)tr.dataset.sise=g.sise; }
     // 유사거래 N건 칩도 buy_grade 응답의 nb_count로 채움(같은 물건, 별도 호출 없음)
-    if(g.nb_count!=null){ const _tr=el.closest('tr'); if(_tr) _tr.dataset.nb=+g.nb_count;
-      const nc=_tr&&_tr.querySelector('.nbchip[data-nbkey="'+CSS.escape(key)+'"]');
-      if(nc && !nc.dataset.done){ nc.dataset.done="1"; if(+g.nb_count>0) nc.textContent='유사거래 '+(+g.nb_count).toLocaleString()+'건'; } }
+    if(g.nb_count!=null){ const _tr=el.closest('tr');
+      const nc=_tr&&_tr.querySelector('.nbchip[data-nbkey="'+CSS.escape(key)+'"]');   // 아파트는 nbchip 없음 → 아래 전부 스킵
+      if(nc){ if(_tr) _tr.dataset.nb=+g.nb_count;
+        if(!nc.dataset.done){ nc.dataset.done="1"; if(+g.nb_count>0) nc.textContent='유사거래 '+(+g.nb_count).toLocaleString()+'건'; } } }
   });
   applyGradeFilter();   // 등급 도착 후 필터 재적용
   applyGmSort();        // 정렬도 재적용(등급/차익 기준 정렬 반영)
