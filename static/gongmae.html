@@ -206,7 +206,13 @@
     <div class="toolbar">
       <div style="display:flex;gap:8px;align-items:center;">
         <label class="ck"><input type="checkbox" id="selectAll" onchange="toggleAll(this)"> 전체선택</label>
-        <select id="gradeSel" onchange="pickGrade(this.value)" title="매수판정으로 거르기(현재 목록 기준)">
+        <select id="pageSize" onchange="changePageSize()" title="한 페이지에 볼 물건 수">
+          <option value="20">20개씩 보기</option>
+          <option value="30">30개씩 보기</option>
+          <option value="50">50개씩 보기</option>
+          <option value="100" selected>100개씩 보기</option>
+        </select>
+        <select id="gradeSel" onchange="pickGrade(this.value)" title="매수판정으로 거르기(전체 결과 기준)">
           <option value="">매수판정 전체</option>
           <option value="매수양호">매수양호</option>
           <option value="매수검토">매수검토</option>
@@ -432,7 +438,7 @@ function fillPriceSelects(){
 }
 let GM_PAGE=1, GM_TOTAL=0;
 // pageSize(툴바) 우선, 없으면 pgRows(폼). 경매 auctions.html의 15~150 대응(공매는 20~100).
-function gmRows(){ return 100; }   // 무조건 100개씩(주인님 지정) — 페이지당 선택 제거
+function gmRows(){ return +(document.getElementById("pageSize")||{}).value || 100; }   // 페이지당(선택값·기본 100)
 function gmParams(page){
   const p=new URLSearchParams({rows:String(gmRows()),page:String(page)});
   const pr=document.getElementById("prop").value; p.set("prop",pr);   // 빈값=전체(명시 전송)
