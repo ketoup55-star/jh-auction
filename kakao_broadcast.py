@@ -105,23 +105,31 @@ def _items(params, tries=4):
     return []
 
 
+_RESI = ("아파트", "다세대", "연립", "빌라", "도시형")   # 주거 용도(=api.main._HERO_OR) — 앱측 필터용
+
+
 def next_sale_date():
-    """내일 이후 가장 가까운 매각기일(현황 주거). 주말·연휴는 매각기일이 없어 자동으로 다음 평일로."""
-    from api import main as M
+    """내일 이후 가장 가까운 매각기일(현황 주거). 인덱스 범위(sell_date_d)만으로 좁혀 받고 data_class·용도는 앱에서 필터.
+    (무거운 or(용도)+data_class 를 DB에 넣으면 전체스캔 → 크롤러 부하 시 3초 statement timeout. 주인님 2026-07-08.)"""
     tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
-    rows = _items({"select": "sell_date_d", "data_class": "eq.현황", "or": M._HERO_OR,
-                   "sell_date_d": f"gte.{tomorrow}", "order": "sell_date_d.asc", "limit": "80"})
-    ds = sorted({x["sell_date_d"] for x in rows if x.get("sell_date_d") and x["sell_date_d"] >= tomorrow})
+    rows = _items({"select": "sell_date_d,data_class,usage_name",
+                   "sell_date_d": f"gte.{tomorrow}", "order": "sell_date_d.asc", "limit": "3000"})
+    ds = sorted({r["sell_date_d"] for r in rows
+                 if r.get("sell_date_d") and r["sell_date_d"] >= tomorrow
+                 and (r.get("data_class") or "") == "현황"
+                 and any(k in (r.get("usage_name") or "") for k in _RESI)})
     return ds[0] if ds else None
 
 
 def prev_sale_date():
     """어제 이전 가장 가까운 매각일(매각 완료 주거)."""
-    from api import main as M
     today = datetime.date.today().isoformat()
-    rows = _items({"select": "sell_date_d", "or": M._HERO_OR, "result": "like.매각*",
-                   "sell_date_d": f"lt.{today}", "order": "sell_date_d.desc", "limit": "80"})
-    ds = sorted({x["sell_date_d"] for x in rows if x.get("sell_date_d") and x["sell_date_d"] < today}, reverse=True)
+    rows = _items({"select": "sell_date_d,result,usage_name",
+                   "sell_date_d": f"lt.{today}", "order": "sell_date_d.desc", "limit": "3000"})
+    ds = sorted({r["sell_date_d"] for r in rows
+                 if r.get("sell_date_d") and r["sell_date_d"] < today
+                 and str(r.get("result") or "").startswith("매각")
+                 and any(k in (r.get("usage_name") or "") for k in _RESI)}, reverse=True)
     return ds[0] if ds else None
 
 
