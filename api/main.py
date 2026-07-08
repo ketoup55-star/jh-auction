@@ -3700,7 +3700,8 @@ def _kakao_run(kind, force=False):
     if kind == "news":
         merged = list(c.get("sent_links", [])) + new_links
         c["sent_links"] = list(dict.fromkeys(merged))[-800:]   # 중복 제거 + 최근 800개만 유지
-    c["sent_date"] = date   # 모든 종류 공통: 오늘 발송 마커(스케줄러가 '오늘 미발송' 판정에 사용)
+    else:
+        c["sent_date"] = date   # upcoming/sold: 매각기일(내용 중복방지용) — 달력날짜 아님(스케줄러는 auto_date 사용)
     c["last"] = now
     st[kind] = c
     kb.save_state(st)
@@ -3713,9 +3714,10 @@ _KAKAO_FIRED = {}   # kind -> "YYYY-MM-DD HH:MM"(같은 분 재발화 방지)
 
 
 def _kakao_scheduler_loop():
-    """매 30초 확인 → '발송시각 경과(+2시간 창) & 오늘 미발송'이면 _kakao_run. (KAKAO_BROADCAST=1일 때만 기동)
-    정확한 분 매칭이 아니라 '시각 지났고 오늘 아직 안 보냄'으로 판정 → 서버 재시작·일시적 실패(매각기일
-    조회 등)에도 그날 안에 확실히 발송(성공 전까지 매 분 재시도, 성공 시 sent_date=오늘로 중복 방지)."""
+    """매 30초 확인 → '발송시각 경과(+2시간 창) & 오늘 미처리(auto_date)'면 _kakao_run. (KAKAO_BROADCAST=1일 때만)
+    정확한 분 매칭이 아니라 '시각 지났고 오늘 아직 자동발송 안 함'으로 판정 → 서버 재시작·일시적 실패(매각기일
+    조회 등)에도 그날 안에 확실히 발송(일시실패는 매 분 재시도, 처리완료 시 auto_date=오늘 달력날짜로 재발화 방지).
+    ※ auto_date=자동발송한 '달력날짜' / sent_date=발송한 '매각기일'(내용 중복방지) — 서로 다른 축이라 분리."""
     import time as _t, datetime as _dt
     print("[kakao] 자동발송 스케줄러 시작(로컬 전용)", flush=True)
     while True:
@@ -3730,8 +3732,8 @@ def _kakao_scheduler_loop():
                 t = (c.get("time") or "").strip()
                 if not (c.get("on") and (c.get("room") or "").strip() and len(t) == 5 and t[2] == ":"):
                     continue
-                if c.get("sent_date") == today:
-                    continue                       # 오늘 이미 발송 완료
+                if c.get("auto_date") == today:
+                    continue                       # 오늘 이미 자동발송 처리함(성공/정상스킵) — 재발화 방지
                 try:
                     sched = now.replace(hour=int(t[:2]), minute=int(t[3:5]), second=0, microsecond=0)
                 except Exception:
@@ -3744,6 +3746,12 @@ def _kakao_scheduler_loop():
                 _KAKAO_FIRED[kind] = stamp
                 r = _kakao_run(kind)
                 print(f"[kakao] 정기발송 {kind} @{stamp}: {r.get('msg')}", flush=True)
+                # 일시적 읽기실패('찾지 못')만 다음 분 재시도. 그 외(발송성공·이미발송·대상없음)는 오늘 처리완료로 마킹.
+                if "찾지 못" not in (r.get("msg") or ""):
+                    try:
+                        st2 = kb.load_state(); st2.setdefault(kind, {})["auto_date"] = today; kb.save_state(st2)
+                    except Exception:
+                        pass
         except Exception as e:
             print(f"[kakao] 스케줄러 오류: {e}", flush=True)
         _t.sleep(30)
