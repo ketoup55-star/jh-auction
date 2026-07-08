@@ -105,9 +105,14 @@
   .ecsi .lbl,.eprofit .lbl,.eloss .lbl{flex:0 0 auto;}.ecsi .amt,.eprofit .amt,.eloss .amt{flex:1 1 auto;text-align:right;}
   .nosise{color:#9aa0a6;font-weight:600;}
   .villaest:empty,.aptest:empty{display:none;}
-  /* 유사거래 N건 칩(경매 '실거래 N건' 대응) */
+  /* 유사거래 N건 칩(빌라류 — 경매 '유사거래' 대응) */
   .nbchip{display:inline-block;margin-left:5px;vertical-align:middle;font-size:11px;font-weight:600;color:#2c5db0;background:#eef3fb;border:1px solid #cfe0f5;border-radius:4px;padding:0 6px;line-height:16px;white-space:nowrap;}
   .nbchip:empty{display:none;}
+  /* 아파트·오피스텔 칩: 실거래(초록, auctions.html t3mchip 1:1)·호가(인디고, auctions.html kbcnt 1:1) */
+  .rtchip{display:inline-block;margin-left:5px;vertical-align:middle;background:#e9f7ee;border:1px solid #bfe3cd;color:#1a7d46;font-size:11px;font-weight:700;border-radius:4px;padding:0 6px;line-height:16px;white-space:nowrap;}
+  .rtchip:empty{display:none;}
+  .hgchip{display:inline-block;margin-left:5px;vertical-align:middle;background:#eef2ff;border:1px solid #c7d2fe;color:#3f51b5;font-size:11px;font-weight:700;border-radius:4px;padding:0 6px;line-height:16px;white-space:nowrap;}
+  .hgchip:empty{display:none;}
   /* PREMIUM 스티커(auctions.html 1:1) */
   .prem-badge{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#7a5c00;
     background:linear-gradient(180deg,#ffe38a,#ffcf45);border:1px solid #e8b830;border-radius:4px;
@@ -513,8 +518,13 @@ function row(L,i){
   let gradechip="", estcell="", trGrade="", trProfit="", trSise="";
   // 유사거래 N건 칩 — 사전계산 nb_count(있으면 즉시), 없으면 fillGmGrades 폴백이 data-nbkey로 채움
   const nbTxt=(n)=>(n!=null&&+n>0)?('유사거래 '+(+n).toLocaleString()+'건'):"";
-  const nbchip=(graded&&GM_VILLA_RE.test(usg))?`<span class="nbchip" data-nbkey="${escAttr(key)}"${L.nb_count!=null?' data-done="1"':''}>${warmed?nbTxt(L.nb_count):""}</span>`:"";   // 아파트/오피스텔은 유사거래 칩 없음(주인님 지시)
+  const nbchip=(graded&&GM_VILLA_RE.test(usg))?`<span class="nbchip" data-nbkey="${escAttr(key)}"${L.nb_count!=null?' data-done="1"':''}>${warmed?nbTxt(L.nb_count):""}</span>`:"";   // 빌라류만 유사거래 칩
   const trNb=(GM_VILLA_RE.test(usg)&&L.nb_count!=null)?` data-nb="${+L.nb_count}"`:"";   // 유사거래 많은순 정렬용(빌라류만)
+  // 아파트·오피스텔: 실거래 N건(nb_count=같은단지·평형 최근3개월)·호가 N건(apt_hoga=KB 같은평형 매매매물). 사전계산(precompute_apt_chips.py) 값만 렌더.
+  const aptChips=(graded&&GM_APT_RE.test(usg))
+    ? ((L.nb_count!=null&&+L.nb_count>0?`<span class="rtchip" title="같은 단지·평형(전용±5%) 최근 3개월 국토부 실거래">실거래 ${(+L.nb_count).toLocaleString()}건</span>`:"")
+      +(L.apt_hoga!=null&&+L.apt_hoga>0?`<span class="hgchip" title="KB부동산에 호가로 올라온 같은 단지·평형(전용±3㎡) 매매 매물 수">호가 ${(+L.apt_hoga).toLocaleString()}건</span>`:""))
+    : "";
   if(warmed){
     const cls=GM_GCLS[L.buy_grade]||"g-mid";
     gradechip=`<span class="gradechip" data-key="${escAttr(key)}" data-done="1"><span class="gbadge ${cls}" title="${escAttr(L.grade_reason||"")}">${L.buy_grade}</span></span>`;
@@ -542,7 +552,7 @@ function row(L,i){
     <td class="cc"><button class="gmfav${GMFAV.has(L.manage_no)?' on':''}" onclick="event.stopPropagation();gmFav(${i},this)" title="관심등록/해제">${GMFAV.has(L.manage_no)?'♥':'♡'}</button><br>${L.manage_no||"-"}</td>
     <td><div style="display:flex;gap:9px;align-items:center;">
       ${L.thumb?`<img src="${L.thumb}" referrerpolicy="no-referrer" loading="lazy" style="width:66px;height:50px;object-fit:cover;border-radius:5px;flex:0 0 auto;background:#eef1f5;border:1px solid var(--line)" onerror="this.style.display='none'">`:""}
-      <div style="min-width:0"><b>${L.name||"-"}</b><div style="color:var(--muted);margin-top:2px">${L.org||""}</div><div style="margin-top:3px">${gradechip}${nbchip}</div></div>
+      <div style="min-width:0"><b>${L.name||"-"}</b><div style="color:var(--muted);margin-top:2px">${L.org||""}</div><div style="margin-top:3px">${gradechip}${nbchip}${aptChips}</div></div>
     </div></td>
     <td class="cc">${(L.usage||"").split(" ").pop()||"-"}</td>
     <td class="num"><div class="price">${won(L.appraisal_price)}</div><span class="low">${won(L.min_price)}${L.bid_ratio!=null?` (${L.bid_ratio}%)`:""}</span>${estcell}</td>

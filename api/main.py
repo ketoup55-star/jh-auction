@@ -4878,7 +4878,7 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
         order = _GM_SORTS.get(sort or "", "bid_close.asc")
         # 사전계산(warm_gongmae_grade.py) 컬럼(buy_grade·sise·profit·grade_reason·nb_count)도 select해
         # item에 병합. 목록이 행별 라이브 호출 없이 배지·시세·차익·유사거래건수를 즉시 렌더.
-        params = {"select": "data,bid_close,buy_grade,sise,profit,grade_reason,nb_count",
+        params = {"select": "data,bid_close,buy_grade,sise,profit,grade_reason,nb_count,apt_hoga",
                   "order": order, "offset": str(max(0, (page - 1) * rows)), "limit": str(rows)}
         # ③ and(스칼라) + or(지역/용도) 병합.
         #    PostgREST root or= 는 1개만 허용 → or 그룹이 2개↑(복수지역 + 용도복수, 또는 시도 + 용도)면
@@ -4922,7 +4922,8 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
             d["sise"] = r.get("sise")
             d["profit"] = r.get("profit")
             d["grade_reason"] = r.get("grade_reason")
-            d["nb_count"] = r.get("nb_count")   # 유사(주변) 실거래 건수(warm 저장값, 없으면 None)
+            d["nb_count"] = r.get("nb_count")   # 유사(주변) 실거래 건수(빌라) / 아파트·오피스텔은 실거래 3개월 건수
+            d["apt_hoga"] = r.get("apt_hoga")   # 아파트·오피스텔 KB 호가(같은 단지·평형 매매매물) 건수(precompute_apt_chips.py)
             items.append(d)
         return {"items": items, "total": total, "page": page, "source": "db"}
     except Exception as e:
