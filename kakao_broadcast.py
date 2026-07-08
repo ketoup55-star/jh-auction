@@ -86,14 +86,32 @@ def _won(n):
 
 
 # ───────── 날짜(매각기일 데이터로 영업일 판단) ─────────
+def _items(params, tries=4):
+    """items 조회 + Supabase 타임아웃(크롤러 부하) 재시도 → 항상 list 반환(실패 시 []).
+    지금발송·자동발송이 크롤러 포화 순간에 '매각일 못 찾음'·빈 발송으로 실패하던 것 방지."""
+    from api import main as M
+    import time as _t
+    for i in range(tries):
+        try:
+            r = M.auction_db._get("items", params)
+            if r.status_code in (200, 206):
+                j = r.json()
+                if isinstance(j, list):
+                    return j
+        except Exception:
+            pass
+        if i < tries - 1:
+            _t.sleep(1.2 * (i + 1))   # 1.2s→2.4s→3.6s 백오프(타임아웃 창 회피)
+    return []
+
+
 def next_sale_date():
     """내일 이후 가장 가까운 매각기일(현황 주거). 주말·연휴는 매각기일이 없어 자동으로 다음 평일로."""
     from api import main as M
     tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
-    r = M.auction_db._get("items", {"select": "sell_date_d", "data_class": "eq.현황", "or": M._HERO_OR,
-                                    "sell_date_d": f"gte.{tomorrow}", "order": "sell_date_d.asc", "limit": "80"})
-    ds = sorted({x["sell_date_d"] for x in (r.json() if r.status_code in (200, 206) else [])
-                 if x.get("sell_date_d") and x["sell_date_d"] >= tomorrow})
+    rows = _items({"select": "sell_date_d", "data_class": "eq.현황", "or": M._HERO_OR,
+                   "sell_date_d": f"gte.{tomorrow}", "order": "sell_date_d.asc", "limit": "80"})
+    ds = sorted({x["sell_date_d"] for x in rows if x.get("sell_date_d") and x["sell_date_d"] >= tomorrow})
     return ds[0] if ds else None
 
 
@@ -101,10 +119,9 @@ def prev_sale_date():
     """어제 이전 가장 가까운 매각일(매각 완료 주거)."""
     from api import main as M
     today = datetime.date.today().isoformat()
-    r = M.auction_db._get("items", {"select": "sell_date_d", "or": M._HERO_OR, "result": "like.매각*",
-                                    "sell_date_d": f"lt.{today}", "order": "sell_date_d.desc", "limit": "80"})
-    ds = sorted({x["sell_date_d"] for x in (r.json() if r.status_code in (200, 206) else [])
-                 if x.get("sell_date_d") and x["sell_date_d"] < today}, reverse=True)
+    rows = _items({"select": "sell_date_d", "or": M._HERO_OR, "result": "like.매각*",
+                   "sell_date_d": f"lt.{today}", "order": "sell_date_d.desc", "limit": "80"})
+    ds = sorted({x["sell_date_d"] for x in rows if x.get("sell_date_d") and x["sell_date_d"] < today}, reverse=True)
     return ds[0] if ds else None
 
 
@@ -120,12 +137,7 @@ def _pick_type(kind, date, tparam, est_kind, n=2):
         params["data_class"] = "eq.현황"
     else:
         params["result"] = "like.매각*"
-    try:
-        rows = M.auction_db._get("items", params).json()
-    except Exception:
-        rows = []
-    if not isinstance(rows, list):   # Supabase 타임아웃 등 에러응답(dict {code,message})·문자열 방어 — 크래시 방지
-        rows = []
+    rows = _items(params)   # 타임아웃 재시도 + 항상 list 반환(크래시·간헐실패 방지)
     good = [x for x in rows if isinstance(x, dict) and "양호" in (x.get("buy_grade") or "")]
     keys = [x["item_key"] for x in good][:150]
     if not keys:
