@@ -4764,6 +4764,10 @@ def _gm_q(v: str) -> str:
 _GM_SORTS = {   # 정렬 키 → PostgREST order (감정가·최저가는 nullslast로 비공개(NULL) 뒤로)
     "bid_close": "bid_close.asc", "appr": "appraisal_price.desc.nullslast",
     "low": "min_price.asc.nullslast",
+    # 프리미엄 정렬(전역) — 종전엔 매핑 부재로 bid_close.asc 폴백 = 정렬 미작동 버그였음(주인님 2026-07-08).
+    "profit_desc": "profit.desc.nullslast",     # 차익 높은순
+    "nb_desc": "nb_count.desc.nullslast",       # 유사거래 많은순(빌라) / 실거래 3개월(아파트) — nb_count 공용
+    "trade_desc": "nb_count.desc.nullslast",    # 실거래 많은순(아파트) — nb_count 공용
 }
 
 
@@ -4846,7 +4850,7 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
                  appr_min: Optional[int] = None, appr_max: Optional[int] = None,
                  low_min: Optional[int] = None, low_max: Optional[int] = None,
                  grade: Optional[str] = None,
-                 sort: Optional[str] = None) -> dict:
+                 sort: Optional[str] = None, sort2: Optional[str] = None) -> dict:
     """온비드 공매물건 목록 — 우리 DB(gongmae_items) 소재지/재산유형/명칭/감정가·최저가/정렬 필터.
     온비드 API가 소재지 검색을 지원하지 않아 전량 적재분을 우리가 필터한다.
     소재지·용도는 **복수 선택**(경매 supabase_source._filters regions/sido/usages 로직 이식):
@@ -4875,7 +4879,10 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
         # ② 소재지(복수)·용도(복수) → or 그룹(들) (경매 검증 로직 이식). legacy sido/sgg/usage 도 흡수.
         ru = _gm_region_usage_filters(regions=regions, sido=sido, sgg=sgg,
                                       usages=usages, usage=usage)
-        order = _GM_SORTS.get(sort or "", "bid_close.asc")
+        # 전역 정렬: 1차(sort) + 2차(sort2, 동점 시) + bid_close 안정 타이브레이커(페이지네이션 결정성 보장).
+        _o1 = _GM_SORTS.get(sort or "", None)
+        _o2 = _GM_SORTS.get(sort2 or "", None)
+        order = ",".join(dict.fromkeys([p for p in (_o1, _o2, "bid_close.asc") if p]))
         # 사전계산(warm_gongmae_grade.py) 컬럼(buy_grade·sise·profit·grade_reason·nb_count)도 select해
         # item에 병합. 목록이 행별 라이브 호출 없이 배지·시세·차익·유사거래건수를 즉시 렌더.
         params = {"select": "data,bid_close,buy_grade,sise,profit,grade_reason,nb_count,apt_hoga",
@@ -5521,8 +5528,8 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
     ck = "gm_grade:" + mng + ((":" + cdtn) if cdtn else "")
     try:
         hit = auction_db.cache_get_many([ck]).get(ck)
-        # v>=3: 기준가(base=예상낙찰가/현재최저) 반영. v<3(구버전)은 profit 기준 달라 재계산.
-        if isinstance(hit, dict) and hit.get("v", 0) >= 4:
+        # v>=5: 추정시세 없을 때 최근 실거래가 fallback 반영(주인님 2026-07-08). v<5는 재계산.
+        if isinstance(hit, dict) and hit.get("v", 0) >= 5:
             return {**hit, "_cache": "hit"}
     except Exception:
         pass
@@ -5535,9 +5542,11 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
     if not (is_villa or is_apt):
         return {"applicable": False, "reason": "매수판정 대상 아님(빌라류·아파트만)",
                 "usage": usage, "v": 2}
-    # ① 추정 시세(용도별 소스 분기) + 유사(주변) 실거래 건수(nb_count)
+    # ① 추정 시세(용도별 소스 분기) + 유사(주변) 실거래 건수(nb_count) + 최근 실거래가(추정시세 없을 때 fallback)
     sise = None
     nb_count = None   # 빌라=nearby_trades 건수 / 아파트=같은평형 매칭 실거래 수
+    recent_price = None   # 최근 실거래가 — 추정시세 산출불가 시 기준가로 사용(아파트=같은평형 최신, 빌라=유사거래 최신)
+    recent_date = None    # 그 실거래 체결일(YYYY-MM-DD) — 물건상세 표시용
     try:
         if is_villa:
             ev = gongmae_villa_est(mng, cdtn)
@@ -5547,7 +5556,10 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
             try:
                 nb = gongmae_nearby_trades(mng, cdtn)
                 if isinstance(nb, dict) and nb.get("available"):
-                    nb_count = len(nb.get("trades") or [])
+                    _tr = nb.get("trades") or []
+                    nb_count = len(_tr)
+                    if _tr:   # 최근 실거래가 = 가장 최근 유사거래(nearby_trades는 deal_date desc 정렬)
+                        recent_price = _to_int(_tr[0].get("amount")); recent_date = _tr[0].get("deal_date")
             except Exception:
                 nb_count = None
         else:
@@ -5561,6 +5573,9 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
                     nb_count = _to_int(_sm.get("count"))
                 elif isinstance(ai.get("trades"), list):
                     nb_count = len(ai["trades"])
+                # 최근 실거래가 = summary.recent(같은평형 최신 실거래 금액)+recent_date — est(3/6개월 창)가 None이어도 존재
+                if isinstance(_sm, dict) and _sm.get("recent"):
+                    recent_price = _to_int(_sm.get("recent")); recent_date = _sm.get("recent_date")
     except Exception:
         sise = None
     # ② 판정 기준가(base) = 예상낙찰가(있으면) / 없으면 현재 회차 최저입찰가.  (주인님 지정 2026-07-08)
@@ -5588,19 +5603,35 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
     kind = "villa" if is_villa else "apt"
     # ③ 판정(주인님 지정 규칙) — 기준가 base 사용
     if not sise:
-        out = {"applicable": True, "grade": "매수금지", "kind": kind,
-               "reason": "수요 없음 · 매수세 없음",
-               "sise": None, "base": None, "base_src": base_src, "expected_bid": exp_bid,
-               "cur_min": cur_min, "last_min": base, "profit": None, "nb_count": nb_count, "v": 4}
+        # 추정시세 산출불가 → 최근 실거래가 fallback(주인님 지정 2026-07-08):
+        #   차익 = 최근실거래가 − base. ≥3천만 → 매수검토(추정시세 없어 '매수양호'는 안 줌).
+        #   그 외/기준가 부재 → 매수금지. 최근 실거래가 자체가 없으면 매수금지.
+        if recent_price and base:
+            pf = recent_price - base
+            if pf >= 30000000:
+                grade, reason = "매수검토", "추정시세 없음 · 최근 실거래가 기준 차익 3천만원 이상"
+            else:
+                grade, reason = "매수금지", "추정시세 없음 · 최근 실거래가 기준 차익 3천만원 미만"
+            out = {"applicable": True, "grade": grade, "kind": kind, "reason": reason,
+                   "sise": None, "sise_src": "최근실거래가",
+                   "recent_price": recent_price, "recent_date": recent_date,
+                   "base": base, "base_src": base_src, "expected_bid": exp_bid,
+                   "cur_min": cur_min, "last_min": base, "profit": pf, "nb_count": nb_count, "v": 5}
+        else:
+            out = {"applicable": True, "grade": "매수금지", "kind": kind,
+                   "reason": "수요 없음 · 매수세 없음(실거래 없음)",
+                   "sise": None, "sise_src": None, "recent_price": None, "recent_date": None,
+                   "base": base, "base_src": base_src, "expected_bid": exp_bid,
+                   "cur_min": cur_min, "last_min": base, "profit": None, "nb_count": nb_count, "v": 5}
     elif base is None:
         return {"applicable": False, "reason": "기준가(예상낙찰가/최저입찰가) 확인 불가",
-                "sise": sise, "kind": kind, "nb_count": nb_count, "v": 4}
+                "sise": sise, "kind": kind, "nb_count": nb_count, "v": 5}
     elif base > sise:
         out = {"applicable": True, "grade": "매수금지", "kind": kind,
                "reason": base_src + "가 추정시세보다 높음",
-               "sise": sise, "base": base, "base_src": base_src, "expected_bid": exp_bid,
+               "sise": sise, "sise_src": "추정시세", "base": base, "base_src": base_src, "expected_bid": exp_bid,
                "cur_min": cur_min, "last_min": base, "profit": sise - base,
-               "nb_count": nb_count, "v": 4}
+               "nb_count": nb_count, "v": 5}
     else:
         profit = sise - base
         if profit >= 30000000:
@@ -5608,9 +5639,9 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
         else:
             grade, reason = "매수검토", "차익 3천만원 미만"
         out = {"applicable": True, "grade": grade, "kind": kind, "reason": reason,
-               "sise": sise, "base": base, "base_src": base_src, "expected_bid": exp_bid,
+               "sise": sise, "sise_src": "추정시세", "base": base, "base_src": base_src, "expected_bid": exp_bid,
                "cur_min": cur_min, "last_min": base, "profit": profit,
-               "nb_count": nb_count, "v": 4}
+               "nb_count": nb_count, "v": 5}
     try:
         auction_db.cache_save(ck, out)
     except Exception:
