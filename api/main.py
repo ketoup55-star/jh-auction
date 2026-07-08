@@ -5164,7 +5164,7 @@ def gongmae_villa_est(mng: str, cdtn: Optional[str] = None) -> dict:
 
 
 @app.get("/gongmae/villa_expected_bid")
-def gongmae_villa_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
+def gongmae_villa_expected_bid(mng: str, cdtn: Optional[str] = None, sid: Optional[str] = Cookie(None)) -> dict:
     """공매 빌라/도생 예상낙찰가 — 경매 백데이터(빌라 매각사례) 참조·eb.compute_villa 무수정 재사용.
     반경1km·전용±6㎡·층±1·감정가±1500만·낙찰가율<100%·3년. gm_vexpbid: 캐시(온디맨드)."""
     from auction_analysis import expected_bid as eb
@@ -5172,7 +5172,7 @@ def gongmae_villa_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
     try:
         hit = auction_db.cache_get_many([ck]).get(ck)
         if isinstance(hit, dict):
-            return hit
+            return _expbid_gate(hit, sid)   # cases_used(참조 백데이터)는 관리자만
     except Exception:
         pass
     e, cur = _gm_cur(mng, cdtn)
@@ -5211,18 +5211,18 @@ def gongmae_villa_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
             auction_db.cache_save(ck, r)
         except Exception:
             pass
-    return r
+    return _expbid_gate(r, sid)   # cases_used는 관리자만(캐시엔 원본 저장, 반환만 게이트)
 
 
 @app.get("/gongmae/expected_bid")
-def gongmae_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
+def gongmae_expected_bid(mng: str, cdtn: Optional[str] = None, sid: Optional[str] = Cookie(None)) -> dict:
     """공매 아파트 예상낙찰가 — 경매 백데이터(동일건물 아파트 매각사례)·eb.compute 무수정 재사용. gm_expbid: 캐시."""
     from auction_analysis import expected_bid as eb
     ck = "gm_expbid:" + mng
     try:
         hit = auction_db.cache_get_many([ck]).get(ck)
         if isinstance(hit, dict):
-            return hit
+            return _expbid_gate(hit, sid)   # cases_used(참조 백데이터)는 관리자만
     except Exception:
         pass
     e, cur = _gm_cur(mng, cdtn)
@@ -5256,7 +5256,7 @@ def gongmae_expected_bid(mng: str, cdtn: Optional[str] = None) -> dict:
             auction_db.cache_save(ck, r)
         except Exception:
             pass
-    return r
+    return _expbid_gate(r, sid)   # cases_used는 관리자만(캐시엔 원본 저장, 반환만 게이트)
 
 
 @app.get("/gongmae/apt_info")

@@ -456,6 +456,7 @@ async function loadGmFeatures(d, e){
     if(bc) bc.textContent=bid?won(bid):"인근 경매사례 없음";
     // 차익 기준가 = 예상낙찰가(있으면) / 없으면 현재 회차 최저입찰가(주인님 규칙)
     if(pc){ var _base=bid||(+d.min_price||0); if(_base&&sise){ var _pf=sise-_base; pc.textContent=(_pf<0?'−':'+')+won(Math.abs(_pf)); if(_pf>0) pc.classList.add("low"); } else pc.textContent="-"; }
+    renderGmCases(xb, document.getElementById("gm-grade-top"));   // 예상낙찰가 참조 경매 매각사례(관리자만)
   });
 }
 // ─── 매수판정 배지+코멘트(빌라/다세대/도시형 + 아파트 공용) — 마지막회차 최저가 vs 추정시세 ───
@@ -478,6 +479,25 @@ async function loadGmGrade(d){
     if(g.profit!=null) parts.push('차익 '+(g.profit>=0?'+':'−')+won(Math.abs(g.profit)));
     cmt.innerHTML=parts.join(' · ');
   }
+}
+// 예상낙찰가 참조 경매 매각사례(cases_used) — 서버가 관리자에게만 내려줌(비관리자는 없어서 미표시). 경매 renderExpBid 패턴.
+function renderGmCases(xb, cardEl){
+  if(!xb || !xb.cases_used || !xb.cases_used.length || !cardEl) return;
+  var card=cardEl.querySelector(".card")||cardEl;
+  if(card.querySelector(".expbid-cases")) return;   // 중복 방지
+  var cs=xb.cases_used;
+  var box=document.createElement("div"); box.className="expbid-cases"; box.style.cssText="margin-top:10px;font-size:12px";
+  var h='<div class="ebtoggle" style="font-weight:700;color:#666;cursor:pointer">🔒 관리자: 예상낙찰가 참조 경매 매각사례 '+cs.length+'건 ▼</div>'
+    +'<div class="ebtbl" style="display:none;margin-top:6px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">'
+    +'<tr style="color:#999;text-align:left"><th>사건번호</th><th>매각기일</th><th>주소</th><th>층</th><th>전용</th><th>감정가</th><th>낙찰가</th><th>낙찰가율</th><th>입찰인원</th><th>2등입찰가</th></tr>';
+  cs.forEach(function(x){
+    var p=(x.item_key||"").split("|");
+    var cn=p.length>=3?(p[1]+"타경"+p[2]+(p[3]&&p[3]!=="1"?" 물번"+p[3]:"")):"-";
+    h+='<tr style="border-top:1px solid #eee"><td>'+cn+'</td><td>'+(x.sell_date||"-")+'</td><td>'+esc(x.address||"-")+'</td><td>'+(x.floor!=null?x.floor+"층":"-")+'</td><td>'+(x.area!=null?x.area+"㎡":"-")+'</td><td>'+won(x.appraisal)+'</td><td style="color:#c0392b">'+won(x.sale_price)+'</td><td>'+(x.sale_rate!=null?Math.round(x.sale_rate)+"%":"-")+'</td><td>'+((x.bid_count!=null&&x.bid_count!=="")?x.bid_count+"명":"-")+'</td><td>'+(x.sale_2nd?won(x.sale_2nd):"-")+'</td></tr>';
+  });
+  h+='</table></div>'; box.innerHTML=h;
+  box.querySelector(".ebtoggle").onclick=function(){ var t=box.querySelector(".ebtbl"); t.style.display=t.style.display==="none"?"block":"none"; };
+  card.appendChild(box);
 }
 // 아파트/오피스텔: 아파트정보·실거래·예상낙찰가·차익·경쟁매물
 async function loadGmApt(box, d, gf){
@@ -548,6 +568,7 @@ async function loadGmApt(box, d, gf){
       +'</div></div>';
   }
   box.innerHTML=html;
+  renderGmCases(xb, box);   // 예상낙찰가 참조 경매 매각사례(관리자만)
 }
 // 유사거래 지도(카카오맵 + 빨강 물건핀 + 파랑 유사거래핀)
 var KAKAO_JS_KEY="d10bff18727c6f302ff09765b62b1b23", _kakaoLoad=null;
