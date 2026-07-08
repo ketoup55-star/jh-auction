@@ -124,26 +124,30 @@ def _pick_type(kind, date, tparam, est_kind, n=2):
         rows = M.auction_db._get("items", params).json()
     except Exception:
         rows = []
-    good = [x for x in rows if "양호" in (x.get("buy_grade") or "")]
+    if not isinstance(rows, list):   # Supabase 타임아웃 등 에러응답(dict {code,message})·문자열 방어 — 크래시 방지
+        rows = []
+    good = [x for x in rows if isinstance(x, dict) and "양호" in (x.get("buy_grade") or "")]
     keys = [x["item_key"] for x in good][:150]
     if not keys:
         return []
     kj = ",".join(keys)
     if est_kind == "apt":
-        ests = M.auction_apt_ests(kj, compute=False) or {}
-        exps = M.auction_expbid_batch(kj) or {}
+        ests = M.auction_apt_ests(kj, compute=False)
+        exps = M.auction_expbid_batch(kj)
     else:
-        ests = M.auction_villa_ests(kj, compute=False) or {}
-        exps = M.auction_vexpbid_batch(kj) or {}
+        ests = M.auction_villa_ests(kj, compute=False)
+        exps = M.auction_vexpbid_batch(kj)
+    if not isinstance(ests, dict): ests = {}   # 에러응답(dict/str)·None 방어
+    if not isinstance(exps, dict): exps = {}
     out = []
     THRESH = 30000000   # 매수양호 기준: 차익 3천만원 이상만 발송(손해·약한 물건 제외 — 주인님 지시)
     for x in good:
         k = x["item_key"]
-        price = (ests.get(k) or {}).get("price")
+        _e = ests.get(k); price = _e.get("price") if isinstance(_e, dict) else None
         if not price:
             continue                                 # 시세 없으면 제외(주인님 지시)
         if kind == "upcoming":
-            eb = (exps.get(k) or {}).get("expected_bid")
+            _x = exps.get(k); eb = _x.get("expected_bid") if isinstance(_x, dict) else None
             if not eb:
                 continue                              # 예상낙찰가 있는 물건만(주인님 지시)
             # 기준가 = 예상낙찰가·현재 최저입찰가 중 큰 값. 최저가 미만 낙찰 불가 →
