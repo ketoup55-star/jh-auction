@@ -3700,8 +3700,7 @@ def _kakao_run(kind, force=False):
     if kind == "news":
         merged = list(c.get("sent_links", [])) + new_links
         c["sent_links"] = list(dict.fromkeys(merged))[-800:]   # 중복 제거 + 최근 800개만 유지
-    else:
-        c["sent_date"] = date
+    c["sent_date"] = date   # 모든 종류 공통: 오늘 발송 마커(스케줄러가 '오늘 미발송' 판정에 사용)
     c["last"] = now
     st[kind] = c
     kb.save_state(st)
@@ -3714,24 +3713,37 @@ _KAKAO_FIRED = {}   # kind -> "YYYY-MM-DD HH:MM"(같은 분 재발화 방지)
 
 
 def _kakao_scheduler_loop():
-    """매 30초 config 발송시각 도달 확인 → on·시각일치·미발화면 _kakao_run. (KAKAO_BROADCAST=1일 때만 기동)"""
+    """매 30초 확인 → '발송시각 경과(+2시간 창) & 오늘 미발송'이면 _kakao_run. (KAKAO_BROADCAST=1일 때만 기동)
+    정확한 분 매칭이 아니라 '시각 지났고 오늘 아직 안 보냄'으로 판정 → 서버 재시작·일시적 실패(매각기일
+    조회 등)에도 그날 안에 확실히 발송(성공 전까지 매 분 재시도, 성공 시 sent_date=오늘로 중복 방지)."""
     import time as _t, datetime as _dt
     print("[kakao] 자동발송 스케줄러 시작(로컬 전용)", flush=True)
     while True:
         try:
             kb = _kb()
             now = _dt.datetime.now()
-            hhmm = now.strftime("%H:%M")
             stamp = now.strftime("%Y-%m-%d %H:%M")
+            today = now.strftime("%Y-%m-%d")
             st = kb.load_state()
             for kind in ("news", "upcoming", "sold"):
                 c = st.get(kind, {})
-                if c.get("on") and (c.get("time") or "") == hhmm and (c.get("room") or "").strip():
-                    if _KAKAO_FIRED.get(kind) == stamp:
-                        continue
-                    _KAKAO_FIRED[kind] = stamp
-                    r = _kakao_run(kind)
-                    print(f"[kakao] 정기발송 {kind} @{stamp}: {r.get('msg')}", flush=True)
+                t = (c.get("time") or "").strip()
+                if not (c.get("on") and (c.get("room") or "").strip() and len(t) == 5 and t[2] == ":"):
+                    continue
+                if c.get("sent_date") == today:
+                    continue                       # 오늘 이미 발송 완료
+                try:
+                    sched = now.replace(hour=int(t[:2]), minute=int(t[3:5]), second=0, microsecond=0)
+                except Exception:
+                    continue
+                elapsed = (now - sched).total_seconds()
+                if not (0 <= elapsed < 2 * 3600):  # 발송시각~+2시간 창(놓친 것 따라잡기·과도한 지각발송 방지)
+                    continue
+                if _KAKAO_FIRED.get(kind) == stamp:
+                    continue                       # 같은 분 중복 방지(실패 시 다음 분 재시도)
+                _KAKAO_FIRED[kind] = stamp
+                r = _kakao_run(kind)
+                print(f"[kakao] 정기발송 {kind} @{stamp}: {r.get('msg')}", flush=True)
         except Exception as e:
             print(f"[kakao] 스케줄러 오류: {e}", flush=True)
         _t.sleep(30)
