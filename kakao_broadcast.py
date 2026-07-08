@@ -90,10 +90,10 @@ def next_sale_date():
     """내일 이후 가장 가까운 매각기일(현황 주거). 주말·연휴는 매각기일이 없어 자동으로 다음 평일로."""
     from api import main as M
     tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
-    r = M.auction_db._get("items", {"select": "sell_date", "data_class": "eq.현황", "or": M._HERO_OR,
-                                    "sell_date": f"gte.{tomorrow}", "order": "sell_date.asc", "limit": "80"})
-    ds = sorted({_d10(x["sell_date"]) for x in (r.json() if r.status_code in (200, 206) else [])
-                 if _d10(x["sell_date"]) and _d10(x["sell_date"]) >= tomorrow})
+    r = M.auction_db._get("items", {"select": "sell_date_d", "data_class": "eq.현황", "or": M._HERO_OR,
+                                    "sell_date_d": f"gte.{tomorrow}", "order": "sell_date_d.asc", "limit": "80"})
+    ds = sorted({x["sell_date_d"] for x in (r.json() if r.status_code in (200, 206) else [])
+                 if x.get("sell_date_d") and x["sell_date_d"] >= tomorrow})
     return ds[0] if ds else None
 
 
@@ -101,10 +101,10 @@ def prev_sale_date():
     """어제 이전 가장 가까운 매각일(매각 완료 주거)."""
     from api import main as M
     today = datetime.date.today().isoformat()
-    r = M.auction_db._get("items", {"select": "sell_date", "or": M._HERO_OR, "result": "like.매각*",
-                                    "sell_date": f"lt.{today}", "order": "sell_date.desc", "limit": "80"})
-    ds = sorted({_d10(x["sell_date"]) for x in (r.json() if r.status_code in (200, 206) else [])
-                 if _d10(x["sell_date"]) and _d10(x["sell_date"]) < today}, reverse=True)
+    r = M.auction_db._get("items", {"select": "sell_date_d", "or": M._HERO_OR, "result": "like.매각*",
+                                    "sell_date_d": f"lt.{today}", "order": "sell_date_d.desc", "limit": "80"})
+    ds = sorted({x["sell_date_d"] for x in (r.json() if r.status_code in (200, 206) else [])
+                 if x.get("sell_date_d") and x["sell_date_d"] < today}, reverse=True)
     return ds[0] if ds else None
 
 
@@ -114,7 +114,7 @@ def _pick_type(kind, date, tparam, est_kind, n=2):
     from api import main as M
     sel = "item_key,address,buy_grade,min_price,building_area,case_no,court_name,deposit,appraisal_price,thumb_url"
     params = {"select": sel + (",sale_price,result,bid_count" if kind == "sold" else ""),
-              "sell_date": f"like.{date}*", "limit": "300"}
+              "sell_date_d": f"eq.{date}", "limit": "300"}   # 텍스트 like(풀스캔·타임아웃) → 인덱스 날짜컬럼(33배 빠름)
     params.update(tparam)
     if kind == "upcoming":
         params["data_class"] = "eq.현황"
