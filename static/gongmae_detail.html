@@ -475,6 +475,7 @@ async function loadGmGrade(d){
     var b={"매수양호":"ok","매수검토":"mid","매수금지":"no"}[g.grade]||"mid";
     var parts=['<b class="'+b+'">'+esc(g.grade)+'</b> · '+esc(g.reason||"")];
     if(g.sise!=null) parts.push('추정시세 '+won(g.sise));
+    else if(g.recent_price!=null) parts.push('최근 실거래가 '+won(g.recent_price)+(g.recent_date?' <span style="color:var(--muted)">('+esc(g.recent_date)+' 체결)</span>':''));
     if(g.base!=null) parts.push((g.base_src||'기준가')+' '+won(g.base));
     if(g.profit!=null) parts.push('차익 '+(g.profit>=0?'+':'−')+won(Math.abs(g.profit)));
     cmt.innerHTML=parts.join(' · ');

@@ -558,6 +558,14 @@ function row(L,i){
         ehtml+='<div class="'+(diff>=0?'eprofit':'eloss')+'"><span class="lbl">차익 :</span><span class="amt">'+(diff>=0?'+':'−')+won(Math.abs(diff))+'</span></div>';
         trProfit=` data-profit="${L.profit}"`;
       }
+    } else if(L.recent_trade_price!=null && +L.recent_trade_price>0){
+      // 추정시세 없음 → 최근 실거래가로 표시(체결 연월) + 차익(=최근실거래−낙찰가, profit 저장값)
+      const rd=(L.recent_trade_date||"").slice(0,7).replace("-",".");
+      ehtml='<div class="ecsi"><span class="lbl">실거래 :</span><span class="amt">'+won(+L.recent_trade_price)+(rd?' <span style="font-size:11px;color:var(--muted);font-weight:400">('+rd+')</span>':'')+'</span></div>';
+      if(L.profit!=null){ const diff=+L.profit;
+        ehtml+='<div class="'+(diff>=0?'eprofit':'eloss')+'"><span class="lbl">차익 :</span><span class="amt">'+(diff>=0?'+':'−')+won(Math.abs(diff))+'</span></div>';
+        trProfit=` data-profit="${L.profit}"`;
+      }
     } else {
       ehtml='<div class="ecsi"><span class="lbl nosise">시세 없음</span></div>';
     }
