@@ -1643,8 +1643,10 @@ async function loadVehicle(){
     ? `<span class="buyb gray" title="연식 또는 주행거리 정보 없음">ⓘ 정보없음</span>`
     : (g.ok ? `<span class="buyb green" title="허용 ${(+g.allowed).toLocaleString()}km 이하 · 사고조건 충족">✓ 매수 양호</span>`
             : `<span class="buyb red" title="${((g.reasons||[]).join(' / '))||('허용 '+(+g.allowed).toLocaleString()+'km 초과')}">✕ 매수 금지</span>`);
-  box.innerHTML=`<div class="card"><h2>🚗 ${r.machine?"기계/중기현황":"차량/중기현황"} ${badge}</h2>
-    <table class="vtbl">${rows}${accRow}${etcRow}${notes?`<tr><th>비고</th><td colspan="3" class="vnote">${notes}</td></tr>`:""}</table>
+  const multiBadge = r.multi_vehicle ? `<span class="buyb" style="background:#c47f00;color:#fff" title="여러 대를 한 세트로 매각(일괄매각)">⚠️ 일괄매각</span>` : "";
+  const multiNote = r.multi_vehicle ? `<div style="margin:6px 0 10px;padding:9px 12px;border-radius:8px;background:#fff7e6;border:1px solid #ffd591;color:#a15c00;font-size:13px;font-weight:600">⚠️ <b>일괄매각</b> — 이 물건은 여러 대를 한 세트로 매각합니다. 아래 차량현황·시세는 여러 대 정보가 섞여 있을 수 있으니 <b>감정평가서·사진 원문</b>을 확인하세요.</div>` : "";
+  box.innerHTML=`<div class="card"><h2>🚗 ${r.machine?"기계/중기현황":"차량/중기현황"} ${badge} ${multiBadge}</h2>
+    ${multiNote}<table class="vtbl">${rows}${accRow}${etcRow}${notes?`<tr><th>비고</th><td colspan="3" class="vnote">${notes}</td></tr>`:""}</table>
     <div class="sub" style="margin-top:9px">※ 수집된 차량/중기현황·보험개발원 사고이력 기준. 미수집 항목은 '확인 필요'로 표기됩니다.</div>
   </div>`;
 }

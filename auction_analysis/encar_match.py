@@ -307,6 +307,14 @@ def match_vehicle(fields: dict) -> dict:
     terms = _model_terms(fields.get("차명"))
     if not terms:
         return {"available": False, "reason": "차명(모델) 정보 없음"}
+    # 일반 분류어(SUV·승용·화물 등)만 있으면 실제 모델 불명(상세문서 미수집 등) → 매칭 금지.
+    #   광역 오매칭 방지: 예) 캐스퍼가 차명 'SUV'로만 잡혀 벤츠 EQE에 매칭돼 8305만 엉터리시세. (주인님 2026-07-08)
+    _GENERIC = {"SUV", "RV", "승용", "승용차", "승용자동차", "승합", "승합차", "승합자동차",
+                "화물", "화물차", "화물자동차", "특수", "특수자동차", "자동차", "중기", "건설기계",
+                "세단", "해치백", "쿠페", "왜건", "밴", "경형", "소형", "중형", "대형",
+                "지게차", "굴삭기", "트럭", "버스", "덤프", "탱크로리"}
+    if all(t.upper() in {g.upper() for g in _GENERIC} for t in terms):
+        return {"available": False, "reason": "차명이 일반 분류어(모델 불명) — 매칭 불가"}
     core = terms[0]
     year = _year4(fields.get("연식"))
     fcond = _fuel_cond(fields.get("사용연료"))

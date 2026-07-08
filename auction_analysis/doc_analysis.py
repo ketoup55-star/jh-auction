@@ -63,6 +63,17 @@ def evict_item(item_key: str) -> None:
             pass
 
 
+_MULTI_RE = re.compile(r"기호\s*[(（]\s*2")
+
+
+def _mark_multi(r):
+    """일괄매각(한 물번에 여러 대) 감지 — 감정평가서 '기타'의 '기호(2)' 표기 → multi_vehicle 플래그 부착.
+    여러 대가 한 필드로 뒤섞여 차량현황·시세가 오도되므로 상세는 배지 표시, 시세는 억제(주인님 2026-07-08)."""
+    if isinstance(r, dict) and r.get("available"):
+        r["multi_vehicle"] = bool(_MULTI_RE.search(str(r.get("etc_note") or "")))
+    return r
+
+
 def analyze_vehicle(source, item_key: str) -> dict:
     """차량외(자동차·중기) 차량/중기현황.
     ① 우선 vehicle_specs DB(크롤러 구조화) → PDF 파싱 없이 즉시.
@@ -75,7 +86,7 @@ def analyze_vehicle(source, item_key: str) -> dict:
     if spec:
         r = build_vehicle_from_specs(spec)
         if r:                               # 사고는 크롤 데이터에 없음 → '확인 필요'(감정평가서 파싱 안 함)
-            return r
+            return _mark_multi(r)
     if item_key in _vehicle_cache:          # ② 폴백(구 PDF 파싱) — 캐시
         return _vehicle_cache[item_key]
     out = {"available": False}
@@ -96,6 +107,7 @@ def analyze_vehicle(source, item_key: str) -> dict:
         except Exception as e:
             out = {"available": False, "reason": type(e).__name__}
     if out.get("available"):
+        _mark_multi(out)
         _vehicle_cache.remember(item_key, out)
     return out
 

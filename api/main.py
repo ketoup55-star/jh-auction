@@ -4501,9 +4501,10 @@ def auction_docsummary(item_key: str) -> dict:
 @app.get("/auction/vehicle")
 def auction_vehicle(item_key: str) -> dict:
     """차량외(자동차·중기): 매각물건명세서 '자동차의 표시' → 차량/중기현황. DB 우선→계산 후 DB저장."""
-    from auction_analysis.doc_analysis import analyze_vehicle
-    return _cached_doc("vehicle2", item_key,
-                       lambda: analyze_vehicle(auction_db, item_key))
+    from auction_analysis.doc_analysis import analyze_vehicle, _mark_multi
+    r = _cached_doc("vehicle2", item_key,
+                    lambda: analyze_vehicle(auction_db, item_key))
+    return _mark_multi(r) if isinstance(r, dict) else r   # 캐시된 옛값도 일괄매각 플래그 보장(재계산 불필요·regex만)
 
 
 def _match_fields(v: dict) -> dict:
@@ -4522,6 +4523,8 @@ def _compute_encar(item_key: str) -> dict:
     v = analyze_vehicle(auction_db, item_key)
     if not v.get("available"):
         return {"available": False, "reason": "차량 정보 없음"}
+    if v.get("multi_vehicle"):   # 일괄매각(여러 대) → 여러 대가 한 필드로 섞여 단일 시세가 오도 → 미제공
+        return {"available": False, "reason": "일괄매각(여러 대) — 개별 시세 미제공", "multi_vehicle": True}
     return match_vehicle(_match_fields(v))
 
 
