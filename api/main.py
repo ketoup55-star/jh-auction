@@ -4845,6 +4845,7 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
                  usages: Optional[list[str]] = Query(None, description="용도 다중(+버튼, usage 부분일치 OR)"),
                  appr_min: Optional[int] = None, appr_max: Optional[int] = None,
                  low_min: Optional[int] = None, low_max: Optional[int] = None,
+                 grade: Optional[str] = None,
                  sort: Optional[str] = None) -> dict:
     """온비드 공매물건 목록 — 우리 DB(gongmae_items) 소재지/재산유형/명칭/감정가·최저가/정렬 필터.
     온비드 API가 소재지 검색을 지원하지 않아 전량 적재분을 우리가 필터한다.
@@ -4869,6 +4870,8 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
             conds.append(("min_price", "gte", str(int(low_min))))
         if low_max is not None:
             conds.append(("min_price", "lte", str(int(low_max))))
+        if grade:                                           # 매수판정 서버필터(매수양호/검토/금지) — 100건 채운 해당등급만(클라 필터는 현재페이지만 걸러 <10건 문제)
+            conds.append(("buy_grade", "eq", grade))
         # ② 소재지(복수)·용도(복수) → or 그룹(들) (경매 검증 로직 이식). legacy sido/sgg/usage 도 흡수.
         ru = _gm_region_usage_filters(regions=regions, sido=sido, sgg=sgg,
                                       usages=usages, usage=usage)

@@ -457,6 +457,7 @@ function gmParams(page){
   const lm=document.getElementById("lowMin").value, lx=document.getElementById("lowMax").value;
   if(lm)p.set("low_min",lm); if(lx)p.set("low_max",lx);
   const so=document.getElementById("sort").value; if(so)p.set("sort",so);
+  if(gradeFilter) p.set("grade", gradeFilter);   // 매수판정 서버필터 — 해당 등급으로 100건 채워 조회(클라 필터는 현재페이지만 걸러 <10건)
   return p;
 }
 async function search(){ GM_PAGE=1; return loadPage(); }
@@ -576,7 +577,7 @@ function gatePremium(e){ if(!canPremium()){ if(e&&e.preventDefault)e.preventDefa
 (async function(){ try{ const u=await (await fetch("/auth/me",{cache:"no-store"})).json(); ME_RANK=u.grade_rank||0; IS_ADMIN=(u.role==="admin"); }catch(e){} })();
 // ── 매수판정 필터(현재 목록 기준 클라이언트 필터, 경매 pickGrade 대응) ──
 let gradeFilter="";
-function pickGrade(v){ gradeFilter=v||""; try{localStorage.setItem('gm_grade',gradeFilter);}catch(e){} applyGradeFilter(); }
+function pickGrade(v){ gradeFilter=v||""; try{localStorage.setItem('gm_grade',gradeFilter);}catch(e){} GM_PAGE=1; loadPage(); }
 function applyGradeFilter(){
   document.querySelectorAll('.gtbl tbody tr').forEach(tr=>{
     if(!gradeFilter){ tr.style.display=""; return; }
