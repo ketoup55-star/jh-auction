@@ -4504,7 +4504,7 @@ def auction_vehicle(item_key: str) -> dict:
     from auction_analysis.doc_analysis import analyze_vehicle, _mark_multi
     r = _cached_doc("vehicle2", item_key,
                     lambda: analyze_vehicle(auction_db, item_key))
-    return _mark_multi(r) if isinstance(r, dict) else r   # 캐시된 옛값도 일괄매각 플래그 보장(재계산 불필요·regex만)
+    return _mark_multi(r, auction_db, item_key) if isinstance(r, dict) else r   # 캐시된 옛값도 일괄매각 플래그 보장(사건에 타물번 차량 있으면 오판 해제)
 
 
 def _match_fields(v: dict) -> dict:

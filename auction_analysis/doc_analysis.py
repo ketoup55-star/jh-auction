@@ -66,11 +66,32 @@ def evict_item(item_key: str) -> None:
 _MULTI_RE = re.compile(r"기호\s*[(（]\s*2")
 
 
-def _mark_multi(r):
+def _has_other_car_obj(source, item_key):
+    """같은 사건에 '나'와 다른 물번의 차량이 있으면 True(=물번별 1대씩 별개 물건, 일괄매각 아님).
+    감정서를 공유하는 다물번 사건(예: 물번1 셀토스 + 물번2 투싼)이 '기호(2)'로 오판돼
+    시세가 부당하게 가려지는 것을 방지(주인님 2026-07-08)."""
+    try:
+        parts = str(item_key).split("|")            # PREFIX|YEAR|CASE|OBJNO
+        if len(parts) < 4 or not hasattr(source, "_get"):
+            return False
+        case_no, my_obj = f"{parts[1]}-{parts[2]}", str(parts[3])
+        resp = source._get("items", {"select": "obj_no", "case_no": f"eq.{case_no}",
+                                     "search_group": "eq.차량외", "limit": "100"})
+        rows = resp.json() if resp.status_code in (200, 206) else []
+        return any(str(x.get("obj_no")) != my_obj for x in rows if x.get("obj_no") is not None)
+    except Exception:
+        return False
+
+
+def _mark_multi(r, source=None, item_key=None):
     """일괄매각(한 물번에 여러 대) 감지 — 감정평가서 '기타'의 '기호(2)' 표기 → multi_vehicle 플래그 부착.
-    여러 대가 한 필드로 뒤섞여 차량현황·시세가 오도되므로 상세는 배지 표시, 시세는 억제(주인님 2026-07-08)."""
+    여러 대가 한 필드로 뒤섞여 차량현황·시세가 오도되므로 상세는 배지 표시, 시세는 억제(주인님 2026-07-08).
+    단, 같은 사건에 다른 물번의 차량이 있으면 각 물번=1대(별개 물건)이므로 일괄매각 아님 → 억제 해제."""
     if isinstance(r, dict) and r.get("available"):
-        r["multi_vehicle"] = bool(_MULTI_RE.search(str(r.get("etc_note") or "")))
+        flag = bool(_MULTI_RE.search(str(r.get("etc_note") or "")))
+        if flag and source is not None and item_key and _has_other_car_obj(source, item_key):
+            flag = False                            # 별개 물번의 차량 → 일괄매각 오판 해제
+        r["multi_vehicle"] = flag
     return r
 
 
@@ -86,7 +107,7 @@ def analyze_vehicle(source, item_key: str) -> dict:
     if spec:
         r = build_vehicle_from_specs(spec)
         if r:                               # 사고는 크롤 데이터에 없음 → '확인 필요'(감정평가서 파싱 안 함)
-            return _mark_multi(r)
+            return _mark_multi(r, source, item_key)
     if item_key in _vehicle_cache:          # ② 폴백(구 PDF 파싱) — 캐시
         return _vehicle_cache[item_key]
     out = {"available": False}
@@ -107,7 +128,7 @@ def analyze_vehicle(source, item_key: str) -> dict:
         except Exception as e:
             out = {"available": False, "reason": type(e).__name__}
     if out.get("available"):
-        _mark_multi(out)
+        _mark_multi(out, source, item_key)
         _vehicle_cache.remember(item_key, out)
     return out
 
