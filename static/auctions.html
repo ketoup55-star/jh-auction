@@ -1121,7 +1121,17 @@ async function doSearch(){
   loadStats();   // 물건통계 비동기 갱신(결과와 병렬) — 이 시점 _urlCaseno(상단 사건검색) 동기로 읽음
   const _q=buildQuery();   // 메인 쿼리도 _urlCaseno 읽음
   _urlCaseno="";           // ★상단 사건검색 caseno는 '초기 1회'만 적용 → 사용 직후 해제. 이후 어떤 필터 경로(상태·통계·검색하기 등)로 검색해도 사건번호 안 따라붙음
-  const d=await (await fetch("/auctions?"+_q,{cache:"no-store"})).json();
+  let d;
+  try{
+    const _r=await fetch("/auctions?"+_q,{cache:"no-store"});
+    if(!_r.ok) throw new Error("HTTP "+_r.status);
+    d=await _r.json();
+    if(!d || typeof d.total!=="number" || !Array.isArray(d.items)) throw new Error("bad response");
+  }catch(e){   // 서버 다운·일시 오류 → '물건 없음'이 아니라 오류로 명확히(사건번호 버그로 오해 방지)
+    const _c2=document.getElementById("cnt"); if(_c2) _c2.textContent="일시적 오류";
+    document.getElementById("grid").innerHTML='<div class="kv" style="padding:26px;text-align:center;color:#c0392b;font-weight:600">⚠️ 목록을 불러오지 못했습니다 (일시적 서버 오류).<br><a href="javascript:doSearch()" style="color:var(--primary);font-weight:700">다시 시도</a> 하거나 잠시 후 새로고침해 주세요.</div>';
+    return;
+  }
   document.getElementById("cnt").innerHTML=`검색결과 <b>${d.total.toLocaleString()}</b>건`;
   if(!d.items.length){ document.getElementById("grid").innerHTML='<div class="kv" style="padding:20px;text-align:center">조건에 맞는 물건이 없습니다.</div>'; }
   else{
