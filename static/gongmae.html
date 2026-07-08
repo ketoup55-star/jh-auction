@@ -351,20 +351,35 @@ async function gmFav(i,btn){
 }
 
 // ── 소재지 드롭다운(온비드 저장분 기준) ──
-let REGIONS={};
+let REGIONS={}, BJD_GM={};
 const SIDO_LABEL={"전남광주통합특별시":"광주·전남"};
 const SIDO_ORDER=["서울특별시","부산광역시","대구광역시","인천광역시","전남광주통합특별시","대전광역시","울산광역시","세종특별자치시","경기도","강원특별자치도","충청북도","충청남도","전북특별자치도","경상북도","경상남도","제주특별자치도"];
 async function loadRegions(){
   try{ REGIONS=await (await fetch("/static/data/gongmae_regions.json",{cache:"no-store"})).json(); }catch(e){ REGIONS={}; }
+  try{ BJD_GM=await (await fetch("/static/data/bjd_dong.json",{cache:"force-cache"})).json(); }catch(e){ BJD_GM={}; }   // 전체 법정동(물건 없는 동도 표시)
   const sd=document.getElementById("sido");
   const keys=Object.keys(REGIONS).sort((a,b)=>{let ia=SIDO_ORDER.indexOf(a),ib=SIDO_ORDER.indexOf(b);return (ia<0?99:ia)-(ib<0?99:ib);});
   keys.forEach(k=>{const o=document.createElement("option");o.value=k;o.textContent=SIDO_LABEL[k]||k;sd.appendChild(o);});
   sd.addEventListener("change",onSido);
+  document.getElementById("gugun").addEventListener("change",onGugun);   // 구/군 선택 → 동 목록 채우기
 }
 function onSido(){
   const sido=document.getElementById("sido").value;
   const gg=document.getElementById("gugun"); gg.innerHTML='<option value="">구/군 전체</option>';
   (REGIONS[sido]||[]).forEach(s=>{const o=document.createElement("option");o.value=s;o.textContent=s;gg.appendChild(o);});
+  document.getElementById("dong").innerHTML='<option value="">동/읍 전체</option>';
+}
+// 전체 법정동(bjd_dong) 기준 동 목록 — 물건 유무 무관. 전남광주=광주+전남 병합, 세종=단층(구군칸이 동/면).
+function gmDongList(sidoKey,gugun){
+  if(!gugun) return [];
+  var b=BJD_GM||{};
+  if(sidoKey==='전남광주통합특별시') return [].concat((b['광주광역시']||{})[gugun]||[],(b['전라남도']||{})[gugun]||[]);
+  return (b[sidoKey]||{})[gugun]||[];
+}
+function onGugun(){
+  var sido=document.getElementById("sido").value, gugun=document.getElementById("gugun").value;
+  var de=document.getElementById("dong"); de.innerHTML='<option value="">동/읍 전체</option>';
+  gmDongList(sido,gugun).forEach(function(d){var o=document.createElement("option");o.value=d;o.textContent=d;de.appendChild(o);});
 }
 
 // ── 용도 드롭다운(대분류 → 세부용도) ──
