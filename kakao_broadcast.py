@@ -136,6 +136,7 @@ def _pick_type(kind, date, tparam, est_kind, n=2):
         ests = M.auction_villa_ests(kj, compute=False) or {}
         exps = M.auction_vexpbid_batch(kj) or {}
     out = []
+    THRESH = 30000000   # 매수양호 기준: 차익 3천만원 이상만 발송(손해·약한 물건 제외 — 주인님 지시)
     for x in good:
         k = x["item_key"]
         price = (ests.get(k) or {}).get("price")
@@ -145,15 +146,22 @@ def _pick_type(kind, date, tparam, est_kind, n=2):
             eb = (exps.get(k) or {}).get("expected_bid")
             if not eb:
                 continue                              # 예상낙찰가 있는 물건만(주인님 지시)
-            bid, bid_lbl = eb, "예상낙찰가"
+            # 기준가 = 예상낙찰가·현재 최저입찰가 중 큰 값. 최저가 미만 낙찰 불가 →
+            #   예상낙찰가가 최저보다 낮으면 그 값은 실현 불가(허수 차익) → 최저가가 실질 하한.
+            mn = M._to_int(x.get("min_price")) or 0
+            bid = max(eb, mn)
+            bid_lbl = "예상낙찰가" if eb >= mn else "최저입찰가"
         else:
             bid = M._to_int(x.get("sale_price"))
             bid_lbl = "낙찰가"
         if not bid:
             continue
+        diff = price - bid
+        if diff < THRESH:
+            continue                                 # 차익 3천만원 미만(손해 포함) 제외 — 매수양호만 발송
         out.append({"item_key": k, "addr": (x.get("address") or "").split("(")[0].strip(),
                     "thumb": x.get("thumb_url") or "",
-                    "price": price, "bid": bid, "bid_lbl": bid_lbl, "diff": price - bid,
+                    "price": price, "bid": bid, "bid_lbl": bid_lbl, "diff": diff,
                     "appraisal": M._to_int(x.get("appraisal_price")), "deposit": _dep(x.get("deposit")),
                     "area": _area(x.get("building_area")), "bid_count": M._to_int(x.get("bid_count"))})
     out.sort(key=lambda r: r["diff"], reverse=True)
