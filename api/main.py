@@ -5498,7 +5498,7 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
     try:
         hit = auction_db.cache_get_many([ck]).get(ck)
         # v>=3: 기준가(base=예상낙찰가/현재최저) 반영. v<3(구버전)은 profit 기준 달라 재계산.
-        if isinstance(hit, dict) and hit.get("v", 0) >= 3:
+        if isinstance(hit, dict) and hit.get("v", 0) >= 4:
             return {**hit, "_cache": "hit"}
     except Exception:
         pass
@@ -5552,24 +5552,31 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
     except Exception:
         exp_bid = None
     cur_min = _gm_cur_min(mng, cdtn)   # 현재 회차 최저입찰가(bid_schedule cdtn 매칭) — 목록 표시값과 일치
-    base = exp_bid if exp_bid else cur_min
-    base_src = "예상낙찰가" if exp_bid else "현재 최저입찰가"
+    # base = 예상낙찰가와 현재 최저입찰가 중 큰 값. 공매는 최저입찰가 미만 낙찰 불가 →
+    #   예상낙찰가(경매 백데이터)가 최저보다 낮으면 그 값은 실현 불가(허수 차익 유발) → 최저가 실질 하한.
+    if exp_bid and cur_min:
+        base = max(exp_bid, cur_min)
+        base_src = "예상낙찰가" if exp_bid >= cur_min else "현재 최저입찰가"
+    elif exp_bid:
+        base, base_src = exp_bid, "예상낙찰가"
+    else:
+        base, base_src = cur_min, "현재 최저입찰가"
     kind = "villa" if is_villa else "apt"
     # ③ 판정(주인님 지정 규칙) — 기준가 base 사용
     if not sise:
         out = {"applicable": True, "grade": "매수금지", "kind": kind,
                "reason": "수요 없음 · 매수세 없음",
                "sise": None, "base": None, "base_src": base_src, "expected_bid": exp_bid,
-               "cur_min": cur_min, "last_min": base, "profit": None, "nb_count": nb_count, "v": 3}
+               "cur_min": cur_min, "last_min": base, "profit": None, "nb_count": nb_count, "v": 4}
     elif base is None:
         return {"applicable": False, "reason": "기준가(예상낙찰가/최저입찰가) 확인 불가",
-                "sise": sise, "kind": kind, "nb_count": nb_count, "v": 3}
+                "sise": sise, "kind": kind, "nb_count": nb_count, "v": 4}
     elif base > sise:
         out = {"applicable": True, "grade": "매수금지", "kind": kind,
                "reason": base_src + "가 추정시세보다 높음",
                "sise": sise, "base": base, "base_src": base_src, "expected_bid": exp_bid,
                "cur_min": cur_min, "last_min": base, "profit": sise - base,
-               "nb_count": nb_count, "v": 3}
+               "nb_count": nb_count, "v": 4}
     else:
         profit = sise - base
         if profit >= 30000000:
@@ -5579,7 +5586,7 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
         out = {"applicable": True, "grade": grade, "kind": kind, "reason": reason,
                "sise": sise, "base": base, "base_src": base_src, "expected_bid": exp_bid,
                "cur_min": cur_min, "last_min": base, "profit": profit,
-               "nb_count": nb_count, "v": 3}
+               "nb_count": nb_count, "v": 4}
     try:
         auction_db.cache_save(ck, out)
     except Exception:
