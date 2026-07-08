@@ -106,7 +106,7 @@
   .nosise{color:#9aa0a6;font-weight:600;}
   .villaest:empty,.aptest:empty{display:none;}
   /* 유사거래 N건 칩(경매 '실거래 N건' 대응) */
-  .nbchip{display:inline-block;margin-top:3px;font-size:11px;font-weight:600;color:#2c5db0;background:#eef3fb;border:1px solid #cfe0f5;border-radius:4px;padding:0 6px;line-height:16px;white-space:nowrap;}
+  .nbchip{display:inline-block;margin-left:5px;vertical-align:middle;font-size:11px;font-weight:600;color:#2c5db0;background:#eef3fb;border:1px solid #cfe0f5;border-radius:4px;padding:0 6px;line-height:16px;white-space:nowrap;}
   .nbchip:empty{display:none;}
   /* PREMIUM 스티커(auctions.html 1:1) */
   .prem-badge{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#7a5c00;
@@ -188,8 +188,7 @@
           <th>최저입찰가</th><td><select id="lowMin"></select> <span class="sep">~</span> <select id="lowMax"></select></td></tr>
       <tr><th>처분방식</th><td><select id="dpsl"><option value="">전체</option><option value="매각">매각</option><option value="임대">임대</option></select></td>
           <th>재산종류</th><td><select id="prop"><option>압류재산</option><option>국유재산</option><option>수탁재산</option><option>유입자산</option><option>공유재산</option><option>기타일반재산</option><option value="">전체</option></select></td></tr>
-      <tr><th>정렬방식</th><td><select id="sort"><option value="bid_close">입찰마감 빠른순</option><option value="appr">감정가 높은순</option><option value="low">최저가 낮은순</option></select></td>
-          <th>페이지당</th><td><select id="pgRows"><option value="20">20개</option><option value="30" selected>30개</option><option value="50">50개</option><option value="100">100개</option></select></td></tr>
+      <tr><th>정렬방식</th><td colspan="3"><select id="sort"><option value="bid_close">입찰마감 빠른순</option><option value="appr">감정가 높은순</option><option value="low">최저가 낮은순</option></select></td></tr>
       <tr><th>토지이용계획</th><td colspan="3">국계법에 따른 지역/지구 <select><option>전체</option></select> <span class="sep">(AND 조건)</span> <input type="text" placeholder="예) 개발제한구역" style="max-width:200px"></td></tr>
       <tr><th>특수물건</th><td colspan="3"><select><option>전체</option></select></td></tr>
     </table>
@@ -207,12 +206,6 @@
     <div class="toolbar">
       <div style="display:flex;gap:8px;align-items:center;">
         <label class="ck"><input type="checkbox" id="selectAll" onchange="toggleAll(this)"> 전체선택</label>
-        <select id="pageSize" onchange="changePageSize()">
-          <option value="20">20개씩 보기</option>
-          <option value="30" selected>30개씩 보기</option>
-          <option value="50">50개씩 보기</option>
-          <option value="100">100개씩 보기</option>
-        </select>
         <select id="gradeSel" onchange="pickGrade(this.value)" title="매수판정으로 거르기(현재 목록 기준)">
           <option value="">매수판정 전체</option>
           <option value="매수양호">매수양호</option>
@@ -228,6 +221,7 @@
           <option value="grade_good">매수양호 우선</option>
           <option value="profit_desc">차익 높은순</option>
           <option value="sise_desc">추정시세 높은순</option>
+          <option value="nb_desc">유사거래 많은순</option>
         </select>
         </span>
         <span class="premwrap" style="position:relative;display:inline-flex;align-items:center">
@@ -237,6 +231,7 @@
           <option value="grade_good">매수양호 우선</option>
           <option value="profit_desc">차익 높은순</option>
           <option value="sise_desc">추정시세 높은순</option>
+          <option value="nb_desc">유사거래 많은순</option>
         </select>
         </span>
         <button class="tbtn" onclick="saveFavsBulk()">♡ 관심물건 저장</button>
@@ -435,7 +430,7 @@ function fillPriceSelects(){
 }
 let GM_PAGE=1, GM_TOTAL=0;
 // pageSize(툴바) 우선, 없으면 pgRows(폼). 경매 auctions.html의 15~150 대응(공매는 20~100).
-function gmRows(){ return +(document.getElementById("pageSize")||{}).value || +(document.getElementById("pgRows")||{}).value || 30; }
+function gmRows(){ return 100; }   // 무조건 100개씩(주인님 지정) — 페이지당 선택 제거
 function gmParams(page){
   const p=new URLSearchParams({rows:String(gmRows()),page:String(page)});
   const pr=document.getElementById("prop").value; p.set("prop",pr);   // 빈값=전체(명시 전송)
@@ -514,6 +509,7 @@ function row(L,i){
   // 유사거래 N건 칩 — 사전계산 nb_count(있으면 즉시), 없으면 fillGmGrades 폴백이 data-nbkey로 채움
   const nbTxt=(n)=>(n!=null&&+n>0)?('유사거래 '+(+n).toLocaleString()+'건'):"";
   const nbchip=graded?`<span class="nbchip" data-nbkey="${escAttr(key)}"${L.nb_count!=null?' data-done="1"':''}>${warmed?nbTxt(L.nb_count):""}</span>`:"";
+  const trNb=(graded&&L.nb_count!=null)?` data-nb="${+L.nb_count}"`:"";   // 유사거래 많은순 정렬용
   if(warmed){
     const cls=GM_GCLS[L.buy_grade]||"g-mid";
     gradechip=`<span class="gradechip" data-key="${escAttr(key)}" data-done="1"><span class="gbadge ${cls}" title="${escAttr(L.grade_reason||"")}">${L.buy_grade}</span></span>`;
@@ -531,17 +527,17 @@ function row(L,i){
       ehtml='<div class="ecsi"><span class="lbl nosise">시세 없음</span></div>';
     }
     const cellcls=GM_APT_RE.test(usg)?'aptest':'villaest';
-    estcell=`<div class="${cellcls}" data-key="${escAttr(key)}" data-base="${base||''}" data-done="1">${ehtml}</div>`+nbchip;
+    estcell=`<div class="${cellcls}" data-key="${escAttr(key)}" data-base="${base||''}" data-done="1">${ehtml}</div>`;
   } else if(graded){
     gradechip=`<span class="gradechip" data-key="${escAttr(key)}"></span>`;
-    estcell=`<div class="${GM_APT_RE.test(usg)?'aptest':'villaest'}" data-key="${escAttr(key)}" data-base="${L.min_price||''}"></div>`+nbchip;
+    estcell=`<div class="${GM_APT_RE.test(usg)?'aptest':'villaest'}" data-key="${escAttr(key)}" data-base="${L.min_price||''}"></div>`;
   }
-  return `<tr data-idx="${i}"${trGrade}${trProfit}${trSise} data-mng="${escAttr(mng)}" data-cdtn="${escAttr(cdtn)}" onclick="gmOpen(${i})">
+  return `<tr data-idx="${i}"${trGrade}${trProfit}${trSise}${trNb} data-mng="${escAttr(mng)}" data-cdtn="${escAttr(cdtn)}" onclick="gmOpen(${i})">
     <td class="cc"><input type="checkbox" class="rowchk" value="${escAttr(mng)}" onclick="event.stopPropagation()"></td>
     <td class="cc"><button class="gmfav${GMFAV.has(L.manage_no)?' on':''}" onclick="event.stopPropagation();gmFav(${i},this)" title="관심등록/해제">${GMFAV.has(L.manage_no)?'♥':'♡'}</button><br>${L.manage_no||"-"}</td>
     <td><div style="display:flex;gap:9px;align-items:center;">
       ${L.thumb?`<img src="${L.thumb}" referrerpolicy="no-referrer" loading="lazy" style="width:66px;height:50px;object-fit:cover;border-radius:5px;flex:0 0 auto;background:#eef1f5;border:1px solid var(--line)" onerror="this.style.display='none'">`:""}
-      <div style="min-width:0"><b>${L.name||"-"}</b><div style="color:var(--muted);margin-top:2px">${L.org||""}</div><div style="margin-top:3px">${gradechip}</div></div>
+      <div style="min-width:0"><b>${L.name||"-"}</b><div style="color:var(--muted);margin-top:2px">${L.org||""}</div><div style="margin-top:3px">${gradechip}${nbchip}</div></div>
     </div></td>
     <td class="cc">${(L.usage||"").split(" ").pop()||"-"}</td>
     <td class="num"><div class="price">${won(L.appraisal_price)}</div><span class="low">${won(L.min_price)}${L.bid_ratio!=null?` (${L.bid_ratio}%)`:""}</span>${estcell}</td>
@@ -592,11 +588,11 @@ function _gmCmp(key,a,b){
   if(!key) return 0;
   if(key==="grade_good"){ const rank={"매수양호":0,"매수검토":1,"매수금지":2}; const av=rank[a.dataset.grade], bv=rank[b.dataset.grade];
     if(av==null&&bv==null)return 0; if(av==null)return 1; if(bv==null)return -1; return av-bv; }
-  const f=key.startsWith("profit")?"profit":"sise";
+  const f=key.startsWith("profit")?"profit":key.startsWith("nb")?"nb":"sise";
   const g=tr=>{ const x=tr.dataset[f]; return (x===undefined||x==="")?null:+x; };
   const av=g(a), bv=g(b);
   if(av==null&&bv==null)return 0; if(av==null)return 1; if(bv==null)return -1;
-  return bv-av;   // desc(차익/시세 높은순)
+  return bv-av;   // desc(차익/시세/유사거래 높은순)
 }
 function applyGmSort(){
   const s1=document.getElementById("gmSort1"), s2=document.getElementById("gmSort2");
@@ -630,7 +626,8 @@ async function fillGmGrades(){
     el.innerHTML='<span class="gbadge '+cls+'" title="'+escAttr(g.reason||"")+'">'+g.grade+'</span>';
     const tr=el.closest('tr'); if(tr){ tr.dataset.grade=g.grade; if(g.profit!=null)tr.dataset.profit=g.profit; if(g.sise!=null)tr.dataset.sise=g.sise; }
     // 유사거래 N건 칩도 buy_grade 응답의 nb_count로 채움(같은 물건, 별도 호출 없음)
-    if(g.nb_count!=null){ const nc=el.closest('tr').querySelector('.nbchip[data-nbkey="'+CSS.escape(key)+'"]');
+    if(g.nb_count!=null){ const _tr=el.closest('tr'); if(_tr) _tr.dataset.nb=+g.nb_count;
+      const nc=_tr&&_tr.querySelector('.nbchip[data-nbkey="'+CSS.escape(key)+'"]');
       if(nc && !nc.dataset.done){ nc.dataset.done="1"; if(+g.nb_count>0) nc.textContent='유사거래 '+(+g.nb_count).toLocaleString()+'건'; } }
   });
   applyGradeFilter();   // 등급 도착 후 필터 재적용

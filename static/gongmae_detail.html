@@ -48,9 +48,9 @@
   .hcell .hl{font-size:11px;color:var(--labeltx);font-weight:700;}
   .hcell .hv{font-weight:600;font-size:13px;word-break:break-all;}
   .hcell .hv.low{color:var(--hotred);font-weight:700;}
-  .gm-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(430px,1fr));gap:12px;}
-  .gm-gal img{width:100%;height:400px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;background:#eef1f5;transition:border-color .12s,transform .12s;}
-  @media(max-width:560px){ .gm-gal{grid-template-columns:repeat(auto-fill,minmax(260px,1fr));} .gm-gal img{height:280px;} }
+  .gm-gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;}
+  .gm-gal img{width:100%;height:180px;object-fit:cover;border-radius:8px;border:1px solid var(--line);cursor:zoom-in;background:#eef1f5;transition:border-color .12s,transform .12s;}
+  @media(max-width:560px){ .gm-gal{grid-template-columns:repeat(auto-fill,minmax(140px,1fr));} .gm-gal img{height:140px;} }
   .gm-gal img:hover{border-color:var(--primary);transform:scale(1.02);}
   /* 사진 라이트박스(캐러셀) */
   .lb-ov{position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:10000;display:none;align-items:center;justify-content:center;}
@@ -330,7 +330,8 @@ function _lbEnsure(){
 function _lbShow(){
   if(!GM_PHOTOS.length) return;
   _lbIdx=(_lbIdx+GM_PHOTOS.length)%GM_PHOTOS.length;
-  var img=document.getElementById("gm-lb-img"); if(img) img.src=GM_PHOTOS[_lbIdx];
+  // 라이트박스=원본 고해상도(ONBID 썸네일 THNL_NM → 원본 ORGL_NM, 약 12배 화질). 썸네일은 THNL 유지(빠름).
+  var img=document.getElementById("gm-lb-img"); if(img) img.src=(GM_PHOTOS[_lbIdx]||"").replace("downloadImageKind=THNL_NM","downloadImageKind=ORGL_NM");
   var c=document.getElementById("gm-lb-count"); if(c) c.textContent=(_lbIdx+1)+" / "+GM_PHOTOS.length;
 }
 function openLightbox(i){ if(!GM_PHOTOS.length) return; _lbEnsure(); _lbIdx=i||0; _lbShow();
