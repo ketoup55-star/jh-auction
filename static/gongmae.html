@@ -392,8 +392,9 @@ function addLocation(){
   if(_locations.some(function(l){return l.q===q;})) return;   // 중복 방지
   _locations.push({label:label, q:q});
   renderLocChips();
+  if(typeof search==='function') search();   // 칩 추가 즉시 필터 반영
 }
-function removeLocation(i){ _locations.splice(i,1); renderLocChips(); }
+function removeLocation(i){ _locations.splice(i,1); renderLocChips(); if(typeof search==='function') search(); }
 function renderLocChips(){
   document.getElementById('locChips').innerHTML=_locations.map(function(l,i){
     return '<span class="loc-chip">'+escHtml(l.label)+'<b onclick="removeLocation('+i+')" title="삭제">×</b></span>';
@@ -411,8 +412,9 @@ function addUsage(){
   if(_usages.some(function(u){return u.q===val;})) return;   // 중복 방지
   _usages.push({label:label, q:val});
   renderUsgChips();
+  if(typeof search==='function') search();   // 칩 추가 즉시 필터 반영(검색 재클릭 불필요)
 }
-function removeUsage(i){ _usages.splice(i,1); renderUsgChips(); }
+function removeUsage(i){ _usages.splice(i,1); renderUsgChips(); if(typeof search==='function') search(); }
 function renderUsgChips(){
   document.getElementById('usgChips').innerHTML=_usages.map(function(u,i){
     return '<span class="loc-chip">'+escHtml(u.label)+'<b onclick="removeUsage('+i+')" title="삭제">×</b></span>';
