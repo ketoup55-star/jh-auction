@@ -1222,7 +1222,7 @@ async function loadBrands(attempt){
   }catch(e){ if(attempt<5) setTimeout(()=>loadBrands(attempt+1),1000); }   // 실패 → 재시도
 }
 // ---- 법원·연도·소재지(시도→구군→동읍) 로딩 ----
-let REG=null, sidoShort={};
+let REG=null, sidoShort={}, DONG_FULL={};
 function opt(val,label){return `<option value="${val}">${label||val}</option>`;}
 function regionParam(){
   const sido=v('sido'), gu=v('gugun'), dong=v('dongeup');
@@ -1233,6 +1233,7 @@ function regionParam(){
 }
 async function loadRegions(){
   REG=await (await fetch("/auctions/regions")).json();
+  try{ DONG_FULL=await (await fetch("/static/data/bjd_dong.json",{cache:"force-cache"})).json(); }catch(e){ DONG_FULL={}; }   // 전체 법정동(물건 없는 동도 표시)
   const court=document.getElementById("court");
   court.innerHTML='<option value="">본원전체</option>'+Object.keys(REG.courts).map(j=>opt(j)).join("");
   court.onchange=()=>{
@@ -1254,7 +1255,7 @@ async function loadRegions(){
   };
   document.getElementById("gugun").onchange=()=>{
     const de=document.getElementById("dongeup");
-    const list=(REG.dong[v('sido')]||{})[v('gugun')]||[];  // 우리 데이터의 동
+    const list=(DONG_FULL[v('sido')]||{})[v('gugun')] || (REG.dong[v('sido')]||{})[v('gugun')] || [];  // 전체 법정동(없으면 우리데이터 폴백)
     de.innerHTML='<option value="">동/읍 선택</option>'+list.map(d=>opt(d)).join("");
   };
 }
