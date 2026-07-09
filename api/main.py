@@ -3576,6 +3576,21 @@ def admin_reset_password(body: PwResetIn, admin: dict = Depends(require_admin)) 
     return {"ok": True}
 
 
+@app.get("/admin/outbound_ip")
+def admin_outbound_ip(admin: dict = Depends(require_admin)) -> dict:
+    """이 서버가 외부 API(알리고 등)로 나갈 때 쓰는 아웃바운드 IP 확인.
+    → 알리고 [연동형 API]-[신청/인증] '발송 IP' 화이트리스트에 이 IP를 등록하면 됨."""
+    out = {}
+    for name, url in (("ipify", "https://api.ipify.org"),
+                      ("amazon", "https://checkip.amazonaws.com")):
+        try:
+            r = httpx.get(url, timeout=8)
+            out[name] = r.text.strip()
+        except Exception as e:                            # noqa: BLE001
+            out[name] = f"error: {e}"
+    return {"outbound_ip": out}
+
+
 @app.get("/admin/coupons")
 def admin_list_coupons(admin: dict = Depends(require_admin)) -> dict:
     return {"coupons": user_store.list_coupons()}
