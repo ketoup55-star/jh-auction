@@ -8314,10 +8314,43 @@ def gonggmae_map(srcs: str = "", props: str = "", usage: str = "",
     return {"mode": "clusters", "total": total, "points": [], "clusters": clusters}
 
 
+_REG_POLYS = {"v": None}
+
+def _load_reg_polys():
+    """규제/토허 구역 폴리곤(shapely) 1회 로드 캐시."""
+    if _REG_POLYS["v"] is None:
+        polys = []
+        try:
+            from shapely.geometry import shape
+            p = os.path.join(_ROOT, "static", "data", "regulation_zones.json")
+            d = _json.load(open(p, encoding="utf-8"))
+            for z in d.get("zones", []):
+                try:
+                    polys.append(shape(z["geometry"]))
+                except Exception:
+                    pass
+        except Exception:
+            polys = []
+        _REG_POLYS["v"] = polys
+    return _REG_POLYS["v"]
+
+def _reg_status(lat, lng, sido):
+    """물건 좌표의 규제 구분: regulated(규제·토허) / metro(수도권 비규제) / none(비규제)."""
+    try:
+        from shapely.geometry import Point
+        pt = Point(float(lng), float(lat))               # GeoJSON = (경도,위도)
+        for poly in _load_reg_polys():
+            if poly.contains(pt):
+                return "regulated"
+    except Exception:
+        pass
+    return "metro" if any(s in (sido or "") for s in ("서울", "경기", "인천")) else "none"
+
+
 @app.get("/gonggmae_map/badges")
 def gonggmae_map_badges(source: str, item_key: str,
                         user: dict = Depends(require_national_user)) -> dict:
-    """핀 팝업용: 실거래 3개월 건수 + 호가 매물 수 (목록 배지와 동일 소스). 클릭 시 온디맨드."""
+    """핀 팝업용: 실거래 3개월·호가(목록과 동일 소스) + 규제 구분. 클릭 시 온디맨드."""
     trades = listings = None
     if source == "gongmae":
         r = _map_query("SELECT nb_count, apt_hoga FROM gongmae_items WHERE id=%(k)s", {"k": item_key})
@@ -8334,7 +8367,12 @@ def gonggmae_map_badges(source: str, item_key: str,
             listings = (auction_kb_counts(keys=item_key) or {}).get(item_key)
         except Exception:
             pass
-    return {"trades_3m": trades, "listings": listings}
+    reg = None                                            # 규제 구분(좌표 기준 point-in-polygon)
+    mp = _map_query("SELECT lat,lng,sido FROM map_points WHERE source=%(s)s AND item_key=%(k)s",
+                    {"s": source, "k": item_key})
+    if mp:
+        reg = _reg_status(mp[0].get("lat"), mp[0].get("lng"), mp[0].get("sido"))
+    return {"trades_3m": trades, "listings": listings, "reg": reg}
 
 
 # ---------- AI 챗봇(사이트 안내) ----------

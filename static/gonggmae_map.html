@@ -99,7 +99,6 @@
   <div class="legend" id="legend">
     <h4>규제 표시</h4>
     <label class="lg" style="cursor:pointer"><input type="checkbox" id="zoneToggle" checked onchange="toggleZones(this.checked)"> <span class="sw" style="background:#e05a4e"></span>규제지역·토허구역</label>
-    <div style="font-size:11px;color:var(--muted);margin:4px 0 2px;">투명도 <input type="range" min="0" max="0.5" step="0.02" value="0.18" oninput="setZoneOpacity(this.value)" style="width:86px;vertical-align:middle"></div>
     <h4 style="margin-top:9px">물건</h4>
     <div class="lg"><span class="sw" style="background:var(--auction)"></span>경매</div>
     <div class="lg"><span class="sw" style="background:var(--gongmae)"></span>공매</div>
@@ -253,12 +252,17 @@ function showInfo(p){
   infoOv.setMap(map);
   loadBadges(p);
 }
+const REG_BADGE={regulated:{t:"규제지역·토허구역",bg:"#fdecea",bd:"#f5b7b1",fg:"#c0392b"},
+                 metro:{t:"수도권 비규제지역",bg:"#fff4e5",bd:"#f0cfa0",fg:"#b06a00"},
+                 none:{t:"비규제지역",bg:"#eafaf1",bd:"#bfe3cd",fg:"#1a7d46"}};
 async function loadBadges(p){
   const box=document.getElementById("mbadges"); if(!box) return;   // 현재 팝업의 배지칸(캡처)
   let d; try{ d=await (await fetch(`/gonggmae_map/badges?source=${encodeURIComponent(p.source)}&item_key=${encodeURIComponent(p.item_key)}`)).json(); }catch(e){ return; }
+  const bd=(bg,bdc,fg,txt)=>`<span style="background:${bg};border:1px solid ${bdc};color:${fg};font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px">${txt}</span>`;
   let h="";
-  if(d.trades_3m!=null) h+=`<span style="background:#e9f7ee;border:1px solid #bfe3cd;color:#1a7d46;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px">실거래 ${d.trades_3m}건</span>`;
-  if(d.listings!=null && d.listings>0) h+=`<span style="background:#eef2ff;border:1px solid #c7d2fe;color:#3f51b5;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px">호가 ${d.listings}건</span>`;
+  const rg=REG_BADGE[d.reg]; if(rg) h+=bd(rg.bg,rg.bd,rg.fg,rg.t);              // 규제 구분
+  if(d.trades_3m!=null) h+=bd("#e9f7ee","#bfe3cd","#1a7d46","실거래 "+d.trades_3m+"건");
+  if(d.listings!=null && d.listings>0) h+=bd("#eef2ff","#c7d2fe","#3f51b5","호가 "+d.listings+"건");
   box.innerHTML=h;                                                 // 캡처 box(그새 다른 핀이면 detached=무해)
 }
 function closeInfo(){ if(infoOv){ infoOv.setMap(null); infoOv=null; } }
