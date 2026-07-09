@@ -631,8 +631,13 @@ class UserStore:
         return [_user_dict(r) for r in self._ex(sql, params, fetch="all")]
 
     def set_grade(self, uid: int, grade: str, grade_until: Optional[str] = None) -> Optional[dict]:
-        """등급 설정 + 유지기한(grade_until ISO, None=무제한) 저장."""
-        self._ex("UPDATE users SET grade=%s, grade_until=%s WHERE id=%s", (grade, grade_until, uid))
+        """등급 설정 + 유지기한(grade_until ISO, None=무제한) 저장.
+        grade_until 컬럼이 없는 DB(마이그레이션 전)에서도 500 안 나게 등급만 폴백."""
+        try:
+            self._ex("UPDATE users SET grade=%s, grade_until=%s WHERE id=%s", (grade, grade_until, uid))
+        except Exception:
+            self._reconnect()                                    # 실패 트랜잭션 복구(grade_until 컬럼 없는 경우 등)
+            self._ex("UPDATE users SET grade=%s WHERE id=%s", (grade, uid))
         return self.get_user(uid)
 
     def set_role(self, uid: int, role: str) -> Optional[dict]:
