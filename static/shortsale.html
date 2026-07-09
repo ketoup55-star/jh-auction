@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>단타 수익률 — JH옥션스쿨</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--line:#dfe3ea;--text:#1c1c1a;--muted:#6b6a64;
+        --primary:#1f4fa3;--labeltx:#2c5db0;--danger:#c0392b;--label:#eef2fb;--hotred:#e8202a;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+  a{color:inherit;}
+  .sitehead{position:sticky;top:0;z-index:50;}
+  .top{background:var(--card);border-bottom:1px solid var(--line);}
+  .topin{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px;}
+  .minicase{display:flex;align-items:center;gap:6px;}
+  .minicase .t{font-weight:600;color:var(--primary);font-size:13px;white-space:nowrap;}
+  .minicase .ty{color:var(--muted);font-size:13px;white-space:nowrap;}
+  .minicase select,.minicase input{height:30px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;}
+  .minicase input{width:150px;}
+  .minicase .csearch{height:30px;width:34px;border:1px solid var(--primary);background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;}
+  .brand{flex:1;text-align:center;font-size:24px;font-weight:700;letter-spacing:-.5px;color:var(--primary);text-decoration:none;}
+  .brand span{color:#3a7bd5;}
+  .util{display:flex;gap:12px;font-size:12px;color:var(--muted);align-items:center;}
+  .util a{color:var(--muted);text-decoration:none;}
+  .util .pay{color:var(--danger);font-weight:600;}
+  .nav{background:var(--card);border-bottom:2px solid var(--primary);}
+  .navin{max-width:1180px;margin:0 auto;padding:0 16px;display:flex;gap:4px;flex-wrap:wrap;}
+  .nav a{padding:14px 18px;font-size:15px;font-weight:600;color:#333;text-decoration:none;}
+  .nav a:hover,.nav a.on{color:var(--primary);}
+  .wrap{max-width:1180px;margin:18px auto 60px;padding:0 16px;}
+  .phead{display:flex;align-items:baseline;justify-content:space-between;margin:2px 2px 4px;}
+  .phead h1{font-size:23px;font-weight:700;margin:0;}
+  .phead .desc{color:var(--muted);font-size:13px;margin-left:12px;}
+  .crumb{font-size:12px;color:var(--muted);}.crumb b{color:var(--primary);}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-top:14px;}
+  .dg-card{padding:16px 18px;}
+  .dg-card h2{margin:0 0 12px;font-size:18px;font-weight:700;}
+  /* 부동산DB '전국' 스티커 */
+  @keyframes natlBlink{0%,100%{opacity:1}50%{opacity:.35}}
+  @keyframes natlWobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg)}55%{transform:rotate(9deg)}80%{transform:rotate(-4deg)}}
+  .natllink{position:relative;}
+  .natl-badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.02em;color:#fff;
+    background:linear-gradient(180deg,#3f7ce2,#1f4fa3);border:1px solid #1a4590;border-radius:5px;
+    padding:1px 7px;line-height:16px;white-space:nowrap;
+    animation:natlBlink 1.5s ease-in-out infinite;transform-origin:center;
+    position:absolute;top:3px;right:-15px;box-shadow:0 1px 5px rgba(20,60,120,.45);z-index:3;}
+  .natllink:hover>.natl-badge{animation:natlWobble .55s ease-in-out;}
+  @media(prefers-reduced-motion:reduce){.natl-badge{animation:none!important;}}
+  /* ── 단기매도 계산기 스타일(상세와 동일) ── */
+  .dg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px 10px;margin-bottom:10px}
+  .dg-grid label{font-size:12px;color:#5b6573;display:flex;align-items:center;gap:3px}
+  .dg-grid input,.dg-grid select{flex:1;min-width:0;width:100%;border:1px solid #cdd5e2;border-radius:5px;padding:4px 5px;font-size:12.5px}
+  .dg-grid span{color:#9aa0a6;font-size:11px;flex:none}
+  .dg-grid .dgl{width:66px;flex:none;color:#5b6573;font-size:12px;white-space:nowrap;overflow:hidden}
+  .dg-out{background:#f7f9fc;border:1px solid #e8ebf0;border-radius:8px;padding:7px 11px;max-width:580px}
+  .dg-orow{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px dashed #edf0f4}
+  .dg-orow:last-child{border-bottom:none}.dg-orow b{font-weight:700}
+  .dg-note{color:#9aa0a6;font-size:12px;margin-top:7px;line-height:1.5}
+  .ssxls{font-size:12px;font-weight:600;color:#16a34a;background:#eafaf1;border:1px solid #b7e6c9;border-radius:6px;padding:3px 10px;cursor:pointer;float:right}
+  .ss-vat-h{font-size:12.5px;color:#5b6573;font-weight:600;margin:2px 0 8px}
+  .ss-vatrow{display:flex;align-items:center;gap:6px;margin-bottom:6px}
+  .ss-vatlbl{width:84px;flex:none;font-size:12px;color:#5b6573;white-space:nowrap}
+  #ssc_vatbox input,#ssc_vatbox select{width:150px;flex:none;min-width:0;border:1px solid #cdd5e2;border-radius:5px;padding:4px 6px;font-size:12.5px}
+  .ss-vatu{flex:none;width:40px;font-size:11px;color:#9aa0a6}
+  .ss-lookup{flex:none;font-size:11.5px;font-weight:600;color:#1565ff;background:#eef3ff;border:1px solid #c4d6ff;border-radius:5px;padding:3px 10px;text-decoration:none;white-space:nowrap}
+  .ss-lookup:hover{background:#dde8ff}
+  .ss-acqbox{background:#f7f9fc;border:1px solid #e8ebf0;border-radius:8px;padding:7px 11px;max-width:430px;margin-bottom:10px}
+  .ss-acqhd{font-size:11.5px;font-weight:700;color:#2a6f97;margin-bottom:2px}
+  .ss-acqbox .dg-orow{font-size:12px;padding:2px 0}
+  .ss-acqtot{border-top:1px solid #d8dee8;font-weight:700;margin-top:2px}
+  .ss-acqtot b{color:#c0392b}
+  .ss-acqwrap{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start;margin-bottom:10px}
+  .ss-acqwrap .ss-acqbox{margin-bottom:0;flex:1 1 300px}
+  .ss-acqref{flex:1 1 280px;max-width:360px;background:#fbfbfd;border:1px solid #e8ebf0;border-radius:8px;padding:7px 11px}
+  .ss-reftbl{width:100%;border-collapse:collapse;font-size:11px;margin-top:3px}
+  .ss-reftbl th,.ss-reftbl td{border:1px solid #eef1f5;padding:3px 5px;text-align:center}
+  .ss-reftbl th{background:#f3f6fa;color:#5b6573;font-weight:600}
+  .ss-reftbl tr.on td{background:#fff3d6;font-weight:700;color:#9a6b0b}
+  .ss-refnote{font-size:10.5px;color:#9aa0a6;margin-top:3px;line-height:1.4}
+  .ss-sec{font-size:11.5px;font-weight:700;color:#2a6f97;margin:3px 0 6px;padding-bottom:3px;border-bottom:1px solid #eef1f5}
+</style>
+</head>
+<body>
+<div class="sitehead">
+  <div class="top"><div class="topin">
+    <div class="minicase">
+      <span class="t">사건검색</span>
+      <select id="caseYear"><option value="">전체</option></select>
+      <span class="ty">타경</span>
+      <input type="text" id="caseNoIn" placeholder="타경 번호" onkeydown="if(event.key==='Enter')caseSearch()">
+      <button class="csearch" onclick="caseSearch()" aria-label="검색">🔍</button>
+    </div>
+    <a class="brand" href="/">JH<span>옥션스쿨</span></a>
+    <div class="util" id="util">
+      <a href="/static/login.html">로그인</a>
+      <a href="/static/login.html?tab=signup">회원가입</a>
+      <a href="/static/mypage.html">마이페이지</a>
+      <a href="/static/payment.html" class="pay">요금결제</a>
+    </div>
+  </div></div>
+  <div class="nav"><div class="navin">
+    <a href="/static/auctions.html">경매검색</a>
+    <a href="/static/board.html?b=yejung">예정</a>
+    <a href="/static/gongmae.html">공매</a>
+    <a href="/static/board.html?b=video">강의</a>
+    <a href="/static/board.html?b=community">커뮤니티</a>
+    <a href="/static/board.html?b=data">경매자료실</a><a href="/static/shortsale.html" class="on">단타 수익률</a><a class="natllink" href="/static/kbdb.html">부동산DB<span class="natl-badge">전국</span></a>
+    <a href="/static/board.html?b=support">고객센터</a>
+    <a href="/static/mypage.html">마이페이지</a>
+  </div></div>
+</div>
+
+<div class="wrap">
+  <div class="phead">
+    <h1>💰 단타 수익률 <span class="desc">낙찰 → 단기 재매도 순수익 계산기 (아파트·빌라·다세대)</span></h1>
+    <div class="crumb">🏠 &nbsp;›&nbsp; <b>단타 수익률</b></div>
+  </div>
+
+  <div class="card dg-card">
+    <h2>💰 단기매도 수익률 계산기 <button onclick="ssExcel()" class="ssxls">📥 엑셀 다운로드</button></h2>
+    <div class="ss-sec">① 거래가</div>
+    <div class="dg-grid">
+      <label><span class="dgl">감정가</span><input id="ssc_appr" type="text" inputmode="numeric" placeholder="0"><span>만</span></label>
+      <label><span class="dgl">낙찰가</span><input id="ssc_bid" type="text" inputmode="numeric" placeholder="0"><span>만</span></label>
+      <label><span class="dgl">매도가</span><input id="ssc_sell" type="text" inputmode="numeric" placeholder="0"><span>만</span></label>
+      <label><span class="dgl">입찰보증금</span><input id="ssc_dep" type="text" inputmode="numeric" placeholder="낙찰가10%"><span>만</span></label>
+    </div>
+    <div class="ss-sec">② 대출</div>
+    <div class="dg-grid">
+      <label><span class="dgl">감정한도</span><input id="ssc_lim_appr" type="number" value="60" step="5"><span>%</span></label>
+      <label><span class="dgl">낙찰한도</span><input id="ssc_lim_bid" type="number" value="80" step="5"><span>%</span></label>
+      <label><span class="dgl">대출금리</span><input id="ssc_int" type="number" value="5" step="0.1"><span>%</span></label>
+      <label><span class="dgl">중도상환</span><input id="ssc_pre" type="number" value="0.5" step="0.1"><span>%</span></label>
+      <label><span class="dgl">매도기간</span><input id="ssc_months" type="number" value="3" step="1"><span>개월</span></label>
+    </div>
+    <div class="ss-sec">③ 세금·법무 <span style="font-weight:400;color:#9aa0a6;font-size:11px">취득세=낙찰가 금액·면적 자동</span></div>
+    <div class="dg-grid">
+      <label><span class="dgl">85㎡초과</span><input type="checkbox" id="ssc_over85" style="width:auto;flex:none"><span class="ss-vatu" style="flex:1">농특세 0.2%</span></label>
+      <label><span class="dgl">말소등기</span><input id="ssc_malso" type="number" value="0" step="1" min="0"><span>건(소멸)</span></label>
+      <label><span class="dgl">채권매입</span><input id="ssc_chae" type="text" inputmode="numeric" placeholder="0"><span>만</span></label>
+      <label><span class="dgl">법무비</span><input id="ssc_law" type="text" inputmode="numeric" value="20"><span>만</span></label>
+    </div>
+    <div class="ss-acqwrap"><div class="ss-acqbox" id="ssc_acqbox"></div><div class="ss-acqref" id="ssc_acqref"></div></div>
+    <div class="ss-sec">④ 기타 비용</div>
+    <div class="dg-grid">
+      <label><span class="dgl">미납관리비</span><input id="ssc_mgmt" type="text" inputmode="numeric" placeholder="0"><span>만</span></label>
+      <label><span class="dgl">명도비</span><input id="ssc_evict" type="text" inputmode="numeric" placeholder="0"><span>만</span></label>
+      <label><span class="dgl">수리비</span><input id="ssc_repair" type="text" inputmode="numeric" placeholder="0"><span>만</span></label>
+      <label><span class="dgl">중개수수료</span><input id="ssc_broker" type="text" inputmode="numeric" placeholder="0"><span>만</span></label>
+      <label><span class="dgl">기타비용</span><input id="ssc_etc" type="text" inputmode="numeric" placeholder="0"><span>만</span></label>
+    </div>
+    <div class="ss-vat-h">전용 85㎡ 초과 + 사업자 매매 시 — 건물분 부가세 (해당 없으면 비워두세요)</div>
+    <div id="ssc_vatbox">
+      <div class="ss-vatrow"><span class="ss-vatlbl">건물 기준시가</span><input id="ssc_bldg" type="text" inputmode="numeric" placeholder="홈택스 조회"><span class="ss-vatu">원</span><a class="ss-lookup" href="https://www.hometax.go.kr/" target="_blank" rel="noopener">홈택스 ↗</a></div>
+      <div class="ss-vatrow"><span class="ss-vatlbl">개별공시지가</span><input id="ssc_gongsi" type="text" inputmode="numeric" placeholder="㎡당"><span class="ss-vatu">원/㎡</span><a class="ss-lookup" href="https://www.eum.go.kr/" target="_blank" rel="noopener">토지이음 ↗</a></div>
+      <div class="ss-vatrow"><span class="ss-vatlbl">토지면적</span><input id="ssc_area" type="number" step="0.01" placeholder="0"><span class="ss-vatu">㎡</span></div>
+      <div class="ss-vatrow"><span class="ss-vatlbl">부가세</span><select id="ssc_vatincl"><option>별도</option><option>포함</option></select></div>
+    </div>
+    <div class="dg-out" id="ssc_out"></div>
+    <div class="dg-note">감정가·낙찰가·매도가 입력 → 순수익 자동 계산. 대출=감정가 60%·낙찰가 80% 중 낮은 금액(감정가 입력 시). 취등록세=금액·면적별 자동(6~9억은 1~3%, 농특세·교육세·말소·인지·채권 포함). 종소세는 차익 기준 종합소득세 누진세율표 자동. 85㎡ 초과는 위 체크 후 건물분 부가세(홈택스·토지이음). 세금은 대략치 — 세무 확인 필요.</div>
+  </div>
+</div>
+
+<script>
+function esc(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];}); }
+// ── 헤더(사건검색·로그인상태) ──
+(function(){ var y=new Date().getFullYear(), sel=document.getElementById('caseYear'); for(var i=y;i>=2015;i--){ var o=document.createElement('option'); o.value=i; o.textContent=i; sel.appendChild(o); } })();
+function caseSearch(){ var y=document.getElementById('caseYear').value, no=document.getElementById('caseNoIn').value.trim(); var p=new URLSearchParams(); if(y)p.set('year',y); if(no)p.set('keyword',no); location.href='/static/auctions.html'+(p.toString()?'?'+p.toString():''); }
+function logout(){ fetch('/auth/logout',{method:'POST'}).then(function(){location.reload();}); }
+async function loadHeader(){
+  try{ var me=await fetch('/auth/me'); if(me.ok){ var u=await me.json();
+    document.getElementById('util').innerHTML=
+      '<span style="color:var(--primary);font-weight:600">'+esc(u.name||u.email)+'님</span>'
+      +'<a href="#" onclick="logout();return false;">로그아웃</a>'
+      +'<a href="/static/mypage.html">마이페이지</a>'
+      +'<a href="/static/payment.html" class="pay">요금결제</a>'
+      +(u.role==='admin'?'<a href="/static/admin.html" style="color:#fff;background:#e23b3b;padding:2px 9px;border-radius:6px;font-weight:700;text-decoration:none">🔧 관리자</a>':'');
+  } }catch(e){}
+}
+loadHeader();
+
+// ── 금액 포맷(상세와 동일) ──
+function won(n){
+  if(n===null||n===undefined||n==="") return "-";
+  n=Math.round(+n); if(isNaN(n)) return "-"; if(n===0) return "0원";
+  const eok=Math.floor(n/1e8), man=Math.floor((n%1e8)/1e4);
+  let s=""; if(eok)s+=eok+"억 "; if(man)s+=man.toLocaleString()+"만";
+  if(!s)s=n.toLocaleString(); return s.trim()+"원";
+}
+function dgFmt(el){ const raw=String(el.value).replace(/[^\d]/g,''); el.value=raw.replace(/\B(?=(\d{3})+(?!\d))/g,','); }
+
+// ── 단기매도 계산(상세 auction.html에서 그대로 복사) ──
+let DETAIL={appraisal_price:0};   // 감정가(대출한도 계산용) — 입력값으로 갱신
+function ssTax(income){   // 차익(원) → 종합소득세 {세율%, 누진공제(원)}
+  const T=[[14000000,6,0],[50000000,15,1260000],[88000000,24,5760000],[150000000,35,15440000],
+           [300000000,38,19940000],[500000000,40,25940000],[1000000000,42,35940000],[Infinity,45,65940000]];
+  for(const t of T){ if(income<=t[0]) return {rate:t[1],ded:t[2]}; }
+  return {rate:45,ded:65940000};
+}
+function acqDetail(price, over85, malsoCnt, chaeWon){   // 취등록세 상세
+  const eok=price/1e8;
+  let base = eok<=6?1.0 : (eok<=9?(eok*2/3-3):3.0);
+  base=Math.round(base*100)/100;
+  const acq=Math.round(price*base/100);
+  const nong=over85?Math.round(price*0.2/100):0;
+  const edu=Math.round(acq*0.1);
+  const malso=(malsoCnt||0)*11200;
+  const inji=price<=1e8?0:(price<=1e9?150000:350000);
+  const chae=chaeWon||0;
+  return {base, acq, nong, edu, malso, inji, chae, total:acq+nong+edu+malso+inji+chae,
+          rateTot:Math.round((base+base*0.1+(over85?0.2:0))*100)/100};
+}
+function ssCalc(){
+  const out=document.getElementById('ssc_out'); if(!out) return;
+  const v=id=>{ const e=document.getElementById(id); return e?(+(String(e.value).replace(/,/g,''))||0):0; };
+  const W=10000;
+  const bid=v('ssc_bid')*W, sell=v('ssc_sell')*W, dep=v('ssc_dep')*W;
+  const limAppr=v('ssc_lim_appr')||60, limBid=v('ssc_lim_bid')||80, intR=v('ssc_int'), preR=v('ssc_pre'), months=v('ssc_months');
+  const law=v('ssc_law')*W, mgmt=v('ssc_mgmt')*W, evict=v('ssc_evict')*W, repair=v('ssc_repair')*W, broker=v('ssc_broker')*W, etc=v('ssc_etc')*W;
+  const diff=sell-bid;
+  let vat=0, vatLbl='';
+  if(document.getElementById('ssc_vatbox')){
+    const bg=v('ssc_bldg'), gj=v('ssc_gongsi'), ar=v('ssc_area'), incl=((document.getElementById('ssc_vatincl')||{}).value==='포함');
+    const landBase=gj*ar, denom=incl?(bg+landBase+bg*0.1):(bg+landBase);
+    if(bg>0 && denom>0){ vat=Math.floor(sell*bg/denom*0.1); vatLbl='건물분 부가세('+(incl?'포함':'별도')+')'; }
+  }
+  const over85chk=!!((document.getElementById('ssc_over85')||{}).checked);
+  const AD=acqDetail(bid, over85chk, v('ssc_malso'), v('ssc_chae')*W);
+  const acq=AD.total;
+  const _ab=document.getElementById('ssc_acqbox');
+  if(_ab){
+    const ar=(k,val)=>'<div class="dg-orow"><span>'+k+'</span><b>'+won(val)+'</b></div>';
+    _ab.innerHTML='<div class="ss-acqhd">취등록세 상세 (취득세율계 '+AD.rateTot+'%)</div>'
+      +ar('취득세 ('+AD.base+'%)',AD.acq)
+      +(AD.nong?ar('농어촌특별세 (85㎡↑ 0.2%)',AD.nong):'')
+      +ar('지방교육세 (취득세×10%)',AD.edu)
+      +ar('말소등록세 ('+v('ssc_malso')+'건)',AD.malso)
+      +ar('인지세',AD.inji)
+      +(AD.chae?ar('국민주택채권',AD.chae):'')
+      +'<div class="dg-orow ss-acqtot"><span>취등록세 합계</span><b>'+won(AD.total)+'</b></div>';
+  }
+  const _aref=document.getElementById('ssc_acqref');
+  if(_aref){
+    const eokB=bid/1e8, brI=eokB<=6?0:(eokB<=9?1:2);
+    const refRows=[['6억 이하','1.0%','0.1%','1.1 / 1.3%'],['6~9억','1~3%','0.2%','2.2~2.4%'],['9억 초과','3.0%','0.3%','3.3 / 3.5%']];
+    _aref.innerHTML='<div class="ss-acqhd">취득세 기준표 (금액·전용면적)</div>'
+      +'<table class="ss-reftbl"><tr><th>구간</th><th>취득세</th><th>교육세</th><th>계 85↓/↑</th></tr>'
+      +refRows.map((r,i)=>'<tr'+(i===brI?' class="on"':'')+'>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')
+      +'</table><div class="ss-refnote">농특세=85㎡ 초과만 0.2% · 6~9억은 금액 따라 1~3%(현재 적용구간 노랑)</div>';
+  }
+  const appr=(+((DETAIL&&DETAIL.appraisal_price))||0);
+  const loanAppr=appr*limAppr/100, loanBid=bid*limBid/100;
+  const useAppr=appr>0 && loanAppr<loanBid;
+  const loan=useAppr?loanAppr:loanBid;
+  const baseLbl=useAppr?('감정가 '+limAppr+'%'):('낙찰가 '+limBid+'%');
+  const mInt=loan*intR/100/12, preInt=loan*preR/100, holdInt=months*mInt;
+  const inc=Math.max(0,diff), tb=ssTax(inc), taxGross=inc*tb.rate/100, taxNet=Math.max(0,taxGross-tb.ded);
+  const costs=preInt+holdInt+acq+law+mgmt+evict+repair+broker+vat+etc;
+  const net=diff-costs-taxNet;
+  const capital=bid-loan, transfer=capital-dep, total=dep+transfer+(costs+taxGross);
+  const yld=capital>0?net/capital*100:null;
+  const row=(k,val,hot)=>`<div class="dg-orow"><span>${k}</span><b${hot?(' style="color:'+(typeof hot==='string'?hot:'#c0392b')+'"'):''}>${val}</b></div>`;
+  const pct=x=>x==null?'-':(x<0?'−':'')+Math.abs(x).toFixed(1)+'%';
+  out.innerHTML=row('차익(매도−낙찰)',won(diff),1)
+    +row('대출('+baseLbl+'·낮은쪽)',won(loan))+row('월 이자',won(mInt))+row('중도상환이자',won(preInt))+row('보유기간이자('+months+'개월)',won(holdInt))
+    +row('취등록세 합계',won(acq))
+    +(vat>0?row(vatLbl,won(vat)):'')
+    +row('종소세('+tb.rate+'%·누진'+won(tb.ded)+')',won(taxNet))
+    +row('순수익',won(net),'#ff0000')
+    +(yld!=null?row('자본 대비 수익률',pct(yld)):'')
+    +row('대출외 자본금',won(capital),1)+row('소유권이전 필요금(법무제외)',won(transfer))
+    +row('총 필요금액',won(total),1);
+}
+// ── 입력 배선(수동입력·독립 페이지용) ──
+function ssV(id){ const e=document.getElementById(id); return e?(+(String(e.value).replace(/,/g,''))||0):0; }
+function ssWire(){
+  const ea=document.getElementById('ssc_appr');
+  if(ea){ dgFmt(ea); ea.oninput=()=>{ dgFmt(ea); DETAIL.appraisal_price=ssV('ssc_appr')*10000; ssCalc(); }; }
+  ['ssc_bid','ssc_sell','ssc_dep','ssc_law','ssc_mgmt','ssc_evict','ssc_repair','ssc_broker','ssc_etc','ssc_bldg','ssc_gongsi','ssc_chae'].forEach(id=>{
+    const e=document.getElementById(id); if(!e) return; dgFmt(e);
+    e.oninput=()=>{ dgFmt(e);
+      if(id==='ssc_bid' && !window.SS_DEPEDIT){ const d=document.getElementById('ssc_dep'); if(d) d.value=String(Math.round(ssV('ssc_bid')*0.1)).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
+      if(id==='ssc_dep') window.SS_DEPEDIT=true;
+      ssCalc();
+    };
+  });
+  ['ssc_lim_appr','ssc_lim_bid','ssc_int','ssc_pre','ssc_months','ssc_area','ssc_malso'].forEach(id=>{ const e=document.getElementById(id); if(e) e.oninput=ssCalc; });
+  ['ssc_vatincl','ssc_over85'].forEach(id=>{ const e=document.getElementById(id); if(e) e.onchange=ssCalc; });
+  ssCalc();
+}
+// ── 엑셀 다운로드(입력+결과) ──
+function _loadXLSX(cb){ if(typeof XLSX!=='undefined') return cb(); const s=document.createElement('script'); s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'; s.onload=cb; s.onerror=()=>alert('엑셀 라이브러리 로드 실패 — 인터넷 연결을 확인하세요.'); document.head.appendChild(s); }
+function ssExcel(){
+  const box=document.querySelector('.dg-card'); if(!box) return;
+  const inputs=[...box.querySelectorAll('.dg-grid label, .ss-vatrow')].map(l=>{
+    const lbl=(l.querySelector('.dgl')||l.querySelector('.ss-vatlbl')||l).textContent.trim();
+    const inp=l.querySelector('input,select'); if(!inp) return null;
+    const unit=l.querySelector('span:not(.dgl):not(.ss-vatlbl)');
+    return [lbl, inp.type==='checkbox'?(inp.checked?'예':'아니오'):inp.value, unit?unit.textContent.trim():''];
+  }).filter(Boolean);
+  const outputs=[...box.querySelectorAll('#ssc_out .dg-orow')].map(r=>[r.querySelector('span').textContent.trim(), r.querySelector('b').textContent.trim()]);
+  const aoa=[['단기매도 수익률 계산기'],[],['[입력]','값','단위'], ...inputs, [],['[결과]','값'], ...outputs];
+  _loadXLSX(()=>{ const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:20},{wch:22},{wch:6}]; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'단기매도'); XLSX.writeFile(wb,'단기매도_계산.xlsx'); });
+}
+ssWire();
+</script>
+</body>
+</html>
