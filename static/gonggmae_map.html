@@ -247,9 +247,19 @@ function showInfo(p){
     <div style="margin-top:5px;color:#222">최저가 <b>${won(p.min_price)}</b>원</div>
     ${p.appraisal_price?`<div style="color:var(--muted)">감정가 ${won(p.appraisal_price)}원${pct!=null?` · <b style="color:${pct<=70?'#c0392b':'#2c5db0'}">감정가 대비 ${pct}%</b>`:""}</div>`:""}
     ${p.bid_close?`<div style="color:var(--muted)">${p.source==="auction"?"매각기일":"입찰마감"} ${String(p.bid_close).slice(0,16)}</div>`:""}
+    <div id="mbadges" style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px"></div>
     <a href="${url}" target="_blank" style="display:block;text-align:center;margin-top:8px;background:var(--primary);color:#fff;border-radius:7px;padding:7px 0;font-weight:700;text-decoration:none">상세보기 ›</a>`;
   infoOv=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lng),content:el,yAnchor:1.35,zIndex:9});
   infoOv.setMap(map);
+  loadBadges(p);
+}
+async function loadBadges(p){
+  const box=document.getElementById("mbadges"); if(!box) return;   // 현재 팝업의 배지칸(캡처)
+  let d; try{ d=await (await fetch(`/gonggmae_map/badges?source=${encodeURIComponent(p.source)}&item_key=${encodeURIComponent(p.item_key)}`)).json(); }catch(e){ return; }
+  let h="";
+  if(d.trades_3m!=null) h+=`<span style="background:#e9f7ee;border:1px solid #bfe3cd;color:#1a7d46;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px">실거래 ${d.trades_3m}건</span>`;
+  if(d.listings!=null && d.listings>0) h+=`<span style="background:#eef2ff;border:1px solid #c7d2fe;color:#3f51b5;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px">호가 ${d.listings}건</span>`;
+  box.innerHTML=h;                                                 // 캡처 box(그새 다른 핀이면 detached=무해)
 }
 function closeInfo(){ if(infoOv){ infoOv.setMap(null); infoOv=null; } }
 

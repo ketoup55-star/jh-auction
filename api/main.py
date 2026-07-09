@@ -8314,6 +8314,29 @@ def gonggmae_map(srcs: str = "", props: str = "", usage: str = "",
     return {"mode": "clusters", "total": total, "points": [], "clusters": clusters}
 
 
+@app.get("/gonggmae_map/badges")
+def gonggmae_map_badges(source: str, item_key: str,
+                        user: dict = Depends(require_national_user)) -> dict:
+    """핀 팝업용: 실거래 3개월 건수 + 호가 매물 수 (목록 배지와 동일 소스). 클릭 시 온디맨드."""
+    trades = listings = None
+    if source == "gongmae":
+        r = _map_query("SELECT nb_count, apt_hoga FROM gongmae_items WHERE id=%(k)s", {"k": item_key})
+        if r:
+            trades = r[0].get("nb_count"); listings = r[0].get("apt_hoga")
+    else:                                                  # 경매 — 목록과 동일 함수 재사용
+        try:
+            m = (auction_apt_ests(keys=item_key) or {}).get(item_key)
+            if isinstance(m, dict):
+                trades = m.get("trades_3m")
+        except Exception:
+            pass
+        try:
+            listings = (auction_kb_counts(keys=item_key) or {}).get(item_key)
+        except Exception:
+            pass
+    return {"trades_3m": trades, "listings": listings}
+
+
 # ---------- AI 챗봇(사이트 안내) ----------
 _CHAT_SYSTEM = """당신은 'JH옥션스쿨' 부동산 경매·공매 분석 플랫폼의 AI 안내 도우미입니다.
 사용자 질문에 친절하고 간결하게(핵심 위주 3~6문장) 한국어로 답하세요.
