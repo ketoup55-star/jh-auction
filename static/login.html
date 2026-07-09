@@ -101,6 +101,11 @@ function switchTab(t){
 const msg = document.getElementById("msg");
 function showErr(t){ msg.textContent=t; msg.className="msg err"; }
 function showOk(t){ msg.textContent=t; msg.className="msg ok"; }
+(function(){   // 카카오 콜백 실패 시 조용히 돌아오던 것 → 에러 표시(진단)
+  const err=params.get("error"), code=params.get("code");
+  if(err==="kakao"){ showErr("카카오 로그인 실패"+(code?(" ["+code+"]"):"")+" — 카카오 계정 동의/앱 설정을 확인하세요."); }
+  else if(err==="kakao_setup"){ showErr("카카오 로그인 미설정(관리자 키 필요)."); }
+})();
 
 async function post(url, body){
   const r = await fetch(url, {method:"POST", headers:{"Content-Type":"application/json"},

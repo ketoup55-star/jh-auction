@@ -8863,6 +8863,7 @@ def kakao_login():
 @app.get("/auth/kakao/callback")
 def kakao_callback(code: str):
     """카카오 콜백: code → 토큰 → 회원정보 → 세션 발급 → 홈으로."""
+    tok = None
     try:
         token_data = {
             "grant_type": "authorization_code",
@@ -8895,8 +8896,20 @@ def kakao_callback(code: str):
             or (p.get("properties") or {}).get("nickname")
             or "카카오회원"
         )
-    except Exception:
-        return RedirectResponse("/static/login.html?error=kakao", status_code=303)
+    except Exception as e:                              # 카카오 에러를 삼키지 말고 로그+에러코드 노출(진단)
+        import sys as _s, re as _re
+        body = ""
+        try:
+            if tok is not None:
+                body = tok.text[:250]
+        except Exception:
+            body = ""
+        print("[kakao] 콜백 실패: %s: %s | %s" % (type(e).__name__, str(e)[:150], body), file=_s.stderr, flush=True)
+        ec = ""
+        mm = _re.search(r'"error_code":"(\w+)"', body)
+        if mm:
+            ec = mm.group(1)
+        return RedirectResponse("/static/login.html?error=kakao" + (("&code=" + ec) if ec else ""), status_code=303)
 
     user = user_store.get_or_create_social_user("kakao", kakao_id, email, nickname)
     user = _maybe_make_admin(user)                    # 관리자 이름/이메일이면 자동 승격
