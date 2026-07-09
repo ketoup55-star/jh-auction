@@ -646,6 +646,25 @@ class UserStore:
         self._ex("UPDATE users SET role=%s WHERE id=%s", (role, uid))
         return self.get_user(uid)
 
+    def update_profile(self, uid: int, name: Optional[str] = None, email: Optional[str] = None) -> Optional[dict]:
+        """회원 본인 정보수정: 닉네임(name)·이메일. 이메일 UNIQUE 체크(자기 제외).
+        카카오 로그인은 provider_id로 매칭하므로 이메일을 바꿔도 로그인은 안 깨짐."""
+        sets, vals = [], []
+        if name is not None and name.strip():
+            sets.append("name=%s"); vals.append(name.strip())
+        if email is not None and email.strip():
+            e = email.strip()
+            if self._ex("SELECT 1 FROM users WHERE email=%s AND id<>%s", (e, uid), fetch="one"):
+                raise ValueError("이미 사용 중인 이메일입니다.")
+            sets.append("email=%s"); vals.append(e)
+        if not sets:
+            return self.get_user(uid)
+        try:
+            self._ex(f"UPDATE users SET {', '.join(sets)} WHERE id=%s", tuple(vals) + (uid,))
+        except psycopg.errors.UniqueViolation:
+            self._reconnect(); raise ValueError("이미 사용 중인 이메일입니다.")
+        return self.get_user(uid)
+
     # ---- 마일리지 ----
     def adjust_mileage(self, uid: int, amount: int, reason: str = "") -> dict:
         """마일리지 증감(+적립/-차감). 잔액 음수 불가. 거래내역 기록 후 회원정보 반환."""

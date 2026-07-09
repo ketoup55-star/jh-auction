@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>회원정보수정 — JH옥션스쿨</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--line:#dfe3ea;--label:#eef2fb;--labeltx:#2c5db0;--text:#1c1c1a;--muted:#6b6a64;--primary:#1f4fa3;--danger:#c0392b;--hotred:#e8202a;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+  a{color:inherit;text-decoration:none;}
+  .sitehead{position:sticky;top:0;z-index:50;}
+  .top{background:var(--card);border-bottom:1px solid var(--line);}
+  .topin{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px;}
+  .brand{flex:1;text-align:center;font-size:24px;font-weight:700;letter-spacing:-.5px;color:var(--primary);}
+  .brand span{color:#3a7bd5;}
+  .util{display:flex;gap:12px;font-size:12px;color:var(--muted);align-items:center;}
+  .util a{color:var(--muted);cursor:pointer;}
+  .minicase{display:flex;align-items:center;gap:6px;}
+  .minicase .t{font-weight:600;color:var(--primary);font-size:13px;white-space:nowrap;}
+  .minicase .ty{color:var(--muted);font-size:13px;white-space:nowrap;}
+  .minicase select,.minicase input{height:30px;border:1px solid var(--line);border-radius:6px;padding:0 8px;font-size:12px;}
+  .minicase input{width:150px;}
+  .minicase .csearch{height:30px;width:34px;border:1px solid var(--primary);background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;font-size:13px;}
+  .minicase .csearch:hover{background:#163c80;}
+  .nav{background:var(--card);border-bottom:2px solid var(--primary);}
+  .navin{max-width:1180px;margin:0 auto;padding:0 16px;display:flex;gap:4px;flex-wrap:wrap;}
+  .nav a{padding:14px 18px;font-size:15px;font-weight:600;color:#333;}.nav a:hover,.nav a.on{color:var(--primary);}
+  .wrap{max-width:1180px;margin:18px auto;padding:0 16px;display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:start;}
+  .side{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .side .me{padding:14px;border-bottom:1px solid var(--line);}
+  .side .me .nm{font-size:16px;font-weight:700;}.side .me .em{font-size:12px;color:var(--muted);margin-top:2px;word-break:break-all;}
+  .side .me .gr{display:inline-block;margin-top:6px;font-size:11px;color:var(--labeltx);background:var(--label);border-radius:6px;padding:2px 8px;}
+  .side nav a{display:flex;justify-content:space-between;padding:12px 14px;font-size:13px;border-bottom:1px solid var(--line);}
+  .side nav a:last-child{border-bottom:none;}.side nav a:hover{background:#f7f9fc;}
+  .side nav a.on{background:var(--primary);color:#fff;font-weight:700;}
+  .main{min-width:0;}
+  .phead{display:flex;justify-content:space-between;align-items:center;margin:2px 2px 14px;}
+  .phead h1{font-size:22px;font-weight:700;margin:0;}.crumb{font-size:12px;color:var(--muted);}.crumb b{color:var(--primary);}
+  .ftbl{width:100%;border-collapse:collapse;font-size:13px;border:1px solid var(--line);background:var(--card);margin-bottom:12px;}
+  .ftbl th,.ftbl td{border:1px solid var(--line);padding:11px 12px;}
+  .ftbl th{background:var(--label);color:var(--labeltx);font-weight:600;width:104px;white-space:nowrap;text-align:center;}
+  .ftbl input{height:34px;border:1px solid var(--line);border-radius:6px;padding:0 10px;font-size:13px;background:#fff;width:100%;max-width:340px;}
+  .notice{background:#fff7e6;border:1px solid #f0d9a8;border-radius:10px;padding:16px 20px;color:#9a6b0b;font-size:13px;line-height:1.8;}
+  @media(max-width:900px){ .wrap{grid-template-columns:1fr;} }
+  @keyframes natlBlink{0%,100%{opacity:1}50%{opacity:.35}}
+  @keyframes natlWobble{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg)}55%{transform:rotate(9deg)}80%{transform:rotate(-4deg)}}
+  .natllink{position:relative;}
+  .natl-badge{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.02em;color:#fff;
+    background:linear-gradient(180deg,#3f7ce2,#1f4fa3);border:1px solid #1a4590;border-radius:5px;
+    padding:1px 7px;line-height:16px;white-space:nowrap;
+    animation:natlBlink 1.5s ease-in-out infinite;transform-origin:center;
+    position:absolute;top:3px;right:-15px;box-shadow:0 1px 5px rgba(20,60,120,.45);z-index:3;}
+  .natllink:hover>.natl-badge{animation:natlWobble .55s ease-in-out;}
+  @media(prefers-reduced-motion:reduce){.natl-badge{animation:none!important;}}
+</style>
+</head>
+<body>
+<div class="sitehead">
+  <div class="top"><div class="topin">
+    <div class="minicase">
+      <span class="t">사건검색</span>
+      <select id="caseYear"><option value="">전체</option></select>
+      <span class="ty">타경</span>
+      <input type="text" id="caseNoIn" placeholder="타경 번호" onkeydown="if(event.key==='Enter')caseSearch()">
+      <button class="csearch" onclick="caseSearch()" aria-label="검색">🔍</button>
+    </div>
+    <a class="brand" href="/">JH<span>옥션스쿨</span></a>
+    <div class="util" id="util"><a href="/static/login.html">로그인</a></div>
+  </div></div>
+  <div class="nav"><div class="navin">
+    <a href="/static/auctions.html">경매검색</a><a href="/static/board.html?b=yejung">예정</a>
+    <a href="/static/gongmae.html">공매</a><a href="/static/board.html?b=video">강의</a>
+    <a href="/static/board.html?b=community">커뮤니티</a><a href="/static/board.html?b=data">경매자료실</a><a href="/static/shortsale.html">단타 수익률</a><a class="natllink" href="/static/kbdb.html">부동산DB<span class="natl-badge">전국</span></a>
+    <a href="/static/board.html?b=support">고객센터</a><a href="/static/mypage.html" class="on">마이페이지</a>
+  </div></div>
+</div>
+
+<div class="wrap">
+  <aside class="side">
+    <div class="me"><div class="nm" id="s_nm">-</div><div class="em" id="s_em"></div><div class="gr" id="s_gr" style="display:none"></div></div>
+    <nav>
+      <a href="/static/mypage.html">관심경매물건 <span>›</span></a>
+      <a href="/static/mypage_gongmae.html">관심공매물건 <span>›</span></a>
+      <a href="/static/mypage_mockbid.html">모의입찰목록 <span>›</span></a>
+      <a href="/static/mypage_calendar.html">개인입찰달력 <span>›</span></a>
+      <a href="#" onclick="soon(event)">나의상담목록 <span>›</span></a>
+      <a class="on" href="/static/mypage_profile.html">회원정보수정 <span>›</span></a>
+      <a href="#" onclick="soon(event)">스피드포인트 <span>›</span></a>
+      <a href="#" onclick="soon(event)">결제내역 <span>›</span></a>
+      <a href="/static/payment.html">기간연장/요금결제 <span>›</span></a>
+    </nav>
+  </aside>
+
+  <div class="main">
+    <div class="phead"><h1>회원정보수정</h1>
+      <div class="crumb">🏠 › 마이페이지 › <b>회원정보수정</b></div></div>
+
+    <table class="ftbl">
+      <tr><th>닉네임</th><td><input type="text" id="p_name" placeholder="닉네임(이름)" maxlength="20"></td></tr>
+      <tr><th>이메일</th><td><input type="email" id="p_email" placeholder="you@example.com"></td></tr>
+      <tr><th>회원등급</th><td id="p_grade" style="color:var(--muted)">-</td></tr>
+      <tr><th>가입경로</th><td id="p_prov" style="color:var(--muted)">-</td></tr>
+    </table>
+    <div style="display:flex;gap:10px;align-items:center;margin:2px 2px 14px">
+      <button id="p_save" onclick="saveProfile()" style="height:38px;padding:0 24px;background:var(--primary);color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer">저장</button>
+      <span id="p_msg" style="font-size:13px"></span>
+    </div>
+    <div class="notice">
+      · <b>닉네임</b>과 <b>이메일</b>을 수정할 수 있습니다.<br>
+      · 이메일은 다른 회원과 <b>중복될 수 없습니다.</b><br>
+      · 카카오 로그인 회원은 이메일을 바꿔도 <b>카카오 로그인에 영향이 없습니다.</b>
+    </div>
+  </div>
+</div>
+
+<script>
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];}); }
+async function logout(){ await fetch("/auth/logout",{method:"POST"}); location.href="/"; }
+function soon(e){ if(e) e.preventDefault(); alert("준비 중인 메뉴입니다."); }
+(function(){ var s=document.getElementById("caseYear"); if(!s)return;
+  var n=new Date().getFullYear(); for(var y=n;y>=2008;y--){var o=document.createElement("option");o.value=y;o.textContent=y;s.appendChild(o);} })();
+function caseSearch(){ var y=document.getElementById("caseYear").value, no=document.getElementById("caseNoIn").value.trim();
+  var p=new URLSearchParams(); if(y)p.set("year",y); if(no)p.set("keyword",no);
+  location.href="/static/auctions.html"+(p.toString()?"?"+p.toString():""); }
+
+async function load(){
+  const me=await fetch("/auth/me");
+  if(me.status===401){ location.href="/static/login.html?next=/static/mypage_profile.html"; return; }
+  const u=await me.json();
+  document.getElementById("s_nm").textContent=u.name||u.email||"-";
+  document.getElementById("s_em").textContent=u.email||"";
+  const gr=document.getElementById("s_gr"); gr.textContent=(u.grade||"무료")+" 회원"; gr.style.display="inline-block";
+  document.getElementById("util").innerHTML=`<span style="color:var(--primary);font-weight:600">${esc(u.name||u.email)}님</span> <a onclick="logout()">로그아웃</a> <a href="/static/mypage_profile.html">정보수정</a> <a href="/static/mypage.html">마이페이지</a> <a href="/static/payment.html" class="pay">요금결제</a>${u.role==="admin"?'<a href="/static/admin.html" style="color:#fff;background:#e23b3b;padding:2px 9px;border-radius:6px;font-weight:700;margin-left:5px;text-decoration:none">🔧 관리자</a>':''}`;
+  document.getElementById("p_name").value=u.name||"";
+  document.getElementById("p_email").value=u.email||"";
+  document.getElementById("p_grade").textContent=(u.grade||"무료")+(u.role==="admin"?" · 관리자":"");
+  document.getElementById("p_prov").textContent=(u.provider==="kakao"?"카카오 로그인":((!u.provider||u.provider==="local")?"이메일 가입":u.provider));
+}
+async function saveProfile(){
+  const name=document.getElementById("p_name").value.trim();
+  const email=document.getElementById("p_email").value.trim();
+  const msg=document.getElementById("p_msg"), btn=document.getElementById("p_save");
+  if(!name){ msg.textContent="닉네임을 입력하세요."; msg.style.color="var(--danger)"; return; }
+  if(email.indexOf("@")<0 || email.indexOf(".")<0){ msg.textContent="올바른 이메일을 입력하세요."; msg.style.color="var(--danger)"; return; }
+  btn.disabled=true; msg.textContent="저장 중…"; msg.style.color="var(--muted)";
+  try{
+    const r=await fetch("/auth/profile",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:name,email:email})});
+    const d=await r.json();
+    if(!r.ok){ msg.textContent=d.detail||"저장 실패"; msg.style.color="var(--danger)"; }
+    else{
+      msg.textContent="✓ 저장되었습니다."; msg.style.color="#1f7a3d";
+      document.getElementById("s_nm").textContent=(d.user&&d.user.name)||name;
+      document.getElementById("s_em").textContent=(d.user&&d.user.email)||email;
+    }
+  }catch(e){ msg.textContent="오류: "+e; msg.style.color="var(--danger)"; }
+  btn.disabled=false;
+}
+load();
+</script>
+</body>
+</html>

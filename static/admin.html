@@ -34,9 +34,9 @@
   .tab.on{color:var(--primary);border-bottom-color:var(--primary);}
   .mtbl{width:100%;border-collapse:collapse;font-size:12.5px;}
   .mtbl{table-layout:fixed;}
-  .mtbl th,.mtbl td{border:1px solid var(--line);padding:6px 7px;text-align:left;vertical-align:middle;word-break:break-word;overflow-wrap:anywhere;}
-  .mtbl td:nth-child(3),.mtbl th:nth-child(3){word-break:break-all;}
-  .mtbl col.c-id{width:34px;}.mtbl col.c-name{width:58px;}.mtbl col.c-email{width:auto;}.mtbl col.c-phone{width:76px;}.mtbl col.c-grade{width:92px;}.mtbl col.c-role{width:48px;}.mtbl col.c-mil{width:50px;}.mtbl col.c-join{width:72px;}.mtbl col.c-mng{width:150px;}
+  .mtbl th,.mtbl td{border:1px solid var(--line);padding:6px 7px;text-align:left;vertical-align:middle;white-space:nowrap;}
+  .mtbl td:nth-child(3){white-space:normal;word-break:break-all;}   /* 이메일만 필요시 줄바꿈(안전망) */
+  .mtbl col.c-id{width:40px;}.mtbl col.c-name{width:82px;}.mtbl col.c-email{width:auto;}.mtbl col.c-phone{width:98px;}.mtbl col.c-grade{width:92px;}.mtbl col.c-role{width:56px;}.mtbl col.c-mil{width:70px;}.mtbl col.c-join{width:92px;}.mtbl col.c-mng{width:150px;}
   .mtbl td .btn.mini{padding:4px 6px;font-size:11px;}
   .mtbl td .inp.mini{width:100%!important;min-width:0;}
   .mtbl th{background:#f7f9fc;color:var(--primary);font-weight:600;}

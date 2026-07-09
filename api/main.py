@@ -8067,6 +8067,29 @@ def me(user: Optional[dict] = Depends(current_user)) -> dict:
     return {**user, "grade_rank": _user_grade_rank(user)}   # 프런트 등급 게이트(유형필터·정렬)용
 
 
+class ProfileIn(BaseModel):
+    name: Optional[str] = None
+    email: Optional[str] = None
+
+
+@app.post("/auth/profile")
+def auth_update_profile(body: ProfileIn, user: Optional[dict] = Depends(current_user)) -> dict:
+    """회원 본인 정보수정 — 닉네임(name)·이메일. 이메일 중복 불가."""
+    if not user:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    name = (body.name or "").strip()
+    email = (body.email or "").strip()
+    if not name:
+        raise HTTPException(400, "닉네임을 입력하세요.")
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(400, "올바른 이메일을 입력하세요.")
+    try:
+        u = user_store.update_profile(user["id"], name=name, email=email)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "user": u}
+
+
 _INTRO_BODY_CACHE = {"html": None}
 
 
