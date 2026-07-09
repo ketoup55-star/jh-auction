@@ -36,7 +36,7 @@
   .mtbl{table-layout:fixed;}
   .mtbl th,.mtbl td{border:1px solid var(--line);padding:6px 7px;text-align:left;vertical-align:middle;word-break:break-word;overflow-wrap:anywhere;}
   .mtbl td:nth-child(3),.mtbl th:nth-child(3){word-break:break-all;}
-  .mtbl col.c-id{width:38px;}.mtbl col.c-name{width:64px;}.mtbl col.c-email{width:auto;}.mtbl col.c-phone{width:84px;}.mtbl col.c-grade{width:78px;}.mtbl col.c-role{width:54px;}.mtbl col.c-mil{width:58px;}.mtbl col.c-join{width:82px;}.mtbl col.c-mng{width:190px;}
+  .mtbl col.c-id{width:38px;}.mtbl col.c-name{width:64px;}.mtbl col.c-email{width:auto;}.mtbl col.c-phone{width:84px;}.mtbl col.c-grade{width:118px;}.mtbl col.c-role{width:54px;}.mtbl col.c-mil{width:58px;}.mtbl col.c-join{width:82px;}.mtbl col.c-mng{width:190px;}
   .mtbl td .btn.mini{padding:4px 6px;font-size:11px;}
   .mtbl td .inp.mini{width:100%!important;min-width:0;}
   .mtbl th{background:#f7f9fc;color:var(--primary);font-weight:600;}
@@ -303,7 +303,16 @@ async function loadMembers(){
     document.getElementById('mbody').innerHTML = list.map(u=>{
       const roleB = u.role==='admin' ? '<span class="badge admin">관리자</span>' : '회원';
       const opts = gradeOptions(u.grade);
-      const gradeSel = `<select class="inp mini" onchange="changeGrade(${u.id},this.value)" style="padding:4px 6px">${opts}</select>`;
+      const gu = u.grade_until;
+      let expTxt = '<span style="color:#2a8f4a">무제한</span>';
+      if(gu){ const past = new Date(gu) < new Date(); expTxt = past ? '<span style="color:#c0392b;font-weight:700">만료됨</span> '+String(gu).slice(0,10) : '~ '+String(gu).slice(0,10); }
+      const gradeSel = `
+        <select id="grd-${u.id}" class="inp mini" onchange="changeGrade(${u.id})" style="padding:3px 5px;width:100%">${opts}</select>
+        <select id="per-${u.id}" class="inp mini" onchange="onPeriodChange(${u.id})" style="padding:3px 5px;width:100%;margin-top:3px">
+          <option value="0">무제한</option><option value="1">1일</option><option value="7">1주일</option><option value="30">1개월</option><option value="90">3개월</option><option value="365">1년</option><option value="custom">직접입력…</option>
+        </select>
+        <input id="perd-${u.id}" class="inp mini" type="number" min="1" placeholder="일수 입력 후 ↵" style="width:100%;margin-top:3px;display:none" onkeydown="if(event.key==='Enter')changeGrade(${u.id})">
+        <div style="margin-top:3px;font-size:10px;color:#888;line-height:1.3">현재: ${expTxt}</div>`;
       return `<tr>
         <td>${u.id}</td><td>${esc(u.name)}</td><td>${esc(u.email)}</td><td>${esc(u.phone)}</td>
         <td>${gradeSel}</td><td>${roleB}</td>
@@ -455,12 +464,25 @@ async function deleteGrade(gid, name){
     if(d.downgraded) alert(`삭제됨. ${d.downgraded}명이 '무료'로 변경되었습니다.`);
   }catch(e){ alert('실패: '+e); }
 }
-async function changeGrade(uid, grade){
+function onPeriodChange(uid){
+  const per=document.getElementById('per-'+uid).value;
+  const di=document.getElementById('perd-'+uid);
+  if(per==='custom'){ di.style.display=''; di.value=''; di.focus(); return; }   // 직접입력 → 일수 입력 후 ↵로 적용
+  di.style.display='none';
+  changeGrade(uid);
+}
+async function changeGrade(uid){
+  const grade=document.getElementById('grd-'+uid).value;
+  const per=document.getElementById('per-'+uid).value;
+  let days=0;
+  if(per==='custom'){ days=Math.abs(parseInt(document.getElementById('perd-'+uid).value,10))||0; if(!days){ alert('유지 일수를 입력하세요.'); return; } }
+  else days=parseInt(per,10)||0;
   try{
     const r=await fetch('/admin/users/grade',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({user_id:uid, grade})});
-    if(!r.ok){ alert((await r.json()).detail||'실패'); loadMembers(); }
-  }catch(e){ alert('실패: '+e); }
+      body:JSON.stringify({user_id:uid, grade, days})});
+    if(!r.ok){ alert((await r.json()).detail||'실패'); }
+  }catch(e){ alert('실패: '+e); return; }
+  loadMembers();   // 만료일 표시 갱신
 }
 
 // ── 게시판관리 ──

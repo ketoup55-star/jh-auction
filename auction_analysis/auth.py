@@ -59,6 +59,7 @@ def _user_dict(r: dict) -> dict:
         "phone": (r["phone"] if "phone" in keys else "") or "",
         "mileage": (r["mileage"] if "mileage" in keys else 0) or 0,
         "paid_until": (r["paid_until"] if "paid_until" in keys else None) or None,
+        "grade_until": (r["grade_until"] if "grade_until" in keys else None) or None,
     }
 
 
@@ -302,6 +303,7 @@ class UserStore:
         self._ensure_column("users", "phone", "TEXT DEFAULT ''")      # 휴대폰(본인인증)
         self._ensure_column("users", "mileage", "INTEGER DEFAULT 0")  # 마일리지 잔액
         self._ensure_column("users", "paid_until", "TEXT")            # 이용권 만료 YYYY-MM-DD
+        self._ensure_column("users", "grade_until", "TEXT")           # 등급 유지기한 ISO(넘으면 무료 대우·NULL=무제한)
         self._ensure_column("grades", "comment", "TEXT DEFAULT ''")   # 등급별 코멘트
         self._ensure_column("favorites", "folder", "TEXT DEFAULT '기타'")     # 관심물건 폴더
         self._ensure_column("favorites", "importance", "INTEGER DEFAULT 0")   # 중요도 0~5
@@ -628,8 +630,9 @@ class UserStore:
         params = params + (int(limit),)
         return [_user_dict(r) for r in self._ex(sql, params, fetch="all")]
 
-    def set_grade(self, uid: int, grade: str) -> Optional[dict]:
-        self._ex("UPDATE users SET grade=%s WHERE id=%s", (grade, uid))
+    def set_grade(self, uid: int, grade: str, grade_until: Optional[str] = None) -> Optional[dict]:
+        """등급 설정 + 유지기한(grade_until ISO, None=무제한) 저장."""
+        self._ex("UPDATE users SET grade=%s, grade_until=%s WHERE id=%s", (grade, grade_until, uid))
         return self.get_user(uid)
 
     def set_role(self, uid: int, role: str) -> Optional[dict]:
