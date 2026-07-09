@@ -8232,6 +8232,15 @@ def download_sms_app():
                         filename="리치빌더 자동문자보내기.apk")
 
 
+@app.get("/privacy")
+def privacy_page():
+    """개인정보처리방침(클린 URL) — 포트원/다날 본인인증 신청·통신판매 표기용."""
+    p = os.path.join(_ROOT, "static", "privacy.html")
+    if not os.path.exists(p):
+        raise HTTPException(404, "페이지를 찾을 수 없습니다.")
+    return FileResponse(p, media_type="text/html; charset=utf-8")
+
+
 # ---------- AI 챗봇(사이트 안내) ----------
 _CHAT_SYSTEM = """당신은 'JH옥션스쿨' 부동산 경매·공매 분석 플랫폼의 AI 안내 도우미입니다.
 사용자 질문에 친절하고 간결하게(핵심 위주 3~6문장) 한국어로 답하세요.
