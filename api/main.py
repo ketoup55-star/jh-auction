@@ -8684,7 +8684,15 @@ async def ai_kb_upload(title: str = Form(...), file: UploadFile = File(...),
     os.makedirs(_AI_KB_DIR, exist_ok=True)
     with open(os.path.join(_AI_KB_DIR, slug + ".txt"), "w", encoding="utf-8") as f:
         f.write(text)
-    idx[slug] = {"title": title, "chars": len(text), "src": fname}
+    ext = (os.path.splitext(fname)[1] or ".txt").lower()          # 원본 확장자 보존(.pdf/.txt)
+    orig_rel = slug + "_orig" + ext
+    try:                                                          # 원본 파일 원형 그대로 저장(다운로드용)
+        with open(os.path.join(_AI_KB_DIR, orig_rel), "wb") as f:
+            f.write(data)
+    except Exception:
+        orig_rel = ""
+    idx[slug] = {"title": title, "chars": len(text), "src": fname,
+                 "orig": orig_rel, "orig_ext": ext}
     _ai_kb_save_index(idx)
     return {"ok": True, "slug": slug, "chars": len(text)}
 
@@ -8701,36 +8709,52 @@ def ai_kb_list(admin: dict = Depends(require_admin)) -> dict:
         except Exception:
             pass
         items.append({"slug": slug, "title": meta.get("title", slug),
-                      "chars": meta.get("chars", 0), "preview": preview})
+                      "chars": meta.get("chars", 0), "preview": preview,
+                      "has_orig": bool(meta.get("orig")), "orig_ext": meta.get("orig_ext", "")})
     return {"ok": True, "items": items, "total_chars": sum(x["chars"] for x in items)}
 
 
 @app.delete("/admin/ai_kb/{slug}")
 def ai_kb_delete(slug: str, admin: dict = Depends(require_admin)) -> dict:
     idx = _ai_kb_load_index()
+    meta = idx.get(slug) or {}
     if slug in idx:
         del idx[slug]
         _ai_kb_save_index(idx)
-    try:
-        os.remove(os.path.join(_AI_KB_DIR, slug + ".txt"))
-    except Exception:
-        pass
+    for rel in (slug + ".txt", meta.get("orig") or ""):          # 텍스트 + 원본 함께 삭제
+        if rel:
+            try:
+                os.remove(os.path.join(_AI_KB_DIR, rel))
+            except Exception:
+                pass
     return {"ok": True}
 
 
 @app.get("/admin/ai_kb/{slug}/download")
-def ai_kb_download(slug: str, admin: dict = Depends(require_admin)):
-    """등록된 학습자료(추출·학습된 텍스트)를 .txt로 다운로드. 원본 PDF는 보관 안 하므로 텍스트 제공."""
+def ai_kb_download(slug: str, kind: str = "orig", admin: dict = Depends(require_admin)):
+    """등록 학습자료 다운로드. kind=orig(기본)=원본 파일(보관돼 있으면), kind=txt=추출·학습된 텍스트.
+    구자료(원본 없음)는 kind=orig여도 텍스트로 폴백."""
     idx = _ai_kb_load_index()
     meta = idx.get(slug)
     if not meta:
         raise HTTPException(404, "자료를 찾을 수 없습니다.")
-    try:
+    from urllib.parse import quote as _q
+    orig = meta.get("orig") or ""
+    if kind == "orig" and orig:                          # 원본 파일 요청 + 보관됨
+        op = os.path.join(_AI_KB_DIR, orig)
+        if os.path.exists(op):
+            with open(op, "rb") as f:
+                blob = f.read()
+            ext = (meta.get("orig_ext") or os.path.splitext(orig)[1] or ".bin").lower()
+            mt = {".pdf": "application/pdf", ".txt": "text/plain; charset=utf-8"}.get(ext, "application/octet-stream")
+            dlname = _q((meta.get("title") or slug) + ext)
+            return Response(content=blob, media_type=mt,
+                            headers={"Content-Disposition": "attachment; filename=\"ai_kb%s\"; filename*=UTF-8''%s" % (ext, dlname)})
+    try:                                                 # 텍스트(원본 없거나 kind=txt)
         with open(os.path.join(_AI_KB_DIR, slug + ".txt"), encoding="utf-8") as f:
             text = f.read()
     except Exception:
         raise HTTPException(404, "파일이 없습니다.")
-    from urllib.parse import quote as _q
     dlname = _q((meta.get("title") or slug) + ".txt")   # 한글 파일명 RFC5987(filename*)
     return Response(content=text, media_type="text/plain; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=\"ai_kb.txt\"; filename*=UTF-8''%s" % dlname})
