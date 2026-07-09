@@ -1,5 +1,150 @@
 {
- "items": [],
- "count": 0,
+ "items": [
+  {
+   "keyword": "집값",
+   "title": "집값 상승·증시 호조에 7월 입주전망 12.9p ‘쑥’… 입주율은 주춤 - 조선비즈",
+   "link": "https://biz.chosun.com/real_estate/real_estate_general/2026/07/09/BVPTKP3ZBBCYLHNGTQC3C4LJQU/",
+   "image": "https://biz.chosun.com/resizer/v2/XPC4ULK7VFCVJPC4OONA77LGDI.png?auth=7642d1c6ff44a03bdff38ff6252765762a5d6d7bdcaff71db7cc0c31e60fc5ff&width=791&height=415&smart=true",
+   "source": "조선비즈",
+   "published": "2026-07-09T10:44:31.756000+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "6월 전국 아파트 경매 진행 3701건…12년여 만에 최다",
+   "link": "https://www.newspim.com/news/view/20260709000414",
+   "image": "https://img.newspim.com/news/2026/07/09/2607091031340190_t1.jpg",
+   "source": "뉴스핌",
+   "published": "2026-07-09T10:35:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "서울 아파트 경매 낙찰가율 101.7%…3개월 연속 100% 웃돌아",
+   "link": "https://www.segye.com/newsView/20260709508695",
+   "image": "https://www.segye.com/content/image/2026/07/09/20260709508693.jpg",
+   "source": "세계일보",
+   "published": "2026-07-09T10:21:37+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "대구 아파트 경매 낙찰률 한 달 만에 하락…7개월째 '80%대'",
+   "link": "https://www.news1.kr/local/daegu-gyeongbuk/6222612",
+   "image": "https://i3n.news1.kr/system/photos/2026/7/9/7999596/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-07-09T09:59:09+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "[2026부동산세미나] 쌓이는 규제 속 대응법은···시사저널e, 부동산 세미나 개최",
+   "link": "https://www.sisajournal-e.com/news/articleView.html?idxno=422299",
+   "image": "https://cdn.sisajournal-e.com/news/thumbnail/202607/422299_236923_1745_v150.jpg",
+   "source": "시사저널e",
+   "published": "2026-07-09T09:31:40+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "“종부세 공정가액비율 60%→80% 인상 땐 1인당 세금 324만원 → 624만원으로 늘어\" - 조선비즈",
+   "link": "https://biz.chosun.com/policy/policy_sub/2026/07/09/G6ARNEFE5RGCLNJJX4CSUJJ2UI/",
+   "image": "https://biz.chosun.com/resizer/v2/KYY7WEL7LNMUNP4PHMPHM4LSCU.jpg?auth=1a9adbd16cc95b8ab2fdc0efd6b649d37a9e10b5e560160b00832e7a3cef5c66&width=1200&height=630&smart=true",
+   "source": "조선비즈",
+   "published": "2026-07-09T09:14:21.502000+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "종부세 공정비율 80%로 올리면 1인당 세금 624만원 … 총 주택 보유세는 '10兆 돌파'",
+   "link": "https://biz.newdaily.co.kr/site/data/html/2026/07/09/2026070900042.amp.html",
+   "image": "https://image.newdaily.co.kr/site/data/img/2026/07/09/2026070900042_0.png?u=20260709093049",
+   "source": "뉴데일리 경제",
+   "published": "2026-07-09T09:09:08+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "KB이어 신한은행도 대출 조인다…모기지보험 중단",
+   "link": "https://kbthink.com/news-list/view.html?newsId=20260709082805140",
+   "image": "https://kbthink.com/content/dam/tam-dcp-cms/kbthink/KB의 생각_한글.png",
+   "source": "KB의 생각",
+   "published": "2026-07-09T08:28:04+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "종부세 80% 카드 꺼내면 보유세 첫 10조 돌파⋯세금 부담↑",
+   "link": "https://www.etoday.co.kr/news/view/2601804",
+   "image": "https://img.etoday.co.kr/pto_db/2026/07/20260707124730_2356049_1200_819.JPG",
+   "source": "이투데이",
+   "published": "2026-07-09T07:26:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "동탄 집값 불붙인 게, 중개사들이 부채질이라고?",
+   "link": "https://news.bizwatch.co.kr/article/real_estate/2026/07/03/0021",
+   "image": "https://cdn.bizwatch.co.kr/news/photo/2026/07/03/05807a499578c7fc897620c748cad149.jpg",
+   "source": "비즈니스워치",
+   "published": "2026-07-09T06:36:03+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "경실련 “집값 안정 위해 공공주택 공급 확대해야”",
+   "link": "https://www.labortoday.co.kr/news/articleView.html?idxno=235603",
+   "image": "https://cdn.labortoday.co.kr/news/thumbnail/202607/235603_113693_0626_v150.jpg",
+   "source": "매일노동뉴스",
+   "published": "2026-07-09T06:30:04+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "서울 6억 아파트 '멸종'인데…정책대출은 5~6억 이하 집만 가능",
+   "link": "https://www.edaily.co.kr/News/Read?newsId=01640006645512880&mediaCodeNo=257",
+   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/07/PS26070900045.jpg",
+   "source": "이데일리",
+   "published": "2026-07-09T06:00:04+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "[김성탁의 민심풍향계] 30대 여권에 등 돌린 이유, 알고 보니 부동산 정책 때문",
+   "link": "https://www.joongang.co.kr/article/25443588",
+   "image": "https://assets.joongang.co.kr/images/share/ja-opengraph-img.png",
+   "source": "중앙일보",
+   "published": "2026-07-09T00:18:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "빌라 경매",
+   "title": "빚 못 갚아 넘어간 서울 집 급증…상반기 강제경매 소유권 이전 '42.5%'↑",
+   "link": "https://news.nate.com/view/20260709n11643",
+   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/aj/2026/07/09/20260709104007187007.jpg",
+   "source": "네이트 뉴스",
+   "published": "2026-07-09T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "대출규제",
+   "title": "\"갑자기 3억을 어디서 빌리나\"…KB 주담대 극약처방",
+   "link": "https://v.daum.net/v/20260709072101058",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/09/sbscnbc/20260709072103380suxl.jpg",
+   "source": "Daum",
+   "published": "2026-07-09T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "[목요일 아침에] 정책 불신이 부른 집값 불안",
+   "link": "https://news.nate.com/view/20260709n02427",
+   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/se/2026/07/09/news-p.v1.20260513.de8378e4bedc4f96ad23cba4e7b048b2_P3.jpeg",
+   "source": "네이트 뉴스",
+   "published": "2026-07-09T00:00:00+09:00",
+   "has_time": false
+  }
+ ],
+ "count": 16,
  "date": "2026-07-09"
 }
