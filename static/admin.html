@@ -36,6 +36,7 @@
   .mtbl{table-layout:fixed;}
   .mtbl th,.mtbl td{border:1px solid var(--line);padding:6px 7px;text-align:left;vertical-align:middle;white-space:nowrap;}
   .mtbl td:nth-child(3){white-space:normal;word-break:break-all;}   /* 이메일만 필요시 줄바꿈(안전망) */
+  .mtbl td:nth-child(5){white-space:normal;}   /* 등급 셀: 드롭다운(등급+기간) 세로 스택 유지 — nowrap이면 옆으로 밀려 권한칸과 겹침 */
   .mtbl col.c-id{width:40px;}.mtbl col.c-name{width:82px;}.mtbl col.c-email{width:auto;}.mtbl col.c-phone{width:98px;}.mtbl col.c-grade{width:92px;}.mtbl col.c-role{width:56px;}.mtbl col.c-mil{width:70px;}.mtbl col.c-join{width:92px;}.mtbl col.c-mng{width:150px;}
   .mtbl td .btn.mini{padding:4px 6px;font-size:11px;}
   .mtbl td .inp.mini{width:100%!important;min-width:0;}
