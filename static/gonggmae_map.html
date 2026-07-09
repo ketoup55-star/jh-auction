@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>경공매 지도 — JH옥션스쿨</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--line:#dfe3ea;--text:#1c1c1a;--muted:#6b6a64;--primary:#1f4fa3;
+        --auction:#e2483d;--gongmae:#1f7ae0;}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:-apple-system,"Segoe UI","Malgun Gothic",sans-serif;background:var(--bg);color:var(--text);font-size:13px;}
+  a{color:inherit;text-decoration:none;}
+  .sitehead{position:sticky;top:0;z-index:60;}
+  .top{background:var(--card);border-bottom:1px solid var(--line);}
+  .topin{max-width:1180px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:16px;}
+  .brand{flex:1;text-align:center;font-size:24px;font-weight:700;color:var(--primary);}
+  .brand span{color:#3a7bd5;}
+  .util{display:flex;gap:12px;font-size:12px;color:var(--muted);align-items:center;}
+  .util a{cursor:pointer;}
+  .nav{background:var(--card);border-bottom:2px solid var(--primary);}
+  .navin{max-width:1180px;margin:0 auto;padding:0 16px;display:flex;gap:4px;flex-wrap:wrap;}
+  .nav a{padding:13px 15px;font-size:15px;font-weight:600;color:#333;}.nav a:hover,.nav a.on{color:var(--primary);}
+  /* 지도 */
+  .maparea{position:relative;height:calc(100vh - 108px);min-height:420px;}
+  #map{width:100%;height:100%;}
+  .mapnote{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);z-index:1;pointer-events:none;}
+  /* 상단 툴바 */
+  .toolbar{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:20;display:flex;gap:8px;align-items:center;
+           background:var(--card);border:1px solid var(--line);border-radius:30px;box-shadow:0 3px 14px rgba(0,0,0,.14);padding:6px 8px 6px 14px;}
+  .toolbar .st{font-size:13px;color:var(--muted);}.toolbar .st b{color:var(--primary);}
+  .fbtn{border:none;background:var(--primary);color:#fff;border-radius:22px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;}
+  .fbtn:hover{background:#163c80;}
+  /* 범례(좌상단, Phase4 규제/토허 + 핀) */
+  .legend{position:absolute;top:12px;left:12px;z-index:20;background:rgba(255,255,255,.95);border:1px solid var(--line);
+          border-radius:10px;box-shadow:0 2px 10px rgba(0,0,0,.12);padding:10px 12px;font-size:12px;min-width:120px;}
+  .legend h4{margin:0 0 6px;font-size:12px;color:var(--muted);font-weight:700;}
+  .lg{display:flex;align-items:center;gap:6px;margin:3px 0;}
+  .lg .sw{width:12px;height:12px;border-radius:3px;display:inline-block;}
+  /* 핀 */
+  .pin{width:14px;height:14px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid #fff;
+       box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:pointer;}
+  .pin.pa{background:var(--auction);}.pin.pg{background:var(--gongmae);}
+  .pin:hover{width:18px;height:18px;}
+  /* 클러스터 */
+  .cluster{min-width:44px;padding:5px 8px;border-radius:22px;background:rgba(31,79,163,.92);color:#fff;text-align:center;
+           cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35);line-height:1.1;}
+  .cluster b{font-size:14px;}
+  .cluster .cl-br{display:block;font-size:9.5px;margin-top:1px;white-space:nowrap;}
+  .cluster .ca{color:#ffd9d5;font-style:normal;}.cluster .cg{color:#cfe6ff;font-style:normal;}
+  /* 필터 패널 */
+  .overlay{position:fixed;inset:0;background:rgba(20,25,35,.45);z-index:80;display:none;align-items:center;justify-content:center;}
+  .panel{background:var(--card);border-radius:14px;width:min(440px,92vw);max-height:88vh;overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.3);}
+  .panel h2{margin:0;padding:16px 20px;font-size:17px;border-bottom:1px solid var(--line);}
+  .pbody{padding:16px 20px;}
+  .step{margin-bottom:18px;}
+  .step .lbl{font-size:13px;font-weight:700;color:var(--primary);margin-bottom:8px;}
+  .step .lbl small{color:var(--muted);font-weight:400;margin-left:4px;}
+  .opts{display:flex;flex-wrap:wrap;gap:8px;}
+  .opt{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:13px;cursor:pointer;user-select:none;}
+  .opt:hover{border-color:var(--primary);}
+  .opt input{margin:0;}
+  .opt.sel{background:#eef3fb;border-color:var(--primary);color:var(--primary);font-weight:600;}
+  #propSection{display:none;}
+  .pfoot{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;}
+  .go{border:none;background:var(--primary);color:#fff;border-radius:8px;padding:10px 22px;font-size:15px;font-weight:700;cursor:pointer;}
+  .go:hover{background:#163c80;}
+  .ghost{border:1px solid var(--line);background:#fff;color:var(--muted);border-radius:8px;padding:10px 16px;cursor:pointer;}
+</style>
+</head>
+<body>
+<div class="sitehead">
+  <div class="top"><div class="topin">
+    <a class="brand" href="/">JH<span>옥션스쿨</span></a>
+    <div class="util" id="util"><a href="/static/login.html">로그인</a></div>
+  </div></div>
+  <div class="nav"><div class="navin">
+    <a href="/static/auctions.html">경매검색</a>
+    <a href="/static/gongmae.html">공매</a>
+    <a href="/static/gonggmae_map.html" class="on">경공매 지도</a>
+    <a href="/static/board.html?b=video">강의</a>
+    <a href="/static/board.html?b=community">커뮤니티</a>
+    <a href="/static/board.html?b=data">경매자료실</a>
+    <a href="/static/shortsale.html">단타 수익률</a>
+    <a href="/static/kbdb.html">부동산DB</a>
+    <a href="/static/board.html?b=support">고객센터</a>
+    <a href="/static/mypage.html">마이페이지</a>
+  </div></div>
+</div>
+
+<div class="maparea">
+  <div id="map"></div>
+  <div class="mapnote" id="mapnote">필터를 설정하면 물건이 표시됩니다.</div>
+
+  <div class="toolbar">
+    <span class="st"><b id="count">0건</b> · <span id="fdesc">필터 미설정</span></span>
+    <button class="fbtn" onclick="openFilter()">🔍 물건 필터</button>
+  </div>
+
+  <div class="legend" id="legend" style="display:none">
+    <h4>표시</h4>
+    <div class="lg"><span class="sw" style="background:var(--auction)"></span>경매</div>
+    <div class="lg"><span class="sw" style="background:var(--gongmae)"></span>공매</div>
+  </div>
+</div>
+
+<!-- 필터 패널 -->
+<div class="overlay" id="overlay">
+  <div class="panel">
+    <h2>물건 필터</h2>
+    <div class="pbody">
+      <div class="step">
+        <div class="lbl">① 대분류 <small>복수 선택</small></div>
+        <div class="opts" id="srcOpts">
+          <label class="opt"><input type="checkbox" name="src" value="auction" onchange="onSrcChange(this)">경매</label>
+          <label class="opt"><input type="checkbox" name="src" value="gongmae" onchange="onSrcChange(this)">공매</label>
+        </div>
+      </div>
+      <div class="step" id="propSection">
+        <div class="lbl">② 재산종류 <small>공매 · 복수 선택</small></div>
+        <div class="opts" id="propOpts"></div>
+      </div>
+      <div class="step">
+        <div class="lbl">③ 용도 <small>단일 선택</small></div>
+        <div class="opts" id="usageOpts"></div>
+      </div>
+    </div>
+    <div class="pfoot">
+      <button class="ghost" onclick="closeFilter()">닫기</button>
+      <button class="go" onclick="applyFilter()">완료</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const KAKAO_JS_KEY="d10bff18727c6f302ff09765b62b1b23";
+const PROPS=["압류재산","국유재산","수탁재산","유입자산","공유재산","기타일반재산"];
+const USAGES=["아파트","다세대연립","도생","단독다가구","상가","숙박"];
+const USAGE_LABEL={아파트:"아파트","다세대연립":"다세대/연립(빌라)",도생:"도시형생활주택",단독다가구:"단독/다가구",상가:"상가",숙박:"숙박"};
+let map, overlays=[], applied=false, fetchSeq=0, idleTimer=null;
+const state={srcs:[],props:[],usage:""};
+
+// 필터 옵션 렌더
+document.getElementById("propOpts").innerHTML=PROPS.map(p=>`<label class="opt"><input type="checkbox" name="prop" value="${p}">${p}</label>`).join("");
+document.getElementById("usageOpts").innerHTML=USAGES.map(u=>`<label class="opt"><input type="radio" name="usage" value="${u}">${USAGE_LABEL[u]}</label>`).join("");
+// 선택 시 하이라이트
+document.addEventListener("change",e=>{ if(e.target.matches(".opt input")){ const box=e.target.closest(".opt");
+  if(e.target.type==="radio"){ document.querySelectorAll('input[name=usage]').forEach(r=>r.closest(".opt").classList.toggle("sel",r.checked)); }
+  else box.classList.toggle("sel", e.target.checked); } });
+
+function loadKakaoSDK(){
+  if(window.kakao&&kakao.maps) return Promise.resolve();
+  return new Promise((res,rej)=>{ const s=document.createElement("script");
+    s.src="https://dapi.kakao.com/v2/maps/sdk.js?appkey="+KAKAO_JS_KEY+"&libraries=services&autoload=false";
+    s.onload=()=>kakao.maps.load(res); s.onerror=rej; document.head.appendChild(s); });
+}
+async function init(){
+  try{ await loadKakaoSDK(); }catch(e){ document.getElementById("mapnote").textContent="지도 로드 실패 — 카카오 개발자센터 도메인 등록 확인"; return; }
+  map=new kakao.maps.Map(document.getElementById("map"),{center:new kakao.maps.LatLng(36.5,127.8),level:13});
+  kakao.maps.event.addListener(map,"idle",()=>{ if(!applied)return; clearTimeout(idleTimer); idleTimer=setTimeout(refresh,250); });
+  openFilter();
+  // 로그인 표시
+  try{ const me=await fetch("/auth/me"); if(me.ok){ const u=await me.json();
+    document.getElementById("util").innerHTML=`<span style="color:var(--primary);font-weight:600">${(u.name||u.email||"회원")}님</span> <a onclick="logout()">로그아웃</a> <a href="/static/mypage.html">마이페이지</a>`; } }catch(e){}
+}
+async function logout(){ await fetch("/auth/logout",{method:"POST"}); location.reload(); }
+
+function openFilter(){ document.getElementById("overlay").style.display="flex"; }
+function closeFilter(){ document.getElementById("overlay").style.display="none"; }
+function onSrcChange(){ const gm=document.querySelector('input[name=src][value=gongmae]').checked;
+  document.getElementById("propSection").style.display=gm?"block":"none";
+  document.querySelector('input[name=src][value=auction]').closest(".opt").classList.toggle("sel",document.querySelector('input[name=src][value=auction]').checked);
+  document.querySelector('input[name=src][value=gongmae]').closest(".opt").classList.toggle("sel",gm); }
+
+function applyFilter(){
+  state.srcs=[...document.querySelectorAll('input[name=src]:checked')].map(x=>x.value);
+  state.props=[...document.querySelectorAll('input[name=prop]:checked')].map(x=>x.value);
+  state.usage=(document.querySelector('input[name=usage]:checked')||{}).value||"";
+  if(!state.srcs.length){ alert("경매 또는 공매를 선택하세요."); return; }
+  if(!state.usage){ alert("용도를 선택하세요."); return; }
+  applied=true; closeFilter();
+  document.getElementById("mapnote").style.display="none";
+  document.getElementById("legend").style.display="block";
+  const srcTxt=state.srcs.map(s=>s==="auction"?"경매":"공매").join("·");
+  document.getElementById("fdesc").textContent=`${srcTxt} · ${USAGE_LABEL[state.usage]}`;
+  refresh();
+}
+
+function clearOverlays(){ overlays.forEach(o=>o.setMap(null)); overlays=[]; }
+async function refresh(){
+  if(!applied||!map) return;
+  const b=map.getBounds(), sw=b.getSouthWest(), ne=b.getNorthEast();
+  const q=new URLSearchParams({srcs:state.srcs.join(","),props:state.props.join(","),usage:state.usage,
+    sw_lat:sw.getLat(),sw_lng:sw.getLng(),ne_lat:ne.getLat(),ne_lng:ne.getLng(),zoom:15-map.getLevel()});
+  const seq=++fetchSeq;
+  let d; try{ d=await (await fetch("/gonggmae_map?"+q)).json(); }catch(e){ return; }
+  if(seq!==fetchSeq) return;
+  clearOverlays();
+  if(d.mode==="clusters"){ d.clusters.forEach(renderCluster); }
+  else{ (d.points||[]).forEach(renderPin); }
+  document.getElementById("count").textContent=(d.total||0).toLocaleString()+"건";
+}
+function renderPin(p){
+  const el=document.createElement("div"); el.className="pin "+(p.source==="auction"?"pa":"pg");
+  el.onclick=()=>showInfo(p);
+  const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lng),content:el,yAnchor:1,zIndex:5});
+  ov.setMap(map); overlays.push(ov);
+}
+function renderCluster(c){
+  const tot=(c.auction||0)+(c.gongmae||0);
+  const el=document.createElement("div"); el.className="cluster";
+  el.innerHTML=`<b>${tot}</b><span class="cl-br"><i class="ca">경매${c.auction||0}</i>·<i class="cg">공매${c.gongmae||0}</i></span>`;
+  el.onclick=()=>{ map.setLevel(Math.max(1,map.getLevel()-2),{anchor:new kakao.maps.LatLng(c.lat,c.lng)}); };
+  const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(c.lat,c.lng),content:el,zIndex:6});
+  ov.setMap(map); overlays.push(ov);
+}
+let infoOv=null;
+function showInfo(p){
+  if(infoOv) infoOv.setMap(null);
+  const won=n=>n?(n/10000).toLocaleString()+"만":"-";
+  const tag=p.source==="auction"?'<span style="color:var(--auction);font-weight:700">경매</span>':'<span style="color:var(--gongmae);font-weight:700">공매</span>';
+  const el=document.createElement("div");
+  el.style.cssText="background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 3px 14px rgba(0,0,0,.22);padding:11px 13px;min-width:170px;font-size:12.5px;";
+  el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">${tag}<span style="cursor:pointer;color:#aaa" onclick="closeInfo()">✕</span></div>
+    <div style="font-weight:600">${USAGE_LABEL[p.usage_group]||p.usage_group||""}${p.prop_type?" · "+p.prop_type:""}</div>
+    <div style="color:var(--muted);margin-top:3px">최저가 ${won(p.min_price)}원</div>
+    ${p.bid_close?`<div style="color:var(--muted)">${p.source==="auction"?"매각기일":"입찰마감"} ${String(p.bid_close).slice(0,16)}</div>`:""}`;
+  infoOv=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lng),content:el,yAnchor:1.35,zIndex:9});
+  infoOv.setMap(map);
+}
+function closeInfo(){ if(infoOv){ infoOv.setMap(null); infoOv=null; } }
+init();
+</script>
+</body>
+</html>
