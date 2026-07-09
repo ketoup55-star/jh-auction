@@ -8839,23 +8839,37 @@ def _openai_key() -> str:
 
 
 def _pdf_bytes_to_text(data: bytes) -> str:
-    """PDF → 텍스트. 텍스트 레이어 있으면 그대로, 스캔본이면 GPT-4o Vision으로 추출."""
-    import fitz
-    doc = fitz.open(stream=data, filetype="pdf")
-    plain = "\n".join((p.get_text() or "") for p in doc)
+    """PDF → 텍스트. 텍스트 레이어는 pdfplumber(항상 설치됨), 스캔본은 fitz+GPT-4o Vision.
+    fitz(PyMuPDF) 미설치 환경에서도 500 안 나게 graceful 처리."""
+    import io
+    plain = ""
+    try:                                                  # 텍스트 PDF → pdfplumber (fitz 불필요)
+        import pdfplumber
+        with pdfplumber.open(io.BytesIO(data)) as pdf:
+            plain = "\n".join((p.extract_text() or "") for p in pdf.pages)
+    except Exception:
+        plain = ""
     if len(plain.strip()) > 60:
         return plain.strip()
-    key = _openai_key()
+    key = _openai_key()                                   # 스캔본 → GPT Vision(페이지 이미지화=fitz)
     if not key:
-        return ""
+        return plain.strip()
+    try:
+        import fitz
+    except Exception:                                     # PyMuPDF 미설치 → 스캔 OCR 불가(하드 500 방지)
+        return plain.strip()
     import base64
     imgs = []
-    for page in doc:
-        pix = page.get_pixmap(dpi=140)
-        b64 = base64.b64encode(pix.tobytes("png")).decode()
-        imgs.append({"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64, "detail": "high"}})
+    try:
+        doc = fitz.open(stream=data, filetype="pdf")
+        for page in doc:
+            pix = page.get_pixmap(dpi=140)
+            b64 = base64.b64encode(pix.tobytes("png")).decode()
+            imgs.append({"type": "image_url", "image_url": {"url": "data:image/png;base64," + b64, "detail": "high"}})
+    except Exception:
+        return plain.strip()
     if not imgs:
-        return ""
+        return plain.strip()
     content = [{"type": "text", "text": "이 문서의 모든 내용을 빠짐없이 한국어 텍스트로 정리해줘. "
                "표·수치·조건·예시를 그대로 포함. AI 상담 답변 근거로 쓸 거야."}] + imgs
     try:
@@ -8867,7 +8881,7 @@ def _pdf_bytes_to_text(data: bytes) -> str:
             return (r.json()["choices"][0]["message"]["content"] or "").strip()
     except Exception:
         pass
-    return ""
+    return plain.strip()
 
 
 @app.post("/admin/ai_kb/upload")
