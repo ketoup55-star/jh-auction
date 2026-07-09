@@ -223,6 +223,11 @@
           <button class="btn primary" onclick="uploadAiKb()">업로드 · 학습</button>
           <span id="aikbMsg" class="sub" style="margin:0"></span>
         </div>
+        <div id="aikbDrop" style="margin-top:12px;padding:22px;border:2px dashed #c7ccd6;border-radius:12px;text-align:center;color:#6b7280;cursor:pointer;transition:background .15s,border-color .15s;user-select:none">
+          <div style="font-size:26px;line-height:1">📎</div>
+          <div data-dzmain style="margin-top:6px">파일을 여기로 <b>드래그 &amp; 드롭</b> — 또는 클릭해서 선택</div>
+          <div class="sub" style="margin:4px 0 0">PDF · TXT (스캔 PDF는 자동 OCR)</div>
+        </div>
         <div class="hint">※ 스캔 PDF는 GPT Vision으로 읽어 시간이 좀 걸립니다(카카오 설정에 GPT 키 필요).</div>
       </div>
       <div class="card">
@@ -634,7 +639,7 @@ async function uploadAiKb(){
     const d=await r.json();
     if(!r.ok){ msg.textContent=d.detail||"업로드 실패"; return; }
     msg.textContent="✓ 완료 — "+(d.chars||0).toLocaleString()+"자 학습됨";
-    document.getElementById("aikbTitle").value=""; document.getElementById("aikbFile").value="";
+    document.getElementById("aikbTitle").value=""; var _f=document.getElementById("aikbFile"); _f.value=""; _f.dispatchEvent(new Event("change"));
     loadAiKb();
   }catch(e){ msg.textContent="오류: "+e; }
 }
@@ -642,6 +647,32 @@ async function deleteAiKb(slug,title){
   if(!confirm("'"+title+"' 자료를 삭제할까요? 챗봇이 더 이상 참고하지 않습니다.")) return;
   try{ await fetch("/admin/ai_kb/"+encodeURIComponent(slug),{method:"DELETE"}); loadAiKb(); }catch(e){}
 }
+// ── AI 학습자료: 드래그 & 드롭 ──
+(function(){
+  var dz=document.getElementById("aikbDrop"), fi=document.getElementById("aikbFile");
+  if(!dz||!fi) return;
+  var main=dz.querySelector("[data-dzmain]");
+  function on(){ dz.style.borderColor="#2f6fed"; dz.style.background="#eef4ff"; }
+  function off(){ dz.style.borderColor="#c7ccd6"; dz.style.background=""; }
+  function okExt(n){ return /\.(pdf|txt)$/i.test(n||""); }
+  function showName(n){ if(main) main.innerHTML = n ? ("선택됨: <b>"+String(n).replace(/[<>&]/g,"")+"</b>") : '파일을 여기로 <b>드래그 &amp; 드롭</b> — 또는 클릭해서 선택'; }
+  dz.addEventListener("click", function(){ fi.click(); });
+  ["dragenter","dragover"].forEach(function(ev){ dz.addEventListener(ev,function(e){ e.preventDefault(); e.stopPropagation(); on(); }); });
+  ["dragleave","dragend"].forEach(function(ev){ dz.addEventListener(ev,function(e){ e.preventDefault(); e.stopPropagation(); off(); }); });
+  dz.addEventListener("drop", function(e){
+    e.preventDefault(); e.stopPropagation(); off();
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if(!f) return;
+    if(!okExt(f.name)){ document.getElementById("aikbMsg").textContent="PDF 또는 TXT 파일만 가능합니다."; return; }
+    try{ var dt=new DataTransfer(); dt.items.add(f); fi.files=dt.files; }catch(_){}
+    showName(f.name);
+  });
+  fi.addEventListener("change", function(){ showName(fi.files&&fi.files[0]?fi.files[0].name:""); });
+  // 페이지 다른 곳에 파일을 떨어뜨렸을 때 브라우저가 그 파일을 여는 것 방지(파일 드래그일 때만)
+  function isFileDrag(e){ try{ return Array.prototype.indexOf.call(e.dataTransfer.types||[],"Files")>=0; }catch(_){ return false; } }
+  document.addEventListener("dragover", function(e){ if(isFileDrag(e)) e.preventDefault(); });
+  document.addEventListener("drop", function(e){ if(isFileDrag(e) && !(e.target.closest&&e.target.closest("#aikbDrop"))) e.preventDefault(); });
+})();
 init();
 </script>
 </body>
