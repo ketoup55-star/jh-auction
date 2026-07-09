@@ -8718,6 +8718,24 @@ def ai_kb_delete(slug: str, admin: dict = Depends(require_admin)) -> dict:
     return {"ok": True}
 
 
+@app.get("/admin/ai_kb/{slug}/download")
+def ai_kb_download(slug: str, admin: dict = Depends(require_admin)):
+    """등록된 학습자료(추출·학습된 텍스트)를 .txt로 다운로드. 원본 PDF는 보관 안 하므로 텍스트 제공."""
+    idx = _ai_kb_load_index()
+    meta = idx.get(slug)
+    if not meta:
+        raise HTTPException(404, "자료를 찾을 수 없습니다.")
+    try:
+        with open(os.path.join(_AI_KB_DIR, slug + ".txt"), encoding="utf-8") as f:
+            text = f.read()
+    except Exception:
+        raise HTTPException(404, "파일이 없습니다.")
+    from urllib.parse import quote as _q
+    dlname = _q((meta.get("title") or slug) + ".txt")   # 한글 파일명 RFC5987(filename*)
+    return Response(content=text, media_type="text/plain; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=\"ai_kb.txt\"; filename*=UTF-8''%s" % dlname})
+
+
 # ---------- 카카오 간편로그인 (OAuth2) ----------
 
 @app.get("/auth/kakao/login")

@@ -622,6 +622,7 @@ async function loadAiKb(){
           '<b>'+esc(x.title)+'</b> <span class="sub" style="margin:0">('+(x.chars||0).toLocaleString()+'자)</span>'+
           '<div class="sub" style="margin:4px 0 0;color:#999;white-space:normal">'+esc(x.preview||'')+'…</div>'+
         '</div>'+
+        '<a title="다운로드(학습된 텍스트 .txt)" href="/admin/ai_kb/'+encodeURIComponent(x.slug)+'/download" download style="text-decoration:none;color:#2f6fed;font-size:16px;margin-right:10px;cursor:pointer">⬇</a>'+
         '<span class="x" title="삭제" onclick="deleteAiKb(\''+esc(x.slug)+'\',\''+esc(x.title)+'\')">✕</span>'+
       '</div>').join("");
   }catch(e){ box.textContent="목록 로드 실패: "+e; }
