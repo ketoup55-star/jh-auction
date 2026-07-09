@@ -8241,6 +8241,78 @@ def privacy_page():
     return FileResponse(p, media_type="text/html; charset=utf-8")
 
 
+# ---------- 경공매 지도 (map_points 직접 조회) ----------
+import threading as _map_threading  # noqa: E402
+_MAP_LOCK = _map_threading.Lock()
+_MAP_CONN = {"c": None}
+
+def _map_conn():
+    import psycopg as _pg
+    c = _MAP_CONN["c"]
+    if c is None or getattr(c, "closed", True):
+        c = _pg.connect(os.environ["SUPABASE_DB_URL"], prepare_threshold=None,
+                        autocommit=True, connect_timeout=15)
+        _MAP_CONN["c"] = c
+    return c
+
+def _map_query(sql: str, params: dict):
+    """map_points 조회. 단일 연결+락(재연결 1회). 결과=dict 리스트."""
+    with _MAP_LOCK:
+        for _ in range(2):
+            try:
+                cur = _map_conn().execute(sql, params)
+                cols = [d.name for d in cur.description]
+                return [dict(zip(cols, row)) for row in cur.fetchall()]
+            except Exception:
+                _MAP_CONN["c"] = None
+        return []
+
+
+@app.get("/gonggmae_map")
+def gonggmae_map(srcs: str = "", props: str = "", usage: str = "",
+                 sw_lat: float = 0, sw_lng: float = 0, ne_lat: float = 0, ne_lng: float = 0,
+                 zoom: int = 0) -> dict:
+    """지도 범위+필터로 물건 조회. 줌인=개별 핀 / 줌아웃=그리드 클러스터(경매N·공매N)."""
+    src_list = [s for s in srcs.split(",") if s in ("auction", "gongmae")]
+    prop_list = [p for p in props.split(",") if p.strip()]
+    if not src_list or not usage or ne_lat <= sw_lat or ne_lng <= sw_lng:
+        return {"mode": "empty", "total": 0, "points": [], "clusters": []}
+    where = ["lat BETWEEN %(a)s AND %(b)s", "lng BETWEEN %(c)s AND %(d)s",
+             "usage_group = %(u)s", "source = ANY(%(s)s)"]
+    p = {"a": sw_lat, "b": ne_lat, "c": sw_lng, "d": ne_lng, "u": usage, "s": src_list}
+    if "gongmae" in src_list and prop_list:                     # 재산종류는 공매에만 적용
+        where.append("(source <> 'gongmae' OR prop_type = ANY(%(pp)s))")
+        p["pp"] = prop_list
+    w = " AND ".join(where)
+    cnt = _map_query(f"SELECT count(*) AS n FROM map_points WHERE {w}", p)
+    total = int(cnt[0]["n"]) if cnt else 0
+    if total == 0:
+        return {"mode": "points", "total": 0, "points": [], "clusters": []}
+    if zoom >= 14 or total <= 1500:                             # 개별 핀
+        rows = _map_query(
+            "SELECT source,item_key,lat,lng,usage_group,prop_type,title,min_price,bid_close,buy_grade "
+            f"FROM map_points WHERE {w} LIMIT 2500", p)
+        return {"mode": "points", "total": total, "points": rows, "clusters": []}
+    clat = max((ne_lat - sw_lat) / 24.0, 1e-6)                  # 뷰포트 24×24 그리드 집계
+    clng = max((ne_lng - sw_lng) / 24.0, 1e-6)
+    p2 = dict(p, clat=clat, clng=clng)
+    grid = _map_query(
+        "SELECT floor((lat-%(a)s)/%(clat)s) AS gy, floor((lng-%(c)s)/%(clng)s) AS gx, "
+        "source, count(*) AS n, avg(lat) AS mlat, avg(lng) AS mlng "
+        f"FROM map_points WHERE {w} GROUP BY gy,gx,source", p2)
+    cells: dict = {}
+    for r in grid:
+        cell = cells.setdefault((r["gy"], r["gx"]),
+                                {"lat": 0.0, "lng": 0.0, "auction": 0, "gongmae": 0, "_n": 0})
+        n = int(r["n"])
+        cell[r["source"]] = n
+        cell["lat"] += float(r["mlat"]) * n; cell["lng"] += float(r["mlng"]) * n; cell["_n"] += n
+    clusters = [{"lat": c["lat"] / c["_n"], "lng": c["lng"] / c["_n"],
+                 "auction": c["auction"], "gongmae": c["gongmae"]}
+                for c in cells.values() if c["_n"]]
+    return {"mode": "clusters", "total": total, "points": [], "clusters": clusters}
+
+
 # ---------- AI 챗봇(사이트 안내) ----------
 _CHAT_SYSTEM = """당신은 'JH옥션스쿨' 부동산 경매·공매 분석 플랫폼의 AI 안내 도우미입니다.
 사용자 질문에 친절하고 간결하게(핵심 위주 3~6문장) 한국어로 답하세요.
