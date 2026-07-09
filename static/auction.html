@@ -412,6 +412,21 @@
   .lg-notes{margin:12px 0 6px;padding-left:18px;font-size:12px;color:#444;line-height:1.6;}
   .lg-notes li{margin:4px 0;}
   .lg-foot{font-size:11px;color:#9aa3ad;margin-top:6px;line-height:1.4;}
+  /* 대출가이드 — 수도권 심화(전입/실거주·우회전략) 접이식 */
+  .lg-more{margin-top:12px;border:1px solid var(--line);border-radius:8px;background:#fafbfd;}
+  .lg-more>summary{cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;color:#2c4d86;list-style:none;user-select:none;}
+  .lg-more>summary::-webkit-details-marker{display:none;}
+  .lg-more>summary::before{content:"▸ ";color:#7c93bf;}
+  .lg-more[open]>summary::before{content:"▾ ";}
+  .lg-more[open]>summary{border-bottom:1px solid var(--line);}
+  .lg-more-body{padding:12px;font-size:12px;color:#3a4250;line-height:1.6;}
+  .lg-more-body h4{margin:14px 0 6px;font-size:12.5px;color:#1f2a3a;}
+  .lg-more-body h4:first-child{margin-top:0;}
+  .lg-more-body p{margin:5px 0;}
+  .lg-warn{margin:12px 0;padding:10px 12px;border-left:3px solid #e08a1e;background:#fff8ee;border-radius:4px;}
+  .lg-warn>b{color:#b06a00;display:block;margin-bottom:4px;}
+  .lg-way{margin:10px 0;padding:9px 11px;border:1px solid var(--line);border-radius:6px;background:#fff;}
+  .lg-way .wt{font-weight:700;color:#2c4d86;font-size:12.5px;margin-bottom:3px;}
 </style>
 </head>
 <body>
@@ -964,6 +979,63 @@ function renderLoanGuide(){
   let rows="";
   ["무주택자","1주택자","다주택자"].forEach(c=>{ const x=M.cols[c];
     rows+=`<tr><th>${c}</th>${cell(x.ga)}${cell(x.biz)}${cell(x.tax)}</tr>`; });
+  // 수도권(규제지역·수도권 비규제)만: 전입/실거주 충돌 + 대출 우회전략. 지방 비규제는 사업자대출이 열려 불필요.
+  const mk=s=>/○/.test(s)?"#1a7d46":/△/.test(s)?"#e08a1e":/✕/.test(s)?"#c0392b":"inherit";
+  const mcell=s=>`<td><b style="color:${mk(s)}">${esc(s)}</b></td>`;
+  const isMetro = reg==="regulated" || reg==="metro";
+  const metroExtra = !isMetro ? "" : `
+    <details class="lg-more">
+      <summary>🏠 전입 의무 vs 실거주 의무 — 자금조달이 임대·절세를 가른다</summary>
+      <div class="lg-more-body">
+        <p><b>전입 의무 = 대출 조건</b> · 규제지역에서 가계 주담대를 받으면 실행일부터 <b>6개월 내 전입</b>(위반 시 회수). <b>현금 매수면 이 의무 자체가 없음</b>(최소 거주기간도 별도 없음).</p>
+        <p><b>실거주 의무 = 부동산 법률</b> · 취득·소유 자체에 붙어 대출과 무관. ①토허 주택 2년 실거주+임대금지, ②분양가상한제 2~5년 실거주. 위반 시 이행강제금·형사처벌. <b>단, 경매는 토허 실거주 의무에서 제외</b>(위 표 참조).</p>
+        <p style="color:#667;">핵심 차이 — 전입 의무는 '돈을 빌렸으니' 생기고 현금이면 면제, 실거주 의무는 '그 집을 가졌으니' 생기고 대출과 무관.</p>
+        <h4>자금조달 방식별 '즉시 임대' 가능 여부 <span style="font-weight:400;color:#8b96a5;">(규제지역·토허구역 물건 기준)</span></h4>
+        <div class="lg-tblwrap"><table class="lg-tbl" style="min-width:420px;">
+          <thead><tr><th>구분</th><th>경매 + 현금 잔금</th><th>경매 + 가계 주담대</th></tr></thead>
+          <tbody>
+            <tr><th>토허 실거주(2년)</th><td>면제<div class="lg-sub">경매는 허가 대상 제외</div></td><td>면제<div class="lg-sub">경매는 허가 대상 제외</div></td></tr>
+            <tr><th>6개월 전입의무</th><td>없음<div class="lg-sub">대출 미실행</div></td><td>있음<div class="lg-sub">6개월 내 전입 필요</div></td></tr>
+            <tr><th>낙찰 직후 임대</th><td><b style="color:#1a7d46">○ 즉시 가능</b></td><td><b style="color:#e08a1e">△ 어려움</b><div class="lg-sub">전입·거주 후에나 가능</div></td></tr>
+          </tbody></table></div>
+        <div class="lg-warn">
+          <b>⚠ 전입 의무 ↔ 매매사업자 충돌 (반드시 확인)</b>
+          <p>① 전입신고가 매도를 막진 않지만 <b>세금 성격을 바꿉니다</b>. 실거주하면 '판매용 재고자산이 아니라 거주용'이라는 강한 반대증거가 되어, 매도 시 종소세(6~45%)가 아닌 <b>양도세(단기 70/60%·중과)로 튕겨나갈 수</b> 있습니다.</p>
+          <p>② 그래서 <b>'가계 주담대 + 매매사업자'는 상충 조합</b>입니다. 규제지역을 가계 주담대로 사면 6개월 전입의무가 붙는데, 그 전입·거주가 매매업 재고자산 성격을 훼손해 종소세 혜택을 잃게 만듭니다.</p>
+          <p>③ 절세를 온전히 살리려면 <b>전입 없이 사업자대출·현금으로</b>. 그런데 사업자대출은 수도권 전역·규제지역에서 LTV 0%이므로, 결국 매매사업자 모델은 <b>지방 비규제</b>에서만 정합적입니다.</p>
+          <p style="color:#8b7355;">예외 — 판매하려 했으나 안 팔려 일시적으로 임대·거주 후 양도한 경우는 사업소득이 유지될 수 있음(세무사 확인).</p>
+        </div>
+        <h4>취득 방식 × 거주/임대 → 매매사업자(종소세) 인정 여부</h4>
+        <div class="lg-tblwrap"><table class="lg-tbl" style="min-width:480px;">
+          <thead><tr><th>취득 방식</th><th>전입 의무</th><th>거주/임대 실태</th><th>종소세 인정</th></tr></thead>
+          <tbody>
+            <tr><th style="width:auto;">현금 잔금</th><td>없음</td><td>전입 없이 판매목적</td>${mcell("○ 인정 (가장 안전)")}</tr>
+            <tr><th style="width:auto;">사업자대출<div class="lg-sub">지방 비규제</div></th><td>없음</td><td>전입 없이 판매목적</td>${mcell("○ 인정 (정합적)")}</tr>
+            <tr><th style="width:auto;">가계 주담대<div class="lg-sub">규제지역</div></th><td>6개월 전입</td><td>전입·실거주 발생</td>${mcell("△ 위험 (양도세 전환)")}</tr>
+            <tr><th style="width:auto;">장기 임대</th><td>—</td><td>임대목적 전용</td>${mcell("✕ 부인 가능")}</tr>
+          </tbody></table></div>
+      </div>
+    </details>
+    <details class="lg-more">
+      <summary>🧭 수도권 대출 우회 전략 3가지 (참고 · 리스크 유의)</summary>
+      <div class="lg-more-body">
+        <p style="color:#8b96a5;">수도권은 매매·임대 사업자대출이 LTV 0%로 막혀 사실상 가계 주담대만 남고, 그마저 6개월 전입의무로 매매업이 어렵습니다. 아래는 실무에서 거론되는 우회로 — <b>실행 권유가 아니라 '존재한다'는 정보 제공</b>입니다.</p>
+        <div class="lg-way"><div class="wt">방법 1. 전자상거래 사업자대출 + 신탁 결합</div>
+          <p>주택 매매·임대 사업자대출이 아닌 <b>전자상거래 등 다른 업종 사업자대출</b>로 규제지역 제한(LTV 0%)을 피하고, <b>신탁 구조</b>(소유권을 신탁사로 이전)로 방공제를 면제받아 한도를 키움.</p>
+          <p style="color:#c0392b;">리스크 — 주택 취득에 쓰면 '용도 외 사용'으로 적발 시 회수·향후 대출 제한.</p>
+          <p style="background:#f4f7fc;padding:8px 10px;border-radius:5px;"><b>※ 왜 신탁대출은 방공제를 안 하나</b> — MCI·MCG는 세입자 최우선변제 위험을 <b>보험으로 메워</b> 한도를 풀어주는 방식(은행이 조이면 방공제 부활). 신탁대출은 소유권을 신탁사로 넘겨 <b>위험 자체를 없앰</b> — 세입자가 위탁자와만 계약하면 무권한 임대차라 최우선변제 대상에서 빠짐. 전 은행권 MCI·MCG 중단 국면에서 방공제로 대출이 안 나오던 <b>다가구·상가주택·빌라 낙찰의 사실상 유일한 출구</b>. 단 신탁 수수료·높은 금리·처분 제한, 세입자 보호 약화로 임대는 까다로움.</p>
+        </div>
+        <div class="lg-way"><div class="wt">방법 2. 가계 주담대 + '전입만, 실거주 안 함' 소명</div>
+          <p>6개월 전입의무는 이행(전입신고)하되 실거주는 안 하고, 세무사를 통해 '형식적 전입이지 실거주가 아니므로 재고자산 매도가 가능'하다고 소명.</p>
+          <p style="color:#c0392b;">리스크 — 사업/양도소득 판정은 case by case. 소명이 안 받아들여지면 양도세 과세.</p>
+        </div>
+        <div class="lg-way"><div class="wt">방법 3. P2P·대부업 (단기 고금리)</div>
+          <p>연 <b>16~18%</b> 고금리이지만 규제 밖에서 조달. 3~4개월 단기매도로 차익이 크면 고금리 내고도 수익 — 짧게 치고 빠지는 물건에 적합.</p>
+          <p style="color:#c0392b;">리스크 — 매도 지연 시 이자 급증, 차익이 작으면 수익 소멸. 출구(매도) 확실성이 전제.</p>
+        </div>
+        <p style="margin-top:10px;color:#8b7355;font-size:11.5px;">공통 주의 — 세 방법 모두 법적·세무 리스크를 안고 있습니다. 실제 활용 전 반드시 대출·세무 전문가의 개별 검토를 받으세요.</p>
+      </div>
+    </details>`;
   box.innerHTML=`<div class="card lg-card">
     <h2>🏦 이 물건 대출·세금 가이드 <span class="lg-badge" style="background:${M.bg};color:${M.fg}">${M.label}</span></h2>
     <div class="lg-desc">${esc(M.desc)}</div>
@@ -976,6 +1048,7 @@ function renderLoanGuide(){
       <li><b>DSR·방공제</b> — 실제 한도는 DSR(1금융 40%·2금융 50%)이 좌우. 방공제 서울5,500·경기4,800·광역시2,800·기타2,500만원 차감(다가구·상가주택 타격 큼).</li>
       <li>규제·토허는 대책마다 수시 변동(2026.7.1 화성 동탄·용인 기흥·구리 추가). 실행 직전 국토부·지자체 공고로 최신 지정 재확인.</li>
     </ul>
+    ${metroExtra}
     <div class="lg-foot">※ 2026.7.1 규제 기준 · 정보 제공용이며 대출·세무 자문이 아닙니다. 물건 권리관계(선순위 임차인·유치권 등)에 따라 한도가 달라질 수 있습니다.</div>
   </div>`;
 }
