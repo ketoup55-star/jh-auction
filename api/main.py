@@ -4522,6 +4522,51 @@ def auction_vehicle(item_key: str) -> dict:
     return _mark_multi(r, auction_db, item_key) if isinstance(r, dict) else r   # 캐시된 옛값도 일괄매각 플래그 보장(사건에 타물번 차량 있으면 오판 해제)
 
 
+@app.get("/auction/shortsale_lookup")
+def shortsale_lookup(case_no: str, court: str = "") -> dict:
+    """단타 계산기: 법원(경매N계)+사건번호로 물건 조회 → 감정가·낙찰가(매각시 sale_price)·최저가·보증금·전용면적 반환.
+    매각물건이면 sale_price(낙찰가) 사용, 미매각이면 min_price(최저가)로 폴백."""
+    import re as _re
+    m = _re.search(r"(\d{4}).*?(\d+)\s*$", (case_no or "").strip())   # 2025타경838 / 2025-838 / 2025 838
+    if not m:
+        return {"found": False, "reason": "사건번호 형식을 확인하세요 (예: 2025타경838 또는 2025-838)."}
+    cno = "%s-%s" % (m.group(1), m.group(2))
+    params = {"select": "case_no,court_name,appraisal_price,min_price,sale_price,deposit,"
+                        "building_area,usage_name,address,status_reason,result",
+              "case_no": "eq.%s" % cno, "limit": "50"}
+    if court and court.strip():
+        params["court_name"] = "eq.%s" % court.strip()
+    try:
+        r = auction_db._get("items", params)
+        rows = r.json() if r.status_code in (200, 206) else []
+    except Exception:
+        rows = []
+    if not rows:
+        return {"found": False, "reason": "해당 사건을 찾지 못했습니다. 법원(계)·사건번호를 확인하세요."}
+    rows.sort(key=lambda x: (1 if _to_int(x.get("sale_price")) > 0 else 0,
+                             1 if x.get("building_area") else 0), reverse=True)   # 매각·면적 있는 물건 우선
+    row = rows[0]
+    sp = _to_int(row.get("sale_price"))
+    dep_amt = 0
+    try:
+        dep_amt = int(_re.sub(r"[^\d]", "", _re.sub(r"\([^)]*\)", "", str(row.get("deposit") or ""))) or 0)
+    except Exception:
+        dep_amt = 0
+    area = 0.0
+    ma = _re.search(r"[\d.]+", str(row.get("building_area") or ""))
+    if ma:
+        try: area = float(ma.group(0))
+        except Exception: area = 0.0
+    return {"found": True, "sold": sp > 0,
+            "court_name": row.get("court_name"), "case_no": row.get("case_no"),
+            "appraisal_price": _to_int(row.get("appraisal_price")),
+            "sale_price": sp, "min_price": _to_int(row.get("min_price")),
+            "deposit_man": round(dep_amt / 10000) if dep_amt else 0,
+            "excl_area": area, "over85": area > 85,
+            "address": row.get("address"), "usage": row.get("usage_name"),
+            "status": row.get("status_reason") or row.get("result")}
+
+
 def _match_fields(v: dict) -> dict:
     """차량 결과 → 매칭용 필드. 세부등급(model_grade)이 있으면 차명에 합쳐 정밀 매칭(예: BMW→BMW 528i)."""
     fm = {f["label"]: f["value"] for f in v.get("fields", [])}

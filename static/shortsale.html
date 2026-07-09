@@ -119,6 +119,13 @@
 
   <div class="card dg-card">
     <h2>💰 단기매도 수익률 계산기 <button onclick="ssExcel()" class="ssxls">📥 엑셀 다운로드</button></h2>
+    <div class="ss-sec">⓪ 매각물건 자동조회 <span style="font-weight:400;color:#9aa0a6;font-size:11px">법원·사건번호 입력 → 감정가·낙찰가 자동입력</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:11px">
+      <select id="ss_court" style="height:32px;border:1px solid #cdd5e2;border-radius:5px;padding:0 8px;font-size:12.5px"><option value="">법원(계) 선택</option></select>
+      <input id="ss_caseno" type="text" placeholder="사건번호 (예: 2025타경838)" style="height:32px;border:1px solid #cdd5e2;border-radius:5px;padding:0 10px;font-size:12.5px;width:210px" onkeydown="if(event.key==='Enter')ssLookup()">
+      <button onclick="ssLookup()" style="height:32px;padding:0 18px;background:var(--primary);color:#fff;border:none;border-radius:5px;font-weight:600;cursor:pointer">조회</button>
+      <span id="ss_lookmsg" style="font-size:12px"></span>
+    </div>
     <div class="ss-sec">① 거래가</div>
     <div class="dg-grid">
       <label><span class="dgl">감정가</span><input id="ssc_appr" type="text" inputmode="numeric" placeholder="0"><span>만</span></label>
@@ -302,6 +309,35 @@ function ssExcel(){
   const outputs=[...box.querySelectorAll('#ssc_out .dg-orow')].map(r=>[r.querySelector('span').textContent.trim(), r.querySelector('b').textContent.trim()]);
   const aoa=[['단기매도 수익률 계산기'],[],['[입력]','값','단위'], ...inputs, [],['[결과]','값'], ...outputs];
   _loadXLSX(()=>{ const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:20},{wch:22},{wch:6}]; const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'단기매도'); XLSX.writeFile(wb,'단기매도_계산.xlsx'); });
+}
+// ── 매각물건 자동조회(법원+사건번호 → 감정가·낙찰가 자동입력) ──
+(function(){ var s=document.getElementById('ss_court'); if(s){ for(var i=1;i<=31;i++){ var o=document.createElement('option'); o.value='경매'+i+'계'; o.textContent='경매'+i+'계'; s.appendChild(o);} } })();
+function _cma(n){ return n?String(n).replace(/\B(?=(\d{3})+(?!\d))/g,','):''; }
+async function ssLookup(){
+  var court=document.getElementById('ss_court').value;
+  var cno=document.getElementById('ss_caseno').value.trim();
+  var msg=document.getElementById('ss_lookmsg');
+  if(!cno){ msg.textContent='사건번호를 입력하세요.'; msg.style.color='#c0392b'; return; }
+  msg.textContent='조회 중…'; msg.style.color='#6b7280';
+  try{
+    var r=await fetch('/auction/shortsale_lookup?case_no='+encodeURIComponent(cno)+'&court='+encodeURIComponent(court));
+    var d=await r.json();
+    if(!d.found){ msg.textContent=d.reason||'물건을 찾지 못했습니다.'; msg.style.color='#c0392b'; return; }
+    document.getElementById('ssc_appr').value=_cma(Math.round((d.appraisal_price||0)/10000));
+    DETAIL.appraisal_price=d.appraisal_price||0;                       // 대출한도 계산용
+    var nak = d.sold ? d.sale_price : d.min_price;                     // 매각=낙찰가 / 미매각=최저가
+    document.getElementById('ssc_bid').value=_cma(Math.round((nak||0)/10000));
+    window.SS_DEPEDIT=true;                                            // 보증금 수동세팅(낙찰가10% 자동 끔)
+    document.getElementById('ssc_dep').value=_cma(d.deposit_man||Math.round((nak||0)*0.1/10000));
+    document.getElementById('ssc_over85').checked=!!d.over85;
+    var ar=document.getElementById('ssc_area'); if(ar && d.excl_area) ar.value=d.excl_area;
+    ssCalc();
+    var info = d.sold ? ('매각물건 · 낙찰가 '+_cma(Math.round(d.sale_price/10000))+'만 자동입력')
+                      : ('미매각 · 낙찰가에 최저가 '+_cma(Math.round(d.min_price/10000))+'만 채움');
+    var sell=(document.getElementById('ssc_sell').value||'').trim();
+    if(!sell){ msg.innerHTML='<b style="color:#c0392b">↑ 매도가를 입력해 주세요.</b> <span style="color:#6b7280">('+info+' · '+((d.court_name||'')+' '+(d.case_no||''))+')</span>'; }
+    else{ msg.textContent='✓ '+info; msg.style.color='#1f7a3d'; }
+  }catch(e){ msg.textContent='조회 오류: '+e; msg.style.color='#c0392b'; }
 }
 ssWire();
 </script>
