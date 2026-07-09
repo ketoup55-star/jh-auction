@@ -783,6 +783,7 @@ async function loadAnalysis(attempt){
         <div class="aiitem"><span class="k">위험도</span><span class="risk-badge" style="background:${riskColor}">${d.risk_level}</span></div>
         <div class="aiitem"><span class="k">채권총액</span><span class="v" style="color:var(--hotred)">${total?won(total):'-'}</span>${total?(allCleared?'<span class="clr-badge ok">모두 말소</span>':'<span class="clr-badge no">일부 인수</span>'):''}</div>
         ${d.baseline?`<div class="aiitem"><span class="k">말소기준</span><span class="v">${d.baseline.date} ${d.baseline.type||''}</span></div>`:''}
+        ${d.reg?`<div class="aiitem"><span class="k">규제</span><span class="v" style="background:${({regulated:'#fdecea',metro:'#fff4e5',none:'#eafaf1'})[d.reg]};color:${({regulated:'#c0392b',metro:'#b06a00',none:'#1a7d46'})[d.reg]};border:1px solid ${({regulated:'#f5b7b1',metro:'#f0cfa0',none:'#bfe3cd'})[d.reg]};font-weight:700;border-radius:6px;padding:1px 8px" data-tip="규제·토허=조정대상/투기과열=토지거래허가구역(서울 전역+경기 15곳)">${({regulated:'규제지역·토허구역',metro:'수도권 비규제',none:'비규제'})[d.reg]}</span></div>`:''}
         ${d.assumed_amount_total?`<div class="aiitem"><span class="k">인수예상</span><span class="v" style="color:var(--hotred)">${won(d.assumed_amount_total)}</span></div>`:''}
       </div>
       ${d.waiver?`<div class="aiwarn" style="background:#eafaf1;border-color:#b6e6cb"><span class="w" style="color:#1a7f4b">✓ 말소동의·대항력 포기 확약서 제출 → 미배당 보증금${d.waived_total?` 약 ${won(d.waived_total)}`:''}은(는) 낙찰자가 인수하지 않습니다.</span></div>`:''}

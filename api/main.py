@@ -1927,6 +1927,7 @@ def _enrich_list(items: list) -> None:
     from auction_analysis.crawler_analysis import elevator_caution
     for it in items:
         k = it.get("item_key")
+        it["reg"] = _reg_by_addr(it.get("address"))       # 규제 구분(주소 기준, 지오코딩 불요)
         b = _brief_cache.get(k)
         if isinstance(b, dict) and b.get("available"):
             it["brief"] = b
@@ -2164,6 +2165,7 @@ def auction_detail(item_key: str, user: dict = Depends(require_national_user)) -
                 d["usage_disp"] = _b["usage_detail"]
     except Exception:
         pass
+    d["reg"] = _reg_by_addr(d.get("address"))             # 규제 구분(규제·토허/수도권 비규제/비규제)
     return d
 
 
@@ -8349,6 +8351,21 @@ def _reg_status(lat, lng, sido):
     except Exception:
         pass
     return "metro" if any(s in (sido or "") for s in ("서울", "경기", "인천")) else "none"
+
+
+# 규제/토허 = 서울 전역 + 경기 15곳(구 단위 정확). 주소 문자열로 판정(지오코딩 불요) — 목록·상세용.
+_REG_ADDR_NAMES = ("과천시", "광명시", "의왕시", "하남시", "구리시", "성남시",
+                   "수원시 영통구", "수원시 장안구", "수원시 팔달구", "안양시 동안구",
+                   "용인시 수지구", "용인시 기흥구", "화성시 동탄구")
+
+def _reg_by_addr(addr):
+    """주소 문자열 → 규제 구분: regulated(규제·토허)/metro(수도권 비규제)/none(비규제)."""
+    a = addr or ""
+    if not a:
+        return None
+    if "서울" in a or any(nm in a for nm in _REG_ADDR_NAMES):
+        return "regulated"
+    return "metro" if ("경기" in a or "인천" in a) else "none"
 
 
 @app.get("/gonggmae_map/badges")
