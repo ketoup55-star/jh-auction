@@ -958,7 +958,9 @@ function renderLoanGuide(){
   const isHouse=/아파트|다세대|연립|빌라|도시형|다가구|단독|주택|농가/.test(u) && !/오피스텔|상가|근린상가|토지/.test(u);
   if(!isHouse || !M){ box.innerHTML=""; return; }
   const esc=s=>String(s==null?"":s).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
-  const cell=c=>`<td><b>${esc(c[0])}</b><div class="lg-sub">${esc(c[1])}</div></td>`;
+  // 상태 글자색: 가능·미적용=녹색 / 불가·적용=빨강 / 조건부=주황 (미적용은 '적용' 매칭 전에 먼저 검사)
+  const clr=s=>/조건부/.test(s)?"#e08a1e":/미적용/.test(s)?"#1a7d46":/불가/.test(s)?"#c0392b":/적용/.test(s)?"#c0392b":/가능/.test(s)?"#1a7d46":"inherit";
+  const cell=c=>`<td><b style="color:${clr(c[0])}">${esc(c[0])}</b><div class="lg-sub">${esc(c[1])}</div></td>`;
   let rows="";
   ["무주택자","1주택자","다주택자"].forEach(c=>{ const x=M.cols[c];
     rows+=`<tr><th>${c}</th>${cell(x.ga)}${cell(x.biz)}${cell(x.tax)}</tr>`; });
