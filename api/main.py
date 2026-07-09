@@ -8152,6 +8152,23 @@ def auth_update_profile(body: ProfileIn, user: Optional[dict] = Depends(current_
     return {"ok": True, "user": u}
 
 
+class PasswordChangeIn(BaseModel):
+    current_password: str = ""
+    new_password: str
+
+
+@app.post("/auth/password")
+def auth_change_password(body: PasswordChangeIn, user: Optional[dict] = Depends(current_user)) -> dict:
+    """회원 본인 비밀번호 변경. 기존 비번 있으면 current 확인, 없으면(카카오) 신규 설정."""
+    if not user:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    try:
+        user_store.change_password(user["id"], body.current_password, body.new_password)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
 _INTRO_BODY_CACHE = {"html": None}
 
 

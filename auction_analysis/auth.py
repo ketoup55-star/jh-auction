@@ -60,6 +60,8 @@ def _user_dict(r: dict) -> dict:
         "mileage": (r["mileage"] if "mileage" in keys else 0) or 0,
         "paid_until": (r["paid_until"] if "paid_until" in keys else None) or None,
         "grade_until": (r["grade_until"] if "grade_until" in keys else None) or None,
+        # 비밀번호 설정 여부(해시 자체는 노출 안 함) — 카카오 신규계정은 password="" 라 False.
+        "has_password": bool((r["password"] if "password" in keys else "") or ""),
     }
 
 
@@ -669,6 +671,20 @@ class UserStore:
         """관리자가 회원 비밀번호 재설정(이메일 로그인 복구용). 소셜계정에도 걸면 이메일 로그인도 가능해짐."""
         if len(new_password or "") < 6:
             raise ValueError("비밀번호는 6자 이상이어야 합니다.")
+        self._ex("UPDATE users SET password=%s WHERE id=%s", (hash_password(new_password), uid))
+        return self.get_user(uid)
+
+    def change_password(self, uid: int, current: str, new_password: str) -> Optional[dict]:
+        """회원 본인 비밀번호 변경. 기존 비번이 있으면 current 검증, 없으면(카카오 등) 신규 설정."""
+        if len(new_password or "") < 6:
+            raise ValueError("새 비밀번호는 6자 이상이어야 합니다.")
+        u = self._ex("SELECT * FROM users WHERE id=%s", (uid,), fetch="one")
+        if not u:
+            raise ValueError("회원을 찾을 수 없습니다.")
+        stored = (u["password"] or "")
+        if stored:                                        # 기존 비번 있으면 현재 비번 확인
+            if not verify_password(current or "", stored):
+                raise ValueError("현재 비밀번호가 일치하지 않습니다.")
         self._ex("UPDATE users SET password=%s WHERE id=%s", (hash_password(new_password), uid))
         return self.get_user(uid)
 
