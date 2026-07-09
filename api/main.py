@@ -8271,8 +8271,9 @@ def _map_query(sql: str, params: dict):
 @app.get("/gonggmae_map")
 def gonggmae_map(srcs: str = "", props: str = "", usage: str = "",
                  sw_lat: float = 0, sw_lng: float = 0, ne_lat: float = 0, ne_lng: float = 0,
-                 zoom: int = 0) -> dict:
-    """지도 범위+필터로 물건 조회. 줌인=개별 핀 / 줌아웃=그리드 클러스터(경매N·공매N)."""
+                 zoom: int = 0, user: dict = Depends(require_national_user)) -> dict:
+    """지도 범위+필터로 물건 조회. 줌인=개별 핀 / 줌아웃=그리드 클러스터(경매N·공매N).
+    전국 등급 이상만(require_national_user)."""
     src_list = [s for s in srcs.split(",") if s in ("auction", "gongmae")]
     prop_list = [p for p in props.split(",") if p.strip()]
     if not src_list or not usage or ne_lat <= sw_lat or ne_lng <= sw_lng:
@@ -8290,7 +8291,7 @@ def gonggmae_map(srcs: str = "", props: str = "", usage: str = "",
         return {"mode": "points", "total": 0, "points": [], "clusters": []}
     if zoom >= 14 or total <= 1500:                             # 개별 핀
         rows = _map_query(
-            "SELECT source,item_key,lat,lng,usage_group,prop_type,title,min_price,bid_close,buy_grade "
+            "SELECT source,item_key,lat,lng,usage_group,prop_type,title,min_price,appraisal_price,bid_close,buy_grade "
             f"FROM map_points WHERE {w} LIMIT 2500", p)
         return {"mode": "points", "total": total, "points": rows, "clusters": []}
     clat = max((ne_lat - sw_lat) / 24.0, 1e-6)                  # 뷰포트 24×24 그리드 집계

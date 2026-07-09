@@ -161,10 +161,20 @@ async function init(){
   map=new kakao.maps.Map(document.getElementById("map"),{center:new kakao.maps.LatLng(36.5,127.8),level:13});
   kakao.maps.event.addListener(map,"idle",()=>{ if(!applied)return; clearTimeout(idleTimer); idleTimer=setTimeout(refresh,250); });
   loadZones();          // 규제/토허 오버레이(필터와 무관한 기본 레이어)
+  // 등급 게이트(전국 이상만) + 로그인 표시
+  let me=null; try{ const r=await fetch("/auth/me"); if(r.ok) me=await r.json(); }catch(e){}
+  if(me){ document.getElementById("util").innerHTML=`<span style="color:var(--primary);font-weight:600">${(me.name||me.email||"회원")}님</span> <a onclick="logout()">로그아웃</a> <a href="/static/mypage.html">마이페이지</a>`; }
+  if(!me || !(me.role==="admin" || (me.grade_rank||0)>=10)){ showGate(!me); return; }
   openFilter();
-  // 로그인 표시
-  try{ const me=await fetch("/auth/me"); if(me.ok){ const u=await me.json();
-    document.getElementById("util").innerHTML=`<span style="color:var(--primary);font-weight:600">${(u.name||u.email||"회원")}님</span> <a onclick="logout()">로그아웃</a> <a href="/static/mypage.html">마이페이지</a>`; } }catch(e){}
+}
+function showGate(noLogin){
+  closeFilter();
+  const n=document.getElementById("mapnote");
+  n.innerHTML='🔒 이 기능은 <b>전국 등급 이상</b> 회원만 이용할 수 있습니다.<br>'
+    +(noLogin?'<a href="/static/login.html?next=/static/gonggmae_map.html" style="color:var(--primary);font-weight:700">로그인 ›</a>'
+             :'<a href="/static/payment.html" style="color:var(--primary);font-weight:700">등급 안내 / 업그레이드 ›</a>');
+  n.style.display="flex"; n.style.pointerEvents="auto"; n.style.lineHeight="1.9";
+  const fb=document.querySelector(".fbtn"); if(fb) fb.style.display="none";
 }
 async function logout(){ await fetch("/auth/logout",{method:"POST"}); location.reload(); }
 
@@ -196,8 +206,10 @@ async function refresh(){
   const q=new URLSearchParams({srcs:state.srcs.join(","),props:state.props.join(","),usage:state.usage,
     sw_lat:sw.getLat(),sw_lng:sw.getLng(),ne_lat:ne.getLat(),ne_lng:ne.getLng(),zoom:15-map.getLevel()});
   const seq=++fetchSeq;
-  let d; try{ d=await (await fetch("/gonggmae_map?"+q)).json(); }catch(e){ return; }
+  let r; try{ r=await fetch("/gonggmae_map?"+q); }catch(e){ return; }
   if(seq!==fetchSeq) return;
+  if(r.status===401||r.status===403){ applied=false; clearOverlays(); showGate(r.status===401); return; }
+  let d; try{ d=await r.json(); }catch(e){ return; }
   clearOverlays();
   if(d.mode==="clusters"){ d.clusters.forEach(renderCluster); }
   else{ (d.points||[]).forEach(renderPin); }
@@ -218,16 +230,24 @@ function renderCluster(c){
   ov.setMap(map); overlays.push(ov);
 }
 let infoOv=null;
+function won(n){ if(!n) return "-"; n=+n;
+  if(n>=100000000){ const e=n/100000000; return (Math.round(e*10)/10).toString().replace(/\.0$/,"")+"억"; }
+  return Math.round(n/10000).toLocaleString()+"만"; }
 function showInfo(p){
   if(infoOv) infoOv.setMap(null);
-  const won=n=>n?(n/10000).toLocaleString()+"만":"-";
   const tag=p.source==="auction"?'<span style="color:var(--auction);font-weight:700">경매</span>':'<span style="color:var(--gongmae);font-weight:700">공매</span>';
+  const pct=(p.appraisal_price&&p.min_price)?Math.round(p.min_price/p.appraisal_price*100):null;
+  const url=p.source==="auction"
+    ? "/static/auction.html?item_key="+encodeURIComponent(p.item_key)
+    : "/static/gongmae_detail.html?id="+encodeURIComponent(p.item_key);
   const el=document.createElement("div");
-  el.style.cssText="background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 3px 14px rgba(0,0,0,.22);padding:11px 13px;min-width:170px;font-size:12.5px;";
+  el.style.cssText="background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 3px 14px rgba(0,0,0,.22);padding:11px 13px;min-width:196px;font-size:12.5px;";
   el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">${tag}<span style="cursor:pointer;color:#aaa" onclick="closeInfo()">✕</span></div>
-    <div style="font-weight:600">${USAGE_LABEL[p.usage_group]||p.usage_group||""}${p.prop_type?" · "+p.prop_type:""}</div>
-    <div style="color:var(--muted);margin-top:3px">최저가 ${won(p.min_price)}원</div>
-    ${p.bid_close?`<div style="color:var(--muted)">${p.source==="auction"?"매각기일":"입찰마감"} ${String(p.bid_close).slice(0,16)}</div>`:""}`;
+    <div style="font-weight:700;font-size:13px">${USAGE_LABEL[p.usage_group]||p.usage_group||""}${p.prop_type?" · "+p.prop_type:""}</div>
+    <div style="margin-top:5px;color:#222">최저가 <b>${won(p.min_price)}</b>원</div>
+    ${p.appraisal_price?`<div style="color:var(--muted)">감정가 ${won(p.appraisal_price)}원${pct!=null?` · <b style="color:${pct<=70?'#c0392b':'#2c5db0'}">감정가 대비 ${pct}%</b>`:""}</div>`:""}
+    ${p.bid_close?`<div style="color:var(--muted)">${p.source==="auction"?"매각기일":"입찰마감"} ${String(p.bid_close).slice(0,16)}</div>`:""}
+    <a href="${url}" target="_blank" style="display:block;text-align:center;margin-top:8px;background:var(--primary);color:#fff;border-radius:7px;padding:7px 0;font-weight:700;text-decoration:none">상세보기 ›</a>`;
   infoOv=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lng),content:el,yAnchor:1.35,zIndex:9});
   infoOv.setMap(map);
 }

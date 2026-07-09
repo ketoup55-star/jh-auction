@@ -164,10 +164,14 @@ def main():
     print(f"[init] 기존 좌표 {len(done)}건 스킵", flush=True)
 
     work = []
+    active_keys = set()                                   # 현재 진행중(지도 대상) 전체 — prune 기준
     for _name, gen in (("auction", rows_auction), ("gongmae", rows_gongmae)):
         for src, key, usage, prop, title, addr, mn, appr, bidc, grade in gen(conn):
             grp = usage_group(src, usage)
-            if grp is None or (src, key) in done:
+            if grp is None:
+                continue
+            active_keys.add((src, key))
+            if (src, key) in done:
                 continue
             work.append((src, key, grp, prop, usage, title, addr, mn, appr, bidc, grade))
     if args.test:
@@ -222,6 +226,16 @@ def main():
                 print(f"[prog] {i}/{len(work)} ok={ok} fail={fail} · 분당 {rate:.0f} · 남은 ~{rem/60:.0f}분", flush=True)
     flush()
     print(f"[DONE] 대상={len(work)} ok={ok} fail={fail} · {(time.time()-t0)/60:.1f}분", flush=True)
+    # 동기화: 더 이상 진행중 아닌(매각완료·입찰마감·용도제외) 물건은 지도에서 제거
+    if not args.test and active_keys:
+        mp = set((s, k) for s, k in conn.execute("SELECT source,item_key FROM map_points").fetchall())
+        stale = list(mp - active_keys)
+        for i in range(0, len(stale), 500):
+            ch = stale[i:i + 500]
+            ph = ",".join(["(%s,%s)"] * len(ch))
+            conn.execute(f"DELETE FROM map_points WHERE (source,item_key) IN ({ph})",
+                         [x for pair in ch for x in pair])
+        print(f"[prune] 비활성 {len(stale)}건 삭제", flush=True)
     conn.close()
 
 if __name__ == "__main__":
