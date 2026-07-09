@@ -5030,6 +5030,7 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
             d["apt_hoga"] = r.get("apt_hoga")   # 아파트·오피스텔 KB 호가(같은 단지·평형 매매매물) 건수(precompute_apt_chips.py)
             d["recent_trade_price"] = r.get("recent_trade_price")   # 최근 실거래가(추정시세 없을 때 fallback 기준·목록 시세칸 표시)
             d["recent_trade_date"] = r.get("recent_trade_date")     # 그 체결일(YYYY-MM-DD)
+            d["reg"] = _reg_by_addr(d.get("address"))               # 규제 구분(주소 기준)
             items.append(d)
         return {"items": items, "total": total, "page": page, "source": "db"}
     except Exception as e:

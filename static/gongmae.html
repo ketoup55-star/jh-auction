@@ -97,6 +97,10 @@
   .gbadge.g-mid{background:#fdf3e2;color:#b9770f;border:1px solid #f3dcb0;}
   .gbadge.g-no{background:#fdecec;color:#d23030;border:1px solid #f4c4c4;}
   .gradechip:empty{display:none;}
+  .regchip{display:inline-block;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px;margin-right:2px;white-space:nowrap;}
+  .regchip.reg-regulated{background:#fdecea;border:1px solid #f5b7b1;color:#c0392b;}
+  .regchip.reg-metro{background:#fff4e5;border:1px solid #f0cfa0;color:#b06a00;}
+  .regchip.reg-none{background:#eafaf1;border:1px solid #bfe3cd;color:#1a7d46;}
   /* 시세·차익 셀(auctions.html 1:1) */
   .ecsi,.eprofit,.eloss{display:flex;justify-content:space-between;align-items:baseline;gap:6px;font-size:12px;margin-top:3px;white-space:nowrap;}
   .ecsi{color:var(--primary);font-weight:600;}
@@ -539,6 +543,7 @@ function row(L,i){
   const mng=L.manage_no||"", cdtn=L.pbct_cdtn_no||"", usg=L.usage||"";
   const graded=gmIsGraded(usg);
   const key=mng+(cdtn?("|"+cdtn):"");
+  const regchip=L.reg?`<span class="regchip reg-${L.reg}">${({regulated:'규제·토허',metro:'수도권 비규제',none:'비규제'})[L.reg]}</span>`:"";
   // ── 사전계산(warm_gongmae_grade.py) 값이 있으면 배지·시세·차익을 즉시 렌더(라이브 호출 없음) ──
   //    buy_grade 없는 미워밍 물건만 빈 placeholder로 남겨 fillGmGrades/fillGmEstimates가 소수 폴백.
   const warmed=graded && L.buy_grade;
@@ -587,7 +592,7 @@ function row(L,i){
     <td class="cc"><button class="gmfav${GMFAV.has(L.manage_no)?' on':''}" onclick="event.stopPropagation();gmFav(${i},this)" title="관심등록/해제">${GMFAV.has(L.manage_no)?'♥':'♡'}</button><br>${L.manage_no||"-"}</td>
     <td><div style="display:flex;gap:9px;align-items:center;">
       ${L.thumb?`<img src="${L.thumb}" referrerpolicy="no-referrer" loading="lazy" style="width:66px;height:50px;object-fit:cover;border-radius:5px;flex:0 0 auto;background:#eef1f5;border:1px solid var(--line)" onerror="this.style.display='none'">`:""}
-      <div style="min-width:0"><b>${L.name||"-"}</b><div style="color:var(--muted);margin-top:2px">${L.org||""}</div><div style="margin-top:3px">${gradechip}${nbchip}${aptChips}</div></div>
+      <div style="min-width:0"><b>${L.name||"-"}</b><div style="color:var(--muted);margin-top:2px">${L.org||""}</div><div style="margin-top:3px">${regchip}${gradechip}${nbchip}${aptChips}</div></div>
     </div></td>
     <td class="cc">${(L.usage||"").split(" ").pop()||"-"}</td>
     <td class="num"><div class="price">${won(L.appraisal_price)}</div><span class="low">${won(L.min_price)}${L.bid_ratio!=null?` (${L.bid_ratio}%)`:""}</span>${estcell}</td>

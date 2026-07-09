@@ -74,6 +74,14 @@ OFF_TERMS = [
 ]
 _OFF_RE = re.compile("|".join(re.escape(t) for t in OFF_TERMS))
 
+# 홍보성 이벤트 블랙리스트 — 뉴스가 아니라 세미나·특강·설명회 등 광고성이면 제외.
+PROMO_TERMS = [
+    "세미나", "특강", "설명회", "박람회", "컨퍼런스", "콘퍼런스", "강연회", "강좌",
+    "아카데미", "웨비나", "수강생", "무료강의", "무료 강의", "무료특강", "무료 특강",
+    "공모전", "출판기념", "시상식", "참가자 모집", "참가 신청", "수강 신청",
+]
+_PROMO_RE = re.compile("|".join(re.escape(t) for t in PROMO_TERMS))
+
 # 부동산 핵심어 — 1개 이상 반드시 있어야 통과('경매·공매·낙찰·세금·대출·시세'는 단독으론 부족).
 CORE_TERMS = [
     "집값", "집 값", "아파트", "빌라", "오피스텔", "주택", "다세대", "연립", "도시형",
@@ -91,6 +99,8 @@ def is_relevant(title, desc):
     '경매/공매/낙찰/세금/대출' 단독으론 부족 — 광물 경매·미술품 경매 오염 방지."""
     t = (title or "") + " " + (desc or "")
     if _OFF_RE.search(t):
+        return False
+    if _PROMO_RE.search(t):                    # 세미나·특강·설명회 등 홍보성 이벤트 제외(뉴스 아님)
         return False
     return bool(_CORE_RE.search(t))
 
