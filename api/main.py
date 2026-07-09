@@ -3559,6 +3559,23 @@ def admin_set_grade(body: GradeIn, admin: dict = Depends(require_admin)) -> dict
     return {"ok": True, "user": u}
 
 
+class PwResetIn(BaseModel):
+    user_id: int
+    new_password: str
+
+
+@app.post("/admin/users/reset_password")
+def admin_reset_password(body: PwResetIn, admin: dict = Depends(require_admin)) -> dict:
+    """관리자 회원 비밀번호 재설정(이메일 로그인 복구)."""
+    try:
+        u = user_store.admin_set_password(body.user_id, body.new_password)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    if not u:
+        raise HTTPException(404, "회원을 찾을 수 없습니다.")
+    return {"ok": True}
+
+
 @app.get("/admin/coupons")
 def admin_list_coupons(admin: dict = Depends(require_admin)) -> dict:
     return {"coupons": user_store.list_coupons()}

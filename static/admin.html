@@ -329,6 +329,7 @@ async function loadMembers(){
           <button class="btn mini" onclick="adjustMileage(${u.id},1)">적립</button>
           <button class="btn mini" onclick="adjustMileage(${u.id},-1)">차감</button>
           <button class="btn mini" onclick="prefillCoupon(${u.id})">쿠폰발급</button>
+          ${u.provider==='kakao'?'':`<button class="btn mini" onclick="resetPw(${u.id})" style="background:#eef3ff;color:#2c5db0">비번재설정</button>`}
         </td></tr>`;
     }).join('') || '<tr><td colspan="9" style="text-align:center;color:#888;padding:14px">회원이 없습니다.</td></tr>';
     mm.textContent = gf ? `${list.length}명 · ${gf}` : `${list.length}명`; mm.className='msg ok';
@@ -489,6 +490,17 @@ async function changeGrade(uid){
     if(!r.ok){ alert((await r.json()).detail||'실패'); }
   }catch(e){ alert('실패: '+e); return; }
   loadMembers();   // 만료일 표시 갱신
+}
+async function resetPw(uid){
+  const pw=prompt("새 비밀번호(6자 이상)를 입력하세요:");
+  if(pw===null) return;                                 // 취소
+  if(pw.length<6){ alert("비밀번호는 6자 이상이어야 합니다."); return; }
+  try{
+    const r=await fetch("/admin/users/reset_password",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({user_id:uid, new_password:pw})});
+    if(r.ok) alert("✓ 비밀번호가 재설정되었습니다.\n이 비밀번호로 이메일 로그인할 수 있습니다.");
+    else alert((await r.json()).detail||"실패");
+  }catch(e){ alert("실패: "+e); }
 }
 
 // ── 게시판관리 ──

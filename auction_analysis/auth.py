@@ -665,6 +665,13 @@ class UserStore:
             self._reconnect(); raise ValueError("이미 사용 중인 이메일입니다.")
         return self.get_user(uid)
 
+    def admin_set_password(self, uid: int, new_password: str) -> Optional[dict]:
+        """관리자가 회원 비밀번호 재설정(이메일 로그인 복구용). 소셜계정에도 걸면 이메일 로그인도 가능해짐."""
+        if len(new_password or "") < 6:
+            raise ValueError("비밀번호는 6자 이상이어야 합니다.")
+        self._ex("UPDATE users SET password=%s WHERE id=%s", (hash_password(new_password), uid))
+        return self.get_user(uid)
+
     # ---- 마일리지 ----
     def adjust_mileage(self, uid: int, amount: int, reason: str = "") -> dict:
         """마일리지 증감(+적립/-차감). 잔액 음수 불가. 거래내역 기록 후 회원정보 반환."""
