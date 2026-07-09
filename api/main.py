@@ -8269,13 +8269,14 @@ def _map_query(sql: str, params: dict):
 
 
 @app.get("/gonggmae_map")
-def gonggmae_map(srcs: str = "", props: str = "", usage: str = "",
+def gonggmae_map(srcs: str = "", props: str = "", usage: str = "", grades: str = "",
                  sw_lat: float = 0, sw_lng: float = 0, ne_lat: float = 0, ne_lng: float = 0,
                  zoom: int = 0, user: dict = Depends(require_national_user)) -> dict:
     """지도 범위+필터로 물건 조회. 줌인=개별 핀 / 줌아웃=그리드 클러스터(경매N·공매N).
-    전국 등급 이상만(require_national_user)."""
+    grades=매수판정 필터(매수양호,매수검토,매수금지). 전국 등급 이상만."""
     src_list = [s for s in srcs.split(",") if s in ("auction", "gongmae")]
     prop_list = [p for p in props.split(",") if p.strip()]
+    grade_list = [g for g in grades.split(",") if g.strip()]
     if not src_list or not usage or ne_lat <= sw_lat or ne_lng <= sw_lng:
         return {"mode": "empty", "total": 0, "points": [], "clusters": []}
     where = ["lat BETWEEN %(a)s AND %(b)s", "lng BETWEEN %(c)s AND %(d)s",
@@ -8284,6 +8285,9 @@ def gonggmae_map(srcs: str = "", props: str = "", usage: str = "",
     if "gongmae" in src_list and prop_list:                     # 재산종류는 공매에만 적용
         where.append("(source <> 'gongmae' OR prop_type = ANY(%(pp)s))")
         p["pp"] = prop_list
+    if grade_list:                                              # 매수판정 필터(미선택 시 전체)
+        where.append("buy_grade = ANY(%(g)s)")
+        p["g"] = grade_list
     w = " AND ".join(where)
     cnt = _map_query(f"SELECT count(*) AS n FROM map_points WHERE {w}", p)
     total = int(cnt[0]["n"]) if cnt else 0
@@ -8350,29 +8354,38 @@ def _reg_status(lat, lng, sido):
 @app.get("/gonggmae_map/badges")
 def gonggmae_map_badges(source: str, item_key: str,
                         user: dict = Depends(require_national_user)) -> dict:
-    """핀 팝업용: 실거래 3개월·호가(목록과 동일 소스) + 규제 구분. 클릭 시 온디맨드."""
-    trades = listings = None
-    if source == "gongmae":
+    """핀 팝업용: 용도별 실거래(아파트)/유사거래(빌라·도생) + 호가 + 규제 구분. 클릭 시 온디맨드."""
+    mp = _map_query("SELECT lat,lng,sido,usage_group FROM map_points "
+                    "WHERE source=%(s)s AND item_key=%(k)s", {"s": source, "k": item_key})
+    ug = ((mp[0].get("usage_group") if mp else "") or "")
+    count = count_kind = listings = None
+    if source == "gongmae":                               # 공매 — 저장된 nb_count/apt_hoga
         r = _map_query("SELECT nb_count, apt_hoga FROM gongmae_items WHERE id=%(k)s", {"k": item_key})
         if r:
-            trades = r[0].get("nb_count"); listings = r[0].get("apt_hoga")
-    else:                                                  # 경매 — 목록과 동일 함수 재사용
+            count = r[0].get("nb_count"); listings = r[0].get("apt_hoga")
+        count_kind = "trades" if ug == "아파트" else "similar"
+    elif ug == "아파트":                                  # 경매 아파트 — 실거래 3개월 + 호가
         try:
             m = (auction_apt_ests(keys=item_key) or {}).get(item_key)
             if isinstance(m, dict):
-                trades = m.get("trades_3m")
+                count = m.get("trades_3m")
         except Exception:
             pass
+        count_kind = "trades"
         try:
             listings = (auction_kb_counts(keys=item_key) or {}).get(item_key)
         except Exception:
             pass
-    reg = None                                            # 규제 구분(좌표 기준 point-in-polygon)
-    mp = _map_query("SELECT lat,lng,sido FROM map_points WHERE source=%(s)s AND item_key=%(k)s",
-                    {"s": source, "k": item_key})
-    if mp:
-        reg = _reg_status(mp[0].get("lat"), mp[0].get("lng"), mp[0].get("sido"))
-    return {"trades_3m": trades, "listings": listings, "reg": reg}
+    elif ug in ("다세대연립", "도생"):                    # 경매 빌라·도생 — 유사거래(반경 실거래)
+        try:
+            nb = auction_nearby_trades(item_key)
+            if isinstance(nb, dict) and nb.get("available"):
+                count = len(nb.get("trades") or [])
+        except Exception:
+            pass
+        count_kind = "similar"
+    reg = _reg_status(mp[0].get("lat"), mp[0].get("lng"), mp[0].get("sido")) if mp else None
+    return {"count": count, "count_kind": count_kind, "listings": listings, "reg": reg}
 
 
 # ---------- AI 챗봇(사이트 안내) ----------

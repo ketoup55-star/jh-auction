@@ -236,6 +236,14 @@ def main():
             conn.execute(f"DELETE FROM map_points WHERE (source,item_key) IN ({ph})",
                          [x for pair in ch for x in pair])
         print(f"[prune] 비활성 {len(stale)}건 삭제", flush=True)
+        # 값 최신화(재지오코딩 없이 buy_grade·가격만 갱신 — 매수판정 필터/배지 정확도)
+        conn.execute("UPDATE map_points m SET buy_grade=i.buy_grade, min_price=i.min_price, "
+                     "appraisal_price=i.appraisal_price FROM items i "
+                     "WHERE m.source='auction' AND m.item_key=i.item_key")
+        conn.execute("UPDATE map_points m SET buy_grade=g.buy_grade, min_price=g.min_price, "
+                     "appraisal_price=g.appraisal_price FROM gongmae_items g "
+                     "WHERE m.source='gongmae' AND m.item_key=g.id")
+        print("[refresh] buy_grade·가격 최신화 완료", flush=True)
     conn.close()
 
 if __name__ == "__main__":

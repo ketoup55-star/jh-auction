@@ -102,6 +102,10 @@
     <h4 style="margin-top:9px">물건</h4>
     <div class="lg"><span class="sw" style="background:var(--auction)"></span>경매</div>
     <div class="lg"><span class="sw" style="background:var(--gongmae)"></span>공매</div>
+    <h4 style="margin-top:9px">매수판정 <small style="font-weight:400;color:var(--muted)">필터</small></h4>
+    <label class="lg" style="cursor:pointer"><input type="checkbox" class="gfil" value="매수양호" checked onchange="onGradeFilter()"> <span class="sw" style="background:#1a7d46"></span>매수양호</label>
+    <label class="lg" style="cursor:pointer"><input type="checkbox" class="gfil" value="매수검토" checked onchange="onGradeFilter()"> <span class="sw" style="background:#e0a03a"></span>매수검토</label>
+    <label class="lg" style="cursor:pointer"><input type="checkbox" class="gfil" value="매수금지" checked onchange="onGradeFilter()"> <span class="sw" style="background:#c0392b"></span>매수금지</label>
   </div>
 </div>
 
@@ -202,7 +206,9 @@ function clearOverlays(){ overlays.forEach(o=>o.setMap(null)); overlays=[]; }
 async function refresh(){
   if(!applied||!map) return;
   const b=map.getBounds(), sw=b.getSouthWest(), ne=b.getNorthEast();
-  const q=new URLSearchParams({srcs:state.srcs.join(","),props:state.props.join(","),usage:state.usage,
+  const gsel=[...document.querySelectorAll('.gfil:checked')].map(x=>x.value);
+  const grades=(gsel.length<3)?gsel.join(","):"";        // 3개 다 체크=전체(미분석 포함), 일부만=그 등급만
+  const q=new URLSearchParams({srcs:state.srcs.join(","),props:state.props.join(","),usage:state.usage,grades:grades,
     sw_lat:sw.getLat(),sw_lng:sw.getLng(),ne_lat:ne.getLat(),ne_lng:ne.getLng(),zoom:15-map.getLevel()});
   const seq=++fetchSeq;
   let r; try{ r=await fetch("/gonggmae_map?"+q); }catch(e){ return; }
@@ -243,6 +249,7 @@ function showInfo(p){
   el.style.cssText="background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 3px 14px rgba(0,0,0,.22);padding:11px 13px;min-width:196px;font-size:12.5px;";
   el.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">${tag}<span style="cursor:pointer;color:#aaa" onclick="closeInfo()">✕</span></div>
     <div style="font-weight:700;font-size:13px">${USAGE_LABEL[p.usage_group]||p.usage_group||""}${p.prop_type?" · "+p.prop_type:""}</div>
+    ${buyBadge(p.buy_grade)}
     <div style="margin-top:5px;color:#222">최저가 <b>${won(p.min_price)}</b>원</div>
     ${p.appraisal_price?`<div style="color:var(--muted)">감정가 ${won(p.appraisal_price)}원${pct!=null?` · <b style="color:${pct<=70?'#c0392b':'#2c5db0'}">감정가 대비 ${pct}%</b>`:""}</div>`:""}
     ${p.bid_close?`<div style="color:var(--muted)">${p.source==="auction"?"매각기일":"입찰마감"} ${String(p.bid_close).slice(0,16)}</div>`:""}
@@ -255,13 +262,17 @@ function showInfo(p){
 const REG_BADGE={regulated:{t:"규제지역·토허구역",bg:"#fdecea",bd:"#f5b7b1",fg:"#c0392b"},
                  metro:{t:"수도권 비규제지역",bg:"#fff4e5",bd:"#f0cfa0",fg:"#b06a00"},
                  none:{t:"비규제지역",bg:"#eafaf1",bd:"#bfe3cd",fg:"#1a7d46"}};
+const BUY_BADGE={"매수양호":{bg:"#eafaf1",bd:"#a9e0be",fg:"#1a7d46"},"매수검토":{bg:"#fff4e5",bd:"#f0cfa0",fg:"#b06a00"},"매수금지":{bg:"#fdecea",bd:"#f5b7b1",fg:"#c0392b"}};
+function buyBadge(g){ const b=BUY_BADGE[g]; if(!b) return "";
+  return `<div style="margin-top:5px"><span style="background:${b.bg};border:1px solid ${b.bd};color:${b.fg};font-size:11px;font-weight:800;border-radius:6px;padding:2px 8px">${g}</span></div>`; }
+function onGradeFilter(){ if(applied) refresh(); }
 async function loadBadges(p){
   const box=document.getElementById("mbadges"); if(!box) return;   // 현재 팝업의 배지칸(캡처)
   let d; try{ d=await (await fetch(`/gonggmae_map/badges?source=${encodeURIComponent(p.source)}&item_key=${encodeURIComponent(p.item_key)}`)).json(); }catch(e){ return; }
   const bd=(bg,bdc,fg,txt)=>`<span style="background:${bg};border:1px solid ${bdc};color:${fg};font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px">${txt}</span>`;
   let h="";
   const rg=REG_BADGE[d.reg]; if(rg) h+=bd(rg.bg,rg.bd,rg.fg,rg.t);              // 규제 구분
-  if(d.trades_3m!=null) h+=bd("#e9f7ee","#bfe3cd","#1a7d46","실거래 "+d.trades_3m+"건");
+  if(d.count!=null){ const lbl=(d.count_kind==="similar"?"유사거래":"실거래")+" "+d.count+"건"; h+=bd("#e9f7ee","#bfe3cd","#1a7d46",lbl); }
   if(d.listings!=null && d.listings>0) h+=bd("#eef2ff","#c7d2fe","#3f51b5","호가 "+d.listings+"건");
   box.innerHTML=h;                                                 // 캡처 box(그새 다른 핀이면 detached=무해)
 }
