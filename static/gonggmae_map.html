@@ -96,8 +96,11 @@
     <button class="fbtn" onclick="openFilter()">🔍 물건 필터</button>
   </div>
 
-  <div class="legend" id="legend" style="display:none">
-    <h4>표시</h4>
+  <div class="legend" id="legend">
+    <h4>규제 표시</h4>
+    <label class="lg" style="cursor:pointer"><input type="checkbox" id="zoneToggle" checked onchange="toggleZones(this.checked)"> <span class="sw" style="background:#e05a4e"></span>규제지역·토허구역</label>
+    <div style="font-size:11px;color:var(--muted);margin:4px 0 2px;">투명도 <input type="range" min="0" max="0.5" step="0.02" value="0.18" oninput="setZoneOpacity(this.value)" style="width:86px;vertical-align:middle"></div>
+    <h4 style="margin-top:9px">물건</h4>
     <div class="lg"><span class="sw" style="background:var(--auction)"></span>경매</div>
     <div class="lg"><span class="sw" style="background:var(--gongmae)"></span>공매</div>
   </div>
@@ -157,6 +160,7 @@ async function init(){
   try{ await loadKakaoSDK(); }catch(e){ document.getElementById("mapnote").textContent="지도 로드 실패 — 카카오 개발자센터 도메인 등록 확인"; return; }
   map=new kakao.maps.Map(document.getElementById("map"),{center:new kakao.maps.LatLng(36.5,127.8),level:13});
   kakao.maps.event.addListener(map,"idle",()=>{ if(!applied)return; clearTimeout(idleTimer); idleTimer=setTimeout(refresh,250); });
+  loadZones();          // 규제/토허 오버레이(필터와 무관한 기본 레이어)
   openFilter();
   // 로그인 표시
   try{ const me=await fetch("/auth/me"); if(me.ok){ const u=await me.json();
@@ -228,6 +232,27 @@ function showInfo(p){
   infoOv.setMap(map);
 }
 function closeInfo(){ if(infoOv){ infoOv.setMap(null); infoOv=null; } }
+
+// ── 규제/토허 오버레이 ──
+let zonePolys=[], zoneOpacity=0.18, zonesOn=true, zonesLoaded=false;
+async function loadZones(){
+  if(zonesLoaded) return;
+  let d; try{ d=await (await fetch("/static/data/regulation_zones.json")).json(); }catch(e){ return; }
+  (d.zones||[]).forEach(z=>{
+    const g=z.geometry; if(!g) return;
+    const polys = g.type==="MultiPolygon" ? g.coordinates : [g.coordinates];
+    polys.forEach(poly=>{
+      const outer=(poly[0]||[]).map(c=>new kakao.maps.LatLng(c[1],c[0]));  // [lng,lat]→LatLng
+      if(outer.length<3) return;
+      const pg=new kakao.maps.Polygon({path:outer,strokeWeight:1.5,strokeColor:"#b0342a",strokeOpacity:.65,
+        fillColor:"#e05a4e",fillOpacity:zoneOpacity,zIndex:1});
+      pg.setMap(zonesOn?map:null); zonePolys.push(pg);
+    });
+  });
+  zonesLoaded=true;
+}
+function setZoneOpacity(v){ zoneOpacity=+v; zonePolys.forEach(p=>p.setOptions({fillOpacity:zoneOpacity})); }
+function toggleZones(on){ zonesOn=on; zonePolys.forEach(p=>p.setMap(on?map:null)); }
 init();
 </script>
 </body>
