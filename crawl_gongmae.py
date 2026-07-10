@@ -30,15 +30,31 @@ KEY = os.environ["ONBID_SERVICE_KEY"]
 DBURL = os.environ["SUPABASE_DB_URL"]
 onbid = OnbidSource()
 
+
+# 규제 구분(주소 기준) — 목록 규제필터용. main.py _reg_by_addr 와 동일 규칙(2026.7.1 기준).
+_REG_ADDR_NAMES = ("과천시", "광명시", "의왕시", "하남시", "구리시", "성남시",
+                   "수원시 영통구", "수원시 장안구", "수원시 팔달구", "안양시 동안구",
+                   "용인시 수지구", "용인시 기흥구", "화성시 동탄구")
+
+
+def _reg_by_addr(a):
+    a = a or ""
+    if not a:
+        return None
+    if "서울" in a or any(n in a for n in _REG_ADDR_NAMES):
+        return "regulated"
+    return "metro" if ("경기" in a or "인천" in a) else "none"
+
+
 _UPSERT = """
 INSERT INTO gongmae_items
-  (id,manage_no,address,usage,prop_type,disposal,name,bid_close,min_price,appraisal_price,data,updated_at)
-VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
+  (id,manage_no,address,usage,prop_type,disposal,name,bid_close,min_price,appraisal_price,data,reg,updated_at)
+VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s, now())
 ON CONFLICT (id) DO UPDATE SET
   manage_no=EXCLUDED.manage_no, address=EXCLUDED.address, usage=EXCLUDED.usage,
   prop_type=EXCLUDED.prop_type, disposal=EXCLUDED.disposal, name=EXCLUDED.name,
   bid_close=EXCLUDED.bid_close, min_price=EXCLUDED.min_price,
-  appraisal_price=EXCLUDED.appraisal_price, data=EXCLUDED.data, updated_at=now();
+  appraisal_price=EXCLUDED.appraisal_price, data=EXCLUDED.data, reg=EXCLUDED.reg, updated_at=now();
 """
 
 
@@ -76,7 +92,7 @@ def main():
                 batch.append((iid, s.get("manage_no"), s.get("address"), s.get("usage"),
                               s.get("prop_type"), s.get("disposal"), s.get("name"),
                               s.get("bid_close"), s.get("min_price"), s.get("appraisal_price"),
-                              json.dumps(s, ensure_ascii=False)))
+                              json.dumps(s, ensure_ascii=False), _reg_by_addr(s.get("address"))))
             with conn.cursor() as cur:
                 cur.executemany(_UPSERT, batch)
             conn.commit()

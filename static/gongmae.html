@@ -234,6 +234,12 @@
           <option value="매수검토">매수검토</option>
           <option value="매수금지">매수금지</option>
         </select>
+        <select id="regSel" onchange="pickReg(this.value)" title="규제 구분으로 거르기">
+          <option value="">규제 전체</option>
+          <option value="regulated">규제지역·토허</option>
+          <option value="metro">수도권 비규제</option>
+          <option value="none">비규제(지방)</option>
+        </select>
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <span class="premwrap" style="position:relative;display:inline-flex;align-items:center">
@@ -496,6 +502,7 @@ function gmParams(page){
   if(_k1){ p.set("sort",_k1); if(_k2&&_k2!==_k1)p.set("sort2",_k2); }
   else { const so=document.getElementById("sort").value; if(so)p.set("sort",so); }
   if(gradeFilter) p.set("grade", gradeFilter);   // 매수판정 서버필터 — 해당 등급으로 100건 채워 조회(클라 필터는 현재페이지만 걸러 <10건)
+  if(regFilter) p.set("reg", regFilter);         // 규제 구분 서버필터(gongmae_items.reg 컬럼)
   return p;
 }
 async function search(){ GM_PAGE=1; return loadPage(); }
@@ -630,6 +637,8 @@ function gatePremium(e){ if(!canPremium()){ if(e&&e.preventDefault)e.preventDefa
 // ── 매수판정 필터(현재 목록 기준 클라이언트 필터, 경매 pickGrade 대응) ──
 let gradeFilter="";
 function pickGrade(v){ gradeFilter=v||""; try{localStorage.setItem('gm_grade',gradeFilter);}catch(e){} GM_PAGE=1; loadPage(); }
+let regFilter="";
+function pickReg(v){ regFilter=v||""; try{localStorage.setItem('gm_reg',regFilter);}catch(e){} GM_PAGE=1; loadPage(); }
 function applyGradeFilter(){
   document.querySelectorAll('.gtbl tbody tr').forEach(tr=>{
     if(!gradeFilter){ tr.style.display=""; return; }
@@ -709,6 +718,7 @@ async function fillGmEstimates(){
 function restoreGmToolbar(){
   try{ const ps=+localStorage.getItem('gm_pageSize')||0; if([20,30,50,100].includes(ps)){ const s=document.getElementById('pageSize'); if(s)s.value=ps; } }catch(e){}
   try{ gradeFilter=localStorage.getItem('gm_grade')||""; const s=document.getElementById('gradeSel'); if(s)s.value=gradeFilter; }catch(e){}
+  try{ regFilter=localStorage.getItem('gm_reg')||""; const rs=document.getElementById('regSel'); if(rs)rs.value=regFilter; }catch(e){}
 }
 fillPriceSelects();
 restoreGmToolbar();
