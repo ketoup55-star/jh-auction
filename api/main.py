@@ -2148,6 +2148,10 @@ def auctions(
             "limit": limit, "items": items}
 
 
+_stats_cache: dict = {}          # 물건통계 캐시 key->(ts,counts). 같은 검색 재계산(>1000건=11카운트쿼리 2.5s) 방지.
+_STATS_TTL = 60.0                 # 초. 크롤러 갱신은 최대 이만큼 지연 반영(물건통계 배너라 무해).
+
+
 @app.get("/auctions/stats")
 def auction_stats(
     group: Optional[list[str]] = Query(None),
@@ -2187,6 +2191,14 @@ def auction_stats(
         buy_ok = False
         barea_min = barea_max = invest_min = invest_max = None
         group = usage = keyword = region = sido = court = court_code = None
+    import time as _t
+    _ck = repr((group, usage, keyword, region, sido, year, caseno, court, court_code, special,
+                type_filter, fuel, brand, grade, zone, reg, buy_ok, appraisal_min, appraisal_max,
+                price_min, price_max, fail_min, fail_max, barea_min, barea_max,
+                invest_min, invest_max, sell_from, sell_to))
+    _hit = _stats_cache.get(_ck)
+    if _hit and _t.time() - _hit[0] < _STATS_TTL:      # 60초 내 동일 검색 → 즉시(재계산 생략)
+        return {"counts": _hit[1]}
     _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로
     item_keys = _combine_item_keys(_type_filter_keys(type_filter), _fuel_filter_keys(fuel),
                                    _brand_filter_keys(brand), _zone_filter_keys(zone),
@@ -2205,6 +2217,9 @@ def auction_stats(
         barea_min=None, barea_max=None,   # building_area 컬럼 NULL → 위 키셋으로 대체
         sell_from=sell_from, sell_to=sell_to,
     )
+    if len(_stats_cache) > 500:            # 무한증식 방지(희귀 필터 조합 누적)
+        _stats_cache.clear()
+    _stats_cache[_ck] = (_t.time(), counts)
     return {"counts": counts}
 
 
