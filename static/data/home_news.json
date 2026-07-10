@@ -2,15 +2,6 @@
  "items": [
   {
    "keyword": "부동산 정책",
-   "title": "“집은 거주 공간”…정부, 보유세·거래세 동시 메스 든다",
-   "link": "https://www.yonginilbo.com/news/article.html?no=109714",
-   "image": "https://www.yonginilbo.com/data/photos/20260728/art_17836423037573_442156.jpg",
-   "source": "yonginilbo.com",
-   "published": "2026-07-10T09:12:55+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
    "title": "4050도 등 돌렸다… 이재명 정부 '부동산 성적표' 59.3%가 '낙제'",
    "link": "https://www.yonginilbo.com/news/article.html?no=109713",
    "image": "https://www.yonginilbo.com/data/photos/20260728/art_17836423329307_733e8c.jpg",
@@ -55,21 +46,21 @@
    "has_time": true
   },
   {
+   "keyword": "부동산 정책",
+   "title": "6월 서울 아파트 토지거래허가신청 가격 상승률, 10·15 이후 최고",
+   "link": "https://www.yna.co.kr/view/AKR20260709192400004?section=economy/all",
+   "image": "https://img6.yna.co.kr/photo/yna/YH/2026/06/25/PYH2026062522920001300_P4.jpg",
+   "source": "연합뉴스",
+   "published": "2026-07-10T06:00:02+09:00",
+   "has_time": true
+  },
+  {
    "keyword": "대출규제",
    "title": "\"6억 풀대출, 집 사려 했는데\" 하루아침에 3억 '반토막'...2030 '패닉' - 머니투데이",
    "link": "https://www.mt.co.kr/amp/estate/2026/07/10/2026070919575597231",
    "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=800,fit=cover,bg=whilte,f=auto,quality=high,sharpen=2,g=face/21/2026/07/2026070919575597231_1.jpg",
    "source": "머니투데이",
    "published": "2026-07-10T05:30:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "“1.3억 촌집 살면서 통장에 월 65만원 꽂힌다” … 올해 ‘확’ 바뀐 주택연금",
-   "link": "https://www.mk.co.kr/news/economy/12094652",
-   "image": "https://pimg.mk.co.kr/news/cms/202607/09/news-p.v1.20260708.66c726ed1ece4ae09f4b52ab6b590c52_R.jpeg",
-   "source": "매일경제",
-   "published": "2026-07-10T05:10:00+09:00",
    "has_time": true
   },
   {
@@ -116,17 +107,8 @@
    "source": "경상일보",
    "published": "2026-07-10T00:00:02+09:00",
    "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "6월 서울 아파트 토지거래허가신청 가격 상승률, 10·15 이후 최고",
-   "link": "https://news.nate.com/view/20260710n02524",
-   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/yt/2026/07/10/PYH2026062522920001300_P2.jpg",
-   "source": "네이트 뉴스",
-   "published": "2026-07-10T00:00:00+09:00",
-   "has_time": false
   }
  ],
- "count": 14,
+ "count": 12,
  "date": "2026-07-10"
 }
