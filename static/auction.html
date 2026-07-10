@@ -744,6 +744,13 @@ async function load(){
     <div id="shortSaleBox"></div>
   `;
   renderLoanGuide();     // 대출·세금 가이드(주택류·규제상태별)
+  // 개인 맞춤 분석·대출요약은 등기분석(느림)을 기다리지 않고 즉시 표시 — 위험도/채권/말소기준은 loadAnalysis가 이후 채움.
+  try{ const _ab=document.getElementById("aiBox"), _ex=aiExtraHTML();
+    if(_ab && _ex && !_ab.innerHTML.trim())
+      _ab.innerHTML=`<div class="aicard"><div class="aihd">🤖 AI 권리분석 요약</div>`
+        +`<div class="airow"><div class="aiitem"><span class="k" style="color:var(--muted)">⏳ 등기 권리분석 로딩 중…</span></div></div>`
+        +`${_ex}<div class="ainote">※ 위험도·채권·말소기준은 곧 표시됩니다.</div></div>`;
+  }catch(e){}
 }
 async function loadAnalysis(attempt){
   attempt=attempt||0;
@@ -815,15 +822,7 @@ async function loadAnalysis(attempt){
   const riskColor=d.risk_level==='위험'?'var(--danger)':d.risk_level==='주의'?'var(--warn)':'#16c54f';
   const aiBox=document.getElementById("aiBox");
   if(aiBox){
-    // 주택류 물건이면 규제상태별 대출·세금·전략 요약을 이 카드에 함께 표시
-    const _luse=(DETAIL&&DETAIL.usage)||"";
-    const _lisHouse=/아파트|다세대|연립|빌라|도시형|다가구|단독|주택|농가/.test(_luse) && !/오피스텔|상가|근린상가|토지/.test(_luse);
-    const _lreg=(DETAIL&&DETAIL.reg)||d.reg;
-    const _loanSum=(_lisHouse && loanTaxSummaryHTML(_lreg)) ? `<div class="ai-loan"><div class="ai-loan-hd">💰 이 물건 대출·세금·전략</div><div class="ai-loan-body">${loanTaxSummaryHTML(_lreg)}</div></div>` : "";
-    // 회원 맞춤 분석(목적×주택수×규제) — 설정한 회원에게만. 매수 램프(buy_grade)와는 무관.
-    const _me = window.ME || {};
-    const _personalSum = (_lisHouse && typeof personalLoanAnalysis==='function')
-      ? personalLoanAnalysis({purpose:_me.purpose, houseCount:_me.house_count, reg:_lreg, usage:_luse}) : "";
+    const _extra = aiExtraHTML();   // 개인 맞춤 분석 + 대출요약(등기분석 무관·즉시렌더와 동일 헬퍼)
     aiBox.innerHTML=`<div class="aicard">
       <div class="aihd">🤖 AI 권리분석 요약</div>
       <div class="airow">
@@ -835,8 +834,7 @@ async function loadAnalysis(attempt){
       </div>
       ${d.waiver?`<div class="aiwarn" style="background:#eafaf1;border-color:#b6e6cb"><span class="w" style="color:#1a7f4b">✓ 말소동의·대항력 포기 확약서 제출 → 미배당 보증금${d.waived_total?` 약 ${won(d.waived_total)}`:''}은(는) 낙찰자가 인수하지 않습니다.</span></div>`:''}
       ${(d.warnings||[]).map(w=>`<div class="aiwarn"><span class="w">⚠ ${w}</span></div>`).join('')}
-      ${_personalSum}
-      ${_loanSum}
+      ${_extra}
       <div class="ainote">※ 등기 자동분석 결과입니다. 특수물건은 전문가 검토가 필요합니다.</div>
     </div>`;
     renderAptAI();   // apt_info가 먼저 끝났으면 매수세·추정시세 즉시 주입
@@ -993,6 +991,16 @@ function loanTaxSummaryHTML(reg){
     metro:`이 물건은 <b>수도권 비규제</b>입니다. 가계 경락잔금대출은 <b>무주택자 LTV 70%</b>까지 되지만, <b>매매·임대 사업자대출은 수도권 전역 규제로 LTV 0%</b>입니다(2025.9.7 대책). 비조정지역이라 <b>세금은 기본세율(중과 없음)</b>이나, 사업자대출이 막혀 매매사업자 레버리지는 어렵습니다. 신탁·전자상거래 사업자대출 등 우회로가 거론되나 <b>법적·세무 리스크</b>가 큽니다.`,
     none:`이 물건은 <b>지방 비규제</b>입니다. 가계 경락잔금대출과 <b>매매사업자 대출이 모두 열리는 유일한 구간</b>으로, <b>다주택자도 사업자대출 레버리지</b>가 가능합니다. 비조정지역이라 다주택도 <b>중과 없이 기본세율</b>이며, 전입 없이 판매목적으로 굴리면 매매사업자 종소세 절세가 온전해 <b>경매 투자·매매업에 가장 유리</b>합니다.`,
   })[reg] || "";
+}
+// 개인 맞춤 분석 + 이 물건 대출·세금 요약 — 등기분석(느림) 불요, DETAIL+ME로 즉시 계산. aiBox 즉시렌더/최종렌더 공용.
+function aiExtraHTML(){
+  const u=(DETAIL&&DETAIL.usage)||"";
+  const isHouse=/아파트|다세대|연립|빌라|도시형|다가구|단독|주택|농가/.test(u) && !/오피스텔|상가|근린상가|토지/.test(u);
+  if(!isHouse) return "";
+  const reg=(DETAIL&&DETAIL.reg), me=window.ME||{};
+  const personal=(typeof personalLoanAnalysis==='function') ? personalLoanAnalysis({purpose:me.purpose,houseCount:me.house_count,reg:reg,usage:u}) : "";
+  const loan=loanTaxSummaryHTML(reg) ? `<div class="ai-loan"><div class="ai-loan-hd">💰 이 물건 대출·세금·전략</div><div class="ai-loan-body">${loanTaxSummaryHTML(reg)}</div></div>` : "";
+  return personal + loan;
 }
 function renderLoanGuide(){
   const box=document.getElementById("loanGuideBox"); if(!box) return;
