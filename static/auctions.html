@@ -370,6 +370,12 @@
         <option value="녹지지역">녹지지역</option>
         <option value="관리지역">관리지역</option>
       </select>
+      <select id="regSel" onchange="pickReg(this.value)" title="규제 구분으로 거르기">
+        <option value="">규제 전체</option>
+        <option value="regulated">규제지역·토허</option>
+        <option value="metro">수도권 비규제</option>
+        <option value="none">비규제(지방)</option>
+      </select>
     </div>
     <div style="display:flex;gap:8px;align-items:center;">
       <span class="premwrap" style="position:relative;display:inline-flex;align-items:center">
@@ -649,6 +655,7 @@ function filterParams(){
   if(v('brandSel')) p.append('brand',v('brandSel'));                                     // 브랜드별(차량, 드롭다운)
   if(gradeFilter) p.append('grade',gradeFilter);                                         // 매수판정(AI 위험도)
   if(zoneFilter) p.append('zone',zoneFilter);                                            // 용도지역
+  if(regFilter) p.append('reg',regFilter);                                               // 규제 구분(규제지역/수도권비규제/비규제)
   return p;
 }
 // ---- 소재지 다중(+버튼으로 여러 지역 추가) ----
@@ -935,10 +942,18 @@ function pickZone(v){                     // 용도지역 필터(저장 안 함 
   zoneFilter=v||"";
   resetOffset(); doSearch();
 }
-function restoreBuyFilter(){            // 새로고침/뒤로가기에도 매수판정 필터 유지
+let regFilter="";                        // "" | regulated | metro | none (규제 구분)
+function pickReg(v){                      // 규제 구분 필터(저장 — 새로고침에도 유지)
+  regFilter=v||"";
+  try{ localStorage.setItem('auc_reg', regFilter); }catch(e){}
+  resetOffset(); doSearch();
+}
+function restoreBuyFilter(){            // 새로고침/뒤로가기에도 매수판정·규제 필터 유지
   buyFilter=false;
   try{ gradeFilter=localStorage.getItem('auc_grade')||""; }catch(e){ gradeFilter=""; }
   const sel=document.getElementById('gradeSel'); if(sel) sel.value=gradeFilter;
+  try{ regFilter=localStorage.getItem('auc_reg')||""; }catch(e){ regFilter=""; }
+  const rsel=document.getElementById('regSel'); if(rsel) rsel.value=regFilter;
 }
 function newSearch(){                   // '검색하기'(새 용도 검색)
   resetOffset(); doSearch();

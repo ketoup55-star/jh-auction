@@ -610,6 +610,84 @@ def _invest_warm() -> None:
         pass
 
 
+# ── 규제 구분 색인(주소 기준) — 목록 규제필터용. _invest_index와 동일 패턴(30분 캐시 + Supabase 공유). ──
+_reg_idx: dict = {"ts": 0.0, "map": None, "building": False}   # item_key -> reg(regulated/metro/none)
+
+
+def _reg_index(force: bool = False) -> dict:
+    import time as _t
+    m = _reg_idx["map"]
+    if m is not None and not force and _t.time() - _reg_idx["ts"] < 1800:
+        return m
+    if not force:
+        try:
+            cached = (auction_db.cache_get_many(["reg_index"]) or {}).get("reg_index")
+            if isinstance(cached, dict) and cached:
+                _reg_idx["map"] = cached; _reg_idx["ts"] = _t.time()
+                return cached
+        except Exception:
+            pass
+        if not _reg_idx.get("building"):
+            _reg_idx["building"] = True
+            threading.Thread(target=_reg_warm, daemon=True).start()
+        return _reg_idx["map"] or {}
+    out: dict = {}
+    off = 0
+    while True:
+        try:
+            r = auction_db._get("items", {"select": "item_key,address",
+                                          "data_class": "eq.현황", "limit": "1000", "offset": str(off)})
+            rows = r.json() if r.status_code in (200, 206) else []
+        except Exception:
+            break
+        for x in rows:
+            k = x.get("item_key")
+            if not k:
+                continue
+            rg = _reg_by_addr(x.get("address"))
+            if rg:
+                out[k] = rg
+        if len(rows) < 1000:
+            break
+        off += 1000
+    if out:
+        _reg_idx["map"] = out; _reg_idx["ts"] = _t.time()
+        try:
+            auction_db.cache_save("reg_index", out)
+        except Exception:
+            pass
+    _reg_idx["building"] = False
+    return _reg_idx["map"] or {}
+
+
+def _reg_warm() -> None:
+    try:
+        _reg_index(force=True)
+    except Exception:
+        pass
+
+
+def _reg_filter_keys(reg) -> Optional[set]:
+    """규제 구분 필터 → item_key 집합. reg∈{regulated,metro,none}. 없으면 None(필터 안 함)."""
+    if not reg or reg not in ("regulated", "metro", "none"):
+        return None
+    m = _reg_index()
+    return {k for k, v in m.items() if v == reg}
+
+
+_gm_reg = {"col": None}   # gongmae_items.reg 컬럼 존재 여부(백필 전이면 None 취급 → 규제필터 미적용)
+
+
+def _gm_reg_col_exists() -> bool:
+    if _gm_reg["col"] is None:
+        try:
+            r = auction_db._get("gongmae_items", {"select": "reg", "limit": "1"})
+            _gm_reg["col"] = (r.status_code in (200, 206))
+        except Exception:
+            _gm_reg["col"] = False
+    return bool(_gm_reg["col"])
+
+
 _baedang_idx: dict = {"ts": 0.0, "map": None, "building": False}   # item_key -> 배당요구신청 건수(다가구·근린주택)
 
 
@@ -1996,6 +2074,7 @@ def auctions(
     brand: Optional[list[str]] = Query(None, description="브랜드별(현대/기아/BMW/벤츠 등)"),
     grade: Optional[list[str]] = Query(None, description="매수판정(매수양호/매수검토/매수금지)"),
     zone: Optional[str] = Query(None, description="용도지역(주거지역/준주거지역/상업지역/준공업지역/공업지역/녹지지역/관리지역)"),
+    reg: Optional[str] = Query(None, description="규제 구분(regulated=규제·토허/metro=수도권 비규제/none=비규제)"),
     buy_ok: bool = Query(False, description="매수 양호 차량만"),
     sort2: Optional[str] = Query(None, description="2차 정렬"),
     appraisal_min: Optional[int] = None,
@@ -2017,7 +2096,7 @@ def auctions(
 ) -> dict:
     usage = _expand_vehicle_usages(usage)         # SUV/승용자동차 → 실제 모델명 usage_name 집합
     if caseno:   # 사건번호 = 특정 물건 직접조회 → 목록 좁히는 필터(등급/유형/특수/지역/법원/상태) 전부 무시.
-        grade = type_filter = fuel = brand = zone = special = None   #  매수판정 등이 localStorage로 복원돼 사건번호 검색에
+        grade = type_filter = fuel = brand = zone = special = reg = None   #  매수판정 등이 localStorage로 복원돼 사건번호 검색에
         buy_ok = False                                                #  AND로 걸려, 그 물건 등급/유형이 필터와 다르면 0건 나오던 버그
         barea_min = barea_max = invest_min = invest_max = None        #  (2025타경100006=매수금지 물건이 매수양호 필터에 걸려 사라짐)
         group = usage = keyword = region = regions = sido = court = court_code = status = None
@@ -2027,7 +2106,8 @@ def auctions(
                                    None if _use_col else _grade_filter_keys(grade),
                                    _buy_ok_keys() if buy_ok else None,
                                    _barea_filter_keys(barea_min, barea_max),  # +건물면적(area_text 전용 파싱)
-                                   _invest_filter_keys(invest_min, invest_max))  # +투자금(min_price+면적 산출)
+                                   _invest_filter_keys(invest_min, invest_max),  # +투자금(min_price+면적 산출)
+                                   _reg_filter_keys(reg))                        # +규제 구분(regulated/metro/none)
     kw = dict(group=group, usages=usage, keyword=keyword,
               region=region, regions=regions, sido=sido, year=year, caseno=caseno, court=court, court_code=court_code,
               result_prefix=status, special=special, item_keys=item_keys,
@@ -2085,6 +2165,7 @@ def auction_stats(
     brand: Optional[list[str]] = Query(None),
     grade: Optional[list[str]] = Query(None),
     zone: Optional[str] = Query(None),
+    reg: Optional[str] = Query(None),
     buy_ok: bool = Query(False),
     appraisal_min: Optional[int] = None,
     appraisal_max: Optional[int] = None,
@@ -2102,7 +2183,7 @@ def auction_stats(
     """현재 검색조건 기준 물건 상태별 건수(물건통계)."""
     usage = _expand_vehicle_usages(usage)         # SUV/승용자동차 → 실제 모델명 usage_name 집합
     if caseno:   # 사건번호 = 특정 물건 직접조회 → 목록 좁히는 필터 전부 무시(위 /auctions 와 동일, 물건통계도 0 나오던 버그)
-        grade = type_filter = fuel = brand = zone = special = None
+        grade = type_filter = fuel = brand = zone = special = reg = None
         buy_ok = False
         barea_min = barea_max = invest_min = invest_max = None
         group = usage = keyword = region = sido = court = court_code = None
@@ -2112,7 +2193,8 @@ def auction_stats(
                                    None if _use_col else _grade_filter_keys(grade),
                                    _buy_ok_keys() if buy_ok else None,
                                    _barea_filter_keys(barea_min, barea_max),  # +건물면적(area_text 전용 파싱)
-                                   _invest_filter_keys(invest_min, invest_max))  # +투자금(min_price+면적 산출)
+                                   _invest_filter_keys(invest_min, invest_max),  # +투자금(min_price+면적 산출)
+                                   _reg_filter_keys(reg))                        # +규제 구분(regulated/metro/none)
     counts = auction_db.status_stats(
         group=group, usages=usage, keyword=keyword, region=region, sido=sido, special=special,
         item_keys=item_keys, buy_grade=(grade if _use_col else None),
@@ -4947,6 +5029,7 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
                  appr_min: Optional[int] = None, appr_max: Optional[int] = None,
                  low_min: Optional[int] = None, low_max: Optional[int] = None,
                  grade: Optional[str] = None,
+                 reg: Optional[str] = Query(None, description="규제 구분(regulated/metro/none) — reg 컬럼 백필 후 활성"),
                  sort: Optional[str] = None, sort2: Optional[str] = None) -> dict:
     """온비드 공매물건 목록 — 우리 DB(gongmae_items) 소재지/재산유형/명칭/감정가·최저가/정렬 필터.
     온비드 API가 소재지 검색을 지원하지 않아 전량 적재분을 우리가 필터한다.
@@ -4987,6 +5070,10 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
         # ③ and(스칼라) + or(지역/용도) 병합.
         #    PostgREST root or= 는 1개만 허용 → or 그룹이 2개↑(복수지역 + 용도복수, 또는 시도 + 용도)면
         #    and=(or(X),or(Y)) 로 묶는다(경매 _filters 말미 로직과 동일).
+        # 규제 구분 필터: gongmae_items.reg 컬럼(백필 예정) 존재 시 컬럼 WHERE(빠름).
+        #  ⚠️ address ilike-OR + ORDER BY 는 46k행 스캔→statement timeout이라 컬럼 방식으로만 활성.
+        if reg in ("regulated", "metro", "none") and _gm_reg_col_exists():
+            conds.append(("reg", "eq", reg))
         or_groups = [v for (k, v) in ru if k == "or"]
         scalar_and = list(conds)   # (col,op,val)
         # ru 중 or 아닌 것(단일 usage ilike 등)은 scalar_and 로 편입
