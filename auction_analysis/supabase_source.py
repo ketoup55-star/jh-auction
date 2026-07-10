@@ -467,8 +467,11 @@ class SupabaseSource:
             else:
                 f.append(("search_group", f"eq.{group}"))
         if usages:
-            quoted = ",".join('"' + u.replace('"', '') + '"' for u in usages)
-            f.append(("usage_name", f"in.({quoted})"))
+            if len(usages) == 1:      # 단일 용도 → eq: (usage_name,case_sort) 부분인덱스를 탐(0.07s).
+                f.append(("usage_name", "eq." + usages[0].replace('"', "")))   # in/ANY는 planner가 case_sort 스캔 택해 51k행 필터→timeout(22s)
+            else:
+                quoted = ",".join('"' + u.replace('"', '') + '"' for u in usages)
+                f.append(("usage_name", f"in.({quoted})"))
         if keyword:
             f.append(("address", f"ilike.*{keyword}*"))
         if region:
