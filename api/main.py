@@ -1991,8 +1991,8 @@ def _enrich_list(items: list) -> None:
     with _cf.ThreadPoolExecutor(max_workers=5) as ex:
         f_brief = ex.submit(_safe, lambda: _load_briefs_from_db(keys, remote=False), None)
         f_sukbak = ex.submit(_safe, lambda: _load_briefs_from_db(_sukbak_keys, remote=True) if _sukbak_keys else None, None)
-        f_villa = ex.submit(_safe, lambda: auction_villa_ests(kjoin, compute=False, remote=False), {})  # 로컬 메모리캐시만(apt와 동일) — Supabase 왕복 제거. 미캐시 시세는 프론트 fillVillaEstimates가 async 채움
-        f_apt = ex.submit(_safe, lambda: auction_apt_ests(kjoin, compute=False, remote=False), {})
+        f_villa = ex.submit(_safe, lambda: auction_villa_ests(kjoin, compute=False, remote=False), {})  # 목록은 로컬 메모리만(0.2초) — remote=True는 콜드쿼리 5초+Supabase 500 유발. 미캐시 시세는 프론트 fillEstimates가 async(compute=false=Supabase 읽기)로 채움
+        f_apt = ex.submit(_safe, lambda: auction_apt_ests(kjoin, compute=False, remote=False), {})      # 챗봇은 별도로 _chat_search_properties에서 후보 est를 즉석 계산(remote=True)하므로 목록 고속과 무관
         f_grade = ex.submit(_safe, _grade_buckets, {})   # 캐시 즉시반환(워밍이 갱신)
         f_brief.result()
         f_sukbak.result()
@@ -8748,6 +8748,35 @@ def _chat_search_properties(args: dict, exclude_keys=None) -> dict:
                             params=[(k, v) for k, v in params if k != "invest_max"], timeout=(40 if _limit > 60 else 25)).json()
         except Exception:
             pass
+    # 시세(est) 없는 후보 → 즉석 계산(compute=True). prewarm 커버리지에 의존하지 않게 —
+    #  대구 등 저커버 지역(Supabase에 신버전 est 소수)서도 챗봇이 물건을 찾고, 계산분은 캐시로 워밍됨.
+    #  응답시간 보호로 상한 40건(목록 앞쪽). 아파트/빌라류 구분해 배치 계산.
+    _ne_apt, _ne_villa, _cbudget = [], [], 40
+    for it in (res.get("items") or []):
+        if it.get("est") or _cbudget <= 0:
+            continue
+        _u, _k = it.get("usage") or "", it.get("item_key")
+        if not _k:
+            continue
+        if "아파트" in _u:
+            _ne_apt.append(_k); _cbudget -= 1
+        elif re.search(r"다세대|연립|빌라|도시형|다가구", _u):
+            _ne_villa.append(_k); _cbudget -= 1
+    if _ne_apt or _ne_villa:
+        _comp = {}
+        try:
+            if _ne_apt:
+                _comp.update(auction_apt_ests(",".join(_ne_apt), compute=True, remote=True) or {})
+            if _ne_villa:
+                _comp.update(auction_villa_ests(",".join(_ne_villa), compute=True, remote=True) or {})
+        except Exception:
+            pass
+        for it in (res.get("items") or []):
+            if not it.get("est"):
+                _e = _comp.get(it.get("item_key"))
+                if isinstance(_e, dict) and _e.get("price"):
+                    it["est"] = _e["price"]
+                    it["est_kind"] = _e.get("kind")
     _imax = args.get("invest_max")
     out = []
     _seen = set()                         # 같은 사건번호 중복 카드 방지(여러 회차·호실)

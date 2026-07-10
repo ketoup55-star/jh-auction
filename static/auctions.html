@@ -745,48 +745,54 @@ async function fillEncarAvgs(attempt){
     setTimeout(()=>fillEncarAvgs(attempt+1), 1500);
   }
 }
-// 주거용(아파트/오피스텔) 행: 추정시세(apt_info의 est) 비동기 채움.
-//  ※ 동시부하로 일부 청크 요청이 실패하면 그 셀은 done 처리하지 않고 잠시 후 재시도(영구 빈칸 방지).
-async function fillEstimates(attempt){
-  attempt=attempt||0;
+// 한 아파트/오피스텔 셀 렌더(캐시분·계산분 공용).
+function _fillAptCell(el,m){
+  el.dataset.done="1";
+  const k=el.dataset.key;
+  if(!m || m.price==null){ el.innerHTML='<div class="ecsi"><span class="lbl nosise">시세 없음</span></div>'; return; }   // 실거래 없어 산출불가 → 명시
+  const p=m.price, isRecent=(m.kind==='recent');
+  const base=+el.dataset.base;            // 원(최저가/낙찰가)
+  const lbl=isRecent?'최근 실거래':'시세';
+  let html=`<div class="ecsi"><span class="lbl">${lbl} :</span><span class="amt">${won(p)}</span></div>`;
+  if(base){
+    const diff=p-base;                    // 원(양수=시세보다 싸게 = 차익)
+    html+=`<div class="${diff>=0?'eprofit':'eloss'}"><span class="lbl">차익 :</span><span class="amt">${diff>=0?'+':'−'}${won(Math.abs(diff))}</span></div>`;
+    const tr=el.closest('tr'); if(tr) tr.dataset.diff=diff;   // 차익순 정렬용
+  }
+  if(isRecent) html+=`<div class="estnote">※추정시세 산출불가→최근 실거래가</div>`;
+  el.innerHTML=html;
+  el.dataset.sise=p;                        // 예상낙찰 차익용(시세 원)
+  if(m.trades_3m!=null){ const chip=document.querySelector('.t3mchip[data-key="'+k.replace(/"/g,'\\"')+'"]'); if(chip) chip.textContent='실거래 '+m.trades_3m+'건'; const tr=el.closest('tr'); if(tr) tr.dataset.t3m=m.trades_3m; }  // 매수배지 옆에 표기
+}
+// 주거용(아파트/오피스텔) 시세 채움 — 빌라와 동일한 2단계(캐시분 즉시 → 미캐시만 점진).
+//  기존엔 한 번에 compute=true(미캐시 전량 동기계산)라 배지가 늦게 떴음 → ① compute=false 즉시표시 ② 나머지 점진.
+async function fillEstimates(){
   const els=[...document.querySelectorAll('.aptest[data-key]')].filter(e=>!e.dataset.done);
   if(!els.length) return;
-  const keys=els.map(e=>e.dataset.key);
-  const chunks=[]; for(let i=0;i<keys.length;i+=60) chunks.push(keys.slice(i,i+60));
-  const map={}, okKeys=new Set();
-  await Promise.all(chunks.map(async c=>{
-    try{
-      const r=await fetch("/auction/apt_ests?keys="+encodeURIComponent(c.join(",")));
-      if(!r.ok) return;                     // 실패 청크: done 안 함 → 재시도 대상
-      Object.assign(map, await r.json()); c.forEach(k=>okKeys.add(k));
-    }catch(e){}
-  }));
-  els.forEach(el=>{
-    const k=el.dataset.key;
-    if(!okKeys.has(k)) return;              // 응답 못 받은 셀은 미완료로 남겨 재시도
-    el.dataset.done="1";
-    const m=map[k];                         // {price, kind:'est'|'recent'} 또는 null
-    if(!m || m.price==null){ el.innerHTML='<div class="ecsi"><span class="lbl nosise">시세 없음</span></div>'; return; }   // 실거래 없어 산출불가 → 명시
-    const p=m.price, isRecent=(m.kind==='recent');
-    const base=+el.dataset.base;            // 원(최저가/낙찰가)
-    const lbl=isRecent?'최근 실거래':'시세';
-    let html=`<div class="ecsi"><span class="lbl">${lbl} :</span><span class="amt">${won(p)}</span></div>`;
-    if(base){
-      const diff=p-base;                    // 원(양수=시세보다 싸게 = 차익)
-      html+=`<div class="${diff>=0?'eprofit':'eloss'}"><span class="lbl">차익 :</span><span class="amt">${diff>=0?'+':'−'}${won(Math.abs(diff))}</span></div>`;
-      const tr=el.closest('tr'); if(tr) tr.dataset.diff=diff;   // 차익순 정렬용
+  const byKey={}; els.forEach(e=>{ byKey[e.dataset.key]=e; });
+  const keys=Object.keys(byKey);
+  // ① 캐시분 즉시(compute=false) — Supabase/메모리 읽기만이라 빠름
+  let cached={};
+  try{
+    for(let i=0;i<keys.length;i+=80){
+      const c=keys.slice(i,i+80);
+      const r=await fetch("/auction/apt_ests?compute=false&keys="+encodeURIComponent(c.join(",")));
+      if(r.ok) Object.assign(cached, await r.json());
     }
-    if(isRecent) html+=`<div class="estnote">※추정시세 산출불가→최근 실거래가</div>`;
-    el.innerHTML=html;
-    el.dataset.sise=p;                        // 예상낙찰 차익용(시세 원)
-    if(m.trades_3m!=null){ const chip=document.querySelector('.t3mchip[data-key="'+k.replace(/"/g,'\\"')+'"]'); if(chip) chip.textContent='실거래 '+m.trades_3m+'건'; const tr=el.closest('tr'); if(tr) tr.dataset.t3m=m.trades_3m; }  // 매수배지 옆에 표기
-  });
-  fillExpBids();                            // 예상낙찰가 독립 패스(렌더 경로 무관)
-  applyAptSort();                           // 차익 채운 뒤 재정렬
-  // 실패로 미완료 셀이 남았으면 잠시 후 재시도(최대 5회)
-  if(attempt<5 && document.querySelectorAll('.aptest[data-key]:not([data-done])').length){
-    setTimeout(()=>fillEstimates(attempt+1), 1500);
+  }catch(e){}
+  const miss=[];
+  keys.forEach(k=>{ const m=cached[k]; if(m&&m.price!=null) _fillAptCell(byKey[k],m); else miss.push(k); });
+  fillExpBids(); applyAptSort();
+  // ② 미캐시만 6개씩 compute=true 로 점진(느린 계산이 빠른 항목 막지 않게 소형청크)
+  for(let i=0;i<miss.length;i+=6){
+    const c=miss.slice(i,i+6);
+    try{
+      const r=await fetch("/auction/apt_ests?compute=true&keys="+encodeURIComponent(c.join(",")));
+      if(r.ok){ const map=await r.json(); c.forEach(k=>{ const el=byKey[k]; if(el) _fillAptCell(el, map[k]); }); }
+    }catch(e){}
+    applyAptSort();
   }
+  fillExpBids(); applyAptSort();
 }
 // 예상낙찰가 독립 패스: 시세/차익을 어느 렌더경로가 그렸든(둘 다 data-done 찍음) 별도로 덧붙임(이중경로 함정 회피).
 //  data-done(시세 렌더됨)인 셀만, data-expdone로 1회 보장. 차익=화면 시세(data-sise)−예상낙찰. 아파트·빌라 공용.

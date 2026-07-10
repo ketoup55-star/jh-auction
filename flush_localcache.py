@@ -55,6 +55,15 @@ def main():
     headers = {"apikey": key, "Authorization": "Bearer " + key,
                "Content-Type": "application/json",
                "Prefer": "resolution=merge-duplicates,return=minimal"}
+    _EP = url + "/rest/v1/api_cache?on_conflict=cache_key"
+
+    def _post(cl, payload):
+        # PostgreSQL은 텍스트에 (널바이트) 저장 불가 → 직렬화 후 이스케이프 시퀀스 제거.
+        body = json.dumps(payload, ensure_ascii=False)
+        if "\\u0000" in body:
+            body = body.replace("\\u0000", "")
+        return cl.post(_EP, headers=headers, content=body.encode("utf-8"))
+
     done = []
     with httpx.Client(timeout=90) as cl:
         for i in range(0, len(rows), 100):              # 100건 배치 업서트
@@ -62,14 +71,24 @@ def main():
             payload = [{"cache_key": k, "data": v} for k, v in chunk]
             for attempt in range(5):                    # 혹시 아직 부하면 백오프 재시도
                 try:
-                    r = cl.post(url + "/rest/v1/api_cache?on_conflict=cache_key",
-                                headers=headers, json=payload)
+                    r = _post(cl, payload)
                     if r.status_code in (200, 201, 204):
                         done += [k for k, _ in chunk]
                         break
                     log("  배치 %d HTTP %d | 응답: %s" % (i // 100, r.status_code, r.text[:300]))
                     if r.status_code == 400:
-                        break   # 400은 재시도해도 동일 — 본문 남기고 다음 배치로
+                        # 불량 1건이 배치 99건 버리지 않게 — 한 건씩 재시도
+                        ok = []
+                        for k, v in chunk:
+                            try:
+                                rr = _post(cl, [{"cache_key": k, "data": v}])
+                                if rr.status_code in (200, 201, 204):
+                                    ok.append(k)
+                            except Exception:
+                                pass
+                        done += ok
+                        log("  배치 %d 400 → 개별재시도 %d/%d 성공" % (i // 100, len(ok), len(chunk)))
+                        break   # 개별처리 완료 → 다음 배치로
                 except Exception as e:
                     log("  배치 %d 재시도(%d): %s" % (i // 100, attempt + 1, str(e)[:50]))
                 time.sleep(6 * (attempt + 1))
