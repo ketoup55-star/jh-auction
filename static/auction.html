@@ -426,7 +426,13 @@
   .lg-warn{margin:12px 0;padding:10px 12px;border-left:3px solid #e08a1e;background:#fff8ee;border-radius:4px;}
   .lg-warn>b{color:#b06a00;display:block;margin-bottom:4px;}
   .lg-way{margin:10px 0;padding:9px 11px;border:1px solid var(--line);border-radius:6px;background:#fff;}
-  .lg-way .wt{font-weight:700;color:#2c4d86;font-size:12.5px;margin-bottom:3px;}
+  .lg-way .wt{font-weight:800;color:#2c4d86;font-size:14.5px;margin-bottom:5px;letter-spacing:-0.2px;}
+  /* 대출가이드 — 이 물건 맞춤 AI 요약 콜아웃 */
+  .lg-ai{margin:2px 0 14px;padding:12px 15px;border-radius:9px;
+         background:linear-gradient(180deg,#f2f6ff 0%,#eef3fd 100%);border:1px solid #d3ddf2;}
+  .lg-ai .lg-ai-hd{font-weight:800;color:#2c4d86;font-size:13px;margin-bottom:6px;display:flex;align-items:center;gap:6px;}
+  .lg-ai .lg-ai-body{font-size:12.7px;line-height:1.72;color:#33404f;word-break:keep-all;}
+  .lg-ai .lg-ai-body b{color:#1f2a3a;}
 </style>
 </head>
 <body>
@@ -1036,8 +1042,15 @@ function renderLoanGuide(){
         <p style="margin-top:10px;color:#8b7355;font-size:11.5px;">공통 주의 — 세 방법 모두 법적·세무 리스크를 안고 있습니다. 실제 활용 전 반드시 대출·세무 전문가의 개별 검토를 받으세요.</p>
       </div>
     </details>`;
+  // 이 물건(규제상태)에 맞춘 대출·세금·전략 요약 — 아래 표/전입·실거주/우회전략을 한눈에.
+  const aiSummary = ({
+    regulated:`이 물건은 <b>규제지역(조정대상=투기과열=토허구역)</b>입니다. 가계 경락잔금대출은 <b>무주택자만 LTV 40%</b>(6개월 전입의무)·1주택자 처분조건부·<b>다주택자 불가</b>이고, <b>매매·임대 사업자대출은 LTV 0%로 전면 차단</b>됩니다. 세금은 무주택 취득 후 1주택 매도면 기본세율이나 <b>다주택은 비교과세(중과)</b>로 매매업 실익이 사라집니다. 경매라 토허 2년 실거주 의무는 면제되지만, 가계대출을 받으면 <b>6개월 전입의무가 매매사업자 절세와 충돌</b>합니다.`,
+    metro:`이 물건은 <b>수도권 비규제</b>입니다. 가계 경락잔금대출은 <b>무주택자 LTV 70%</b>까지 되지만, <b>매매·임대 사업자대출은 수도권 전역 규제로 LTV 0%</b>입니다(2025.9.7 대책). 비조정지역이라 <b>세금은 기본세율(중과 없음)</b>이나, 사업자대출이 막혀 매매사업자 레버리지는 어렵습니다. 신탁·전자상거래 사업자대출 등 우회로가 거론되나 <b>법적·세무 리스크</b>가 큽니다.`,
+    none:`이 물건은 <b>지방 비규제</b>입니다. 가계 경락잔금대출과 <b>매매사업자 대출이 모두 열리는 유일한 구간</b>으로, <b>다주택자도 사업자대출 레버리지</b>가 가능합니다. 비조정지역이라 다주택도 <b>중과 없이 기본세율</b>이며, 전입 없이 판매목적으로 굴리면 매매사업자 종소세 절세가 온전해 <b>경매 투자·매매업에 가장 유리</b>합니다.`,
+  })[reg] || "";
   box.innerHTML=`<div class="card lg-card">
     <h2>🏦 이 물건 대출·세금 가이드 <span class="lg-badge" style="background:${M.bg};color:${M.fg}">${M.label}</span></h2>
+    ${aiSummary?`<div class="lg-ai"><div class="lg-ai-hd">🤖 AI 요약 · 이 물건 맞춤</div><div class="lg-ai-body">${aiSummary}</div></div>`:""}
     <div class="lg-desc">${esc(M.desc)}</div>
     <div class="lg-tblwrap"><table class="lg-tbl">
       <thead><tr><th>보유 주택 수</th><th>가계 경락잔금대출</th><th>매매사업자 대출</th><th>비교과세(매매업 세금)</th></tr></thead>

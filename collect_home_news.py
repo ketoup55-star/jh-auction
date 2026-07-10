@@ -298,7 +298,7 @@ def main():
     n_cand = n_today = n_ad = n_off = n_dup = 0
     for kw in KEYWORDS:
         try:
-            items = svc.search_news(kw, CAND_PER_KW)
+            items = svc.search_news(kw, CAND_PER_KW, headless=True)   # 크롬 창 숨김(헤드리스)
         except Exception as e:
             print(f"{kw}: 검색 오류 {type(e).__name__} {e}")
             items = []
