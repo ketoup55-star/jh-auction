@@ -8144,7 +8144,8 @@ def logout(response: Response, sid: Optional[str] = Cookie(None)) -> dict:
 def me(user: Optional[dict] = Depends(current_user)) -> dict:
     if not user:
         raise HTTPException(401, "로그인이 필요합니다.")
-    return {**user, "grade_rank": _user_grade_rank(user)}   # 프런트 등급 게이트(유형필터·정렬)용
+    prefs = user_store.get_prefs(user["id"])   # 목적(purpose)·보유주택수(house_count) — 맞춤 대출분석용
+    return {**user, "grade_rank": _user_grade_rank(user), **prefs}   # 프런트 등급 게이트(유형필터·정렬)용
 
 
 class ProfileIn(BaseModel):
@@ -8168,6 +8169,20 @@ def auth_update_profile(body: ProfileIn, user: Optional[dict] = Depends(current_
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"ok": True, "user": u}
+
+
+class PrefsIn(BaseModel):
+    purpose: list[str] = []      # ['live','invest'] 복수 선택 가능
+    house_count: str = ""        # none | one | multi
+
+
+@app.post("/auth/prefs")
+def auth_set_prefs(body: PrefsIn, user: Optional[dict] = Depends(current_user)) -> dict:
+    """회원 맞춤설정 저장 — 목적(실거주/투자, 복수)·보유주택수. 로그인 직후 모달 + 회원정보수정에서 사용."""
+    if not user:
+        raise HTTPException(401, "로그인이 필요합니다.")
+    prefs = user_store.set_prefs(user["id"], body.purpose, body.house_count)
+    return {"ok": True, **prefs}
 
 
 class PasswordChangeIn(BaseModel):

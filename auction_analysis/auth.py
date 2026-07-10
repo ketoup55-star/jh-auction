@@ -295,6 +295,12 @@ class UserStore:
                 conditions TEXT NOT NULL,
                 created_at TEXT
             )""",
+            """CREATE TABLE IF NOT EXISTS user_prefs(
+                user_id BIGINT PRIMARY KEY,
+                purpose TEXT DEFAULT '',
+                house_count TEXT DEFAULT '',
+                updated_at TEXT
+            )""",
         ]
         for s in stmts:
             self._ex(s)
@@ -666,6 +672,29 @@ class UserStore:
         except psycopg.errors.UniqueViolation:
             self._reconnect(); raise ValueError("이미 사용 중인 이메일입니다.")
         return self.get_user(uid)
+
+    # ---- 회원 맞춤설정(목적·보유주택수) ----
+    def get_prefs(self, uid: int) -> dict:
+        """회원 맞춤설정: purpose(복수 리스트: live/invest)·house_count(none/one/multi). 미설정=빈값."""
+        try:
+            r = self._ex("SELECT purpose, house_count FROM user_prefs WHERE user_id=%s", (uid,), fetch="one")
+        except Exception:
+            return {"purpose": [], "house_count": ""}
+        if not r:
+            return {"purpose": [], "house_count": ""}
+        purpose = [p for p in (r["purpose"] or "").split(",") if p]
+        return {"purpose": purpose, "house_count": r["house_count"] or ""}
+
+    def set_prefs(self, uid: int, purpose, house_count: str) -> dict:
+        """맞춤설정 UPSERT. purpose=['live','invest'] 중 유효값만, house_count∈{none,one,multi}."""
+        valid_p = [p for p in (purpose or []) if p in ("live", "invest")]
+        hc = house_count if house_count in ("none", "one", "multi") else ""
+        self._ex(
+            "INSERT INTO user_prefs(user_id,purpose,house_count,updated_at) VALUES(%s,%s,%s,%s) "
+            "ON CONFLICT(user_id) DO UPDATE SET purpose=EXCLUDED.purpose, "
+            "house_count=EXCLUDED.house_count, updated_at=EXCLUDED.updated_at",
+            (uid, ",".join(valid_p), hc, _now()))
+        return self.get_prefs(uid)
 
     def admin_set_password(self, uid: int, new_password: str) -> Optional[dict]:
         """관리자가 회원 비밀번호 재설정(이메일 로그인 복구용). 소셜계정에도 걸면 이메일 로그인도 가능해짐."""

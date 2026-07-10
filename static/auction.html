@@ -587,6 +587,7 @@ function sellLabel(s){ // "2026-06-17 (입찰 당일)" → "(수) 2026-06-17 10:
 
 async function load(){
   if(!itemKey){ root.innerHTML='<p class="sub">item_key가 필요합니다.</p>'; return; }
+  const _meP = fetch("/auth/me").then(r=>r.ok?r.json():{}).catch(()=>({}));   // 회원 목적·주택수(맞춤분석용)
   let res;
   try{ res=await fetch("/auction?item_key="+encodeURIComponent(itemKey)); }
   catch(e){ window._loadTry=(window._loadTry||0)+1;
@@ -615,6 +616,7 @@ async function load(){
   window._loadTry=0;
   const d=await res.json();
   DETAIL=d;
+  try{ window.ME = await _meP; }catch(e){ window.ME = {}; }   // 맞춤분석용 회원정보
   const photos=(d.media||[]).filter(m=>m.kind==="photo"&&m.url);
   PHOTOS=photos.map(p=>p.url);   // 슬라이드는 전체 사진 대상
   const docs=(d.media||[]).filter(m=>m.kind!=="photo"&&m.url);
@@ -818,6 +820,10 @@ async function loadAnalysis(attempt){
     const _lisHouse=/아파트|다세대|연립|빌라|도시형|다가구|단독|주택|농가/.test(_luse) && !/오피스텔|상가|근린상가|토지/.test(_luse);
     const _lreg=(DETAIL&&DETAIL.reg)||d.reg;
     const _loanSum=(_lisHouse && loanTaxSummaryHTML(_lreg)) ? `<div class="ai-loan"><div class="ai-loan-hd">💰 이 물건 대출·세금·전략</div><div class="ai-loan-body">${loanTaxSummaryHTML(_lreg)}</div></div>` : "";
+    // 회원 맞춤 분석(목적×주택수×규제) — 설정한 회원에게만. 매수 램프(buy_grade)와는 무관.
+    const _me = window.ME || {};
+    const _personalSum = (_lisHouse && typeof personalLoanAnalysis==='function')
+      ? personalLoanAnalysis({purpose:_me.purpose, houseCount:_me.house_count, reg:_lreg, usage:_luse}) : "";
     aiBox.innerHTML=`<div class="aicard">
       <div class="aihd">🤖 AI 권리분석 요약</div>
       <div class="airow">
@@ -829,6 +835,7 @@ async function loadAnalysis(attempt){
       </div>
       ${d.waiver?`<div class="aiwarn" style="background:#eafaf1;border-color:#b6e6cb"><span class="w" style="color:#1a7f4b">✓ 말소동의·대항력 포기 확약서 제출 → 미배당 보증금${d.waived_total?` 약 ${won(d.waived_total)}`:''}은(는) 낙찰자가 인수하지 않습니다.</span></div>`:''}
       ${(d.warnings||[]).map(w=>`<div class="aiwarn"><span class="w">⚠ ${w}</span></div>`).join('')}
+      ${_personalSum}
       ${_loanSum}
       <div class="ainote">※ 등기 자동분석 결과입니다. 특수물건은 전문가 검토가 필요합니다.</div>
     </div>`;
@@ -2587,6 +2594,7 @@ async function submitMockBid(){
 load().then(()=>{ loadFavStatus(); loadMockBid(); loadCaseObjects(); loadAnalysis(); loadDocSummary(); loadAptInfo(); loadExpectedBid(); loadOffiInfo(); loadGeocode(); loadBuildingBrief(); loadVehicle(); loadEncar(); loadReview(); loadNearbyMap(); loadMarketAnalysis(); loadDagaguAnalysis(); loadShortSale(); /* 주동선 지도 제거→계량분석 패널(주인님 결정) */ });
 </script>
 <script src="/static/fav_modal.js"></script>
+<script src="/static/personal_loan.js"></script>
 <style>
 #aibot-btn{position:fixed;right:22px;bottom:22px;width:60px;height:60px;border-radius:50%;background:#1a73e8;color:#fff;border:none;font-size:22px;font-weight:800;letter-spacing:1px;cursor:pointer;box-shadow:0 6px 20px -4px rgba(26,115,232,.6);z-index:9998;display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:aibotTilt 4.5s ease-in-out infinite,aibotGlow 2.2s ease-in-out infinite;transform-origin:center bottom;}
 @keyframes aibotTilt{0%,84%,100%{transform:rotate(0)}88%{transform:rotate(-13deg)}92%{transform:rotate(13deg)}96%{transform:rotate(-6deg)}}
@@ -2681,5 +2689,6 @@ async function aibotSend(){
   aibotBusy=false;
 }
 </script>
+<script src="/static/profile_setup.js"></script>
 </body>
 </html>

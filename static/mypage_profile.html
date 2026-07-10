@@ -119,6 +119,29 @@
       · 카카오 로그인 회원은 이메일을 바꿔도 <b>카카오 로그인에 영향이 없습니다.</b>
     </div>
 
+    <div class="phead" style="margin:26px 2px 14px"><h1 style="font-size:19px">투자 성향 <span style="font-size:13px;color:var(--muted);font-weight:400">— 물건 상세 AI 권리분석 맞춤용</span></h1></div>
+    <table class="ftbl">
+      <tr><th>목적<br><span style="font-size:11px;color:var(--muted);font-weight:400">복수 선택</span></th>
+        <td>
+          <label style="margin-right:20px;cursor:pointer;font-size:14px"><input type="checkbox" id="pf_live" value="live" style="vertical-align:-2px;margin-right:5px"> 실거주</label>
+          <label style="cursor:pointer;font-size:14px"><input type="checkbox" id="pf_invest" value="invest" style="vertical-align:-2px;margin-right:5px"> 투자</label>
+        </td></tr>
+      <tr><th>보유 주택 수</th>
+        <td>
+          <label style="margin-right:18px;cursor:pointer;font-size:14px"><input type="radio" name="pf_hc" value="none" style="vertical-align:-2px;margin-right:5px"> 무주택자</label>
+          <label style="margin-right:18px;cursor:pointer;font-size:14px"><input type="radio" name="pf_hc" value="one" style="vertical-align:-2px;margin-right:5px"> 1주택자</label>
+          <label style="cursor:pointer;font-size:14px"><input type="radio" name="pf_hc" value="multi" style="vertical-align:-2px;margin-right:5px"> 다주택자</label>
+        </td></tr>
+    </table>
+    <div style="display:flex;gap:10px;align-items:center;margin:2px 2px 14px">
+      <button id="pf_save" onclick="savePrefs()" style="height:38px;padding:0 24px;background:var(--primary);color:#fff;border:none;border-radius:7px;font-weight:700;cursor:pointer">저장</button>
+      <span id="pf_msg" style="font-size:13px"></span>
+    </div>
+    <div class="notice">
+      · 이 설정에 맞춰 <b>경매·공매 주택 물건 상세의 AI 권리분석</b>에서 내 상황 기준 대출 가능 여부·조건을 안내합니다.<br>
+      · <b>매수 양호·검토·금지 판정과는 완전히 별개</b>입니다.
+    </div>
+
     <div class="phead" style="margin:26px 2px 14px"><h1 id="pw_head" style="font-size:19px">비밀번호 변경</h1></div>
     <table class="ftbl">
       <tr id="pw_cur_row"><th>현재 비밀번호</th><td><input type="password" id="pw_cur" placeholder="현재 비밀번호"></td></tr>
@@ -158,6 +181,9 @@ async function load(){
   document.getElementById("p_email").value=u.email||"";
   document.getElementById("p_grade").textContent=(u.grade||"무료")+(u.role==="admin"?" · 관리자":"");
   document.getElementById("p_prov").textContent=(u.provider==="kakao"?"카카오 로그인":((!u.provider||u.provider==="local")?"이메일 가입":u.provider));
+  // 투자 성향(목적·주택수) 채우기
+  (u.purpose||[]).forEach(function(p){ var el=document.getElementById("pf_"+p); if(el) el.checked=true; });
+  if(u.house_count){ var r=document.querySelector('input[name="pf_hc"][value="'+u.house_count+'"]'); if(r) r.checked=true; }
   // 카카오 회원이 아직 비밀번호를 설정한 적 없으면 → '비밀번호 설정'(현재 비번 없이 신규 설정)
   if(u.provider==="kakao" && !u.has_password){
     document.getElementById("pw_cur_row").style.display="none";
@@ -165,6 +191,24 @@ async function load(){
     document.getElementById("pw_save").textContent="비밀번호 설정";
     document.getElementById("pw_note").innerHTML='· 카카오 회원도 비밀번호를 설정하면 <b>이메일로도 로그인</b>할 수 있습니다.<br>· 비밀번호는 <b>6자 이상</b>이어야 합니다.';
   }
+}
+async function savePrefs(){
+  const purpose=[];
+  if(document.getElementById("pf_live").checked) purpose.push("live");
+  if(document.getElementById("pf_invest").checked) purpose.push("invest");
+  const hcEl=document.querySelector('input[name="pf_hc"]:checked');
+  const house_count=hcEl?hcEl.value:"";
+  const msg=document.getElementById("pf_msg"), btn=document.getElementById("pf_save");
+  if(!purpose.length){ msg.style.color="#c0392b"; msg.textContent="목적을 1개 이상 선택하세요."; return; }
+  if(!house_count){ msg.style.color="#c0392b"; msg.textContent="보유 주택 수를 선택하세요."; return; }
+  btn.disabled=true; msg.style.color="var(--muted)"; msg.textContent="저장 중…";
+  try{
+    const r=await fetch("/auth/prefs",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({purpose:purpose,house_count:house_count})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.detail||"저장 실패");
+    msg.style.color="#1a7d46"; msg.textContent="저장되었습니다.";
+  }catch(e){ msg.style.color="#c0392b"; msg.textContent=String(e.message||e); }
+  finally{ btn.disabled=false; }
 }
 async function changePassword(){
   const cur=document.getElementById("pw_cur").value;
