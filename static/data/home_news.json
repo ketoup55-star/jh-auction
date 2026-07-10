@@ -1,114 +1,105 @@
 {
- "items": [
-  {
-   "keyword": "부동산 정책",
-   "title": "4050도 등 돌렸다… 이재명 정부 '부동산 성적표' 59.3%가 '낙제'",
-   "link": "https://www.yonginilbo.com/news/article.html?no=109713",
-   "image": "https://www.yonginilbo.com/data/photos/20260728/art_17836423329307_733e8c.jpg",
-   "source": "yonginilbo.com",
-   "published": "2026-07-10T09:12:51+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "[MK 경매·공매] 왕초보 경·공매 ‘심화’ 과정 2기 찬바람 부는 상가·오피스텔 경매, 저가 낙찰 기회로",
-   "link": "https://www.mk.co.kr/news/realestate/12094303",
-   "image": "https://pimg.mk.co.kr/news/cms/202607/09/news-p.v1.20260709.f7ab1ed0fe25440a9191166c24e08b1c_R.png",
-   "source": "매일경제",
-   "published": "2026-07-10T08:35:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "KB국민은행, 주담대 3억원 상한…은행권 대출 규제 강화 신호탄",
-   "link": "https://www.cstimes.com/news/articleView.html?idxno=712882",
-   "image": "https://www.cstimes.com/news/photo/202607/712882_632915_3852.png",
-   "source": "컨슈머타임스(Consumertimes)",
-   "published": "2026-07-10T08:05:56+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "[스타트 경제] 서울 매매·전세 상승 폭 확대...'풍선효과' 영통 집값 '들썩'",
-   "link": "https://www.ytn.co.kr/_ln/0102_202607100727372122",
-   "image": "https://image.ytn.co.kr/general/jpg/2026/0710/202607100727372122_t.jpg",
-   "source": "YTN",
-   "published": "2026-07-10T07:27:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "[대출 규제 역설] 주담대 6억→3억 ‘반토막’…내 집 마련 더 멀어지나",
-   "link": "https://www.dailian.co.kr/news/view/1665384",
-   "image": "https://cdnimage.dailian.co.kr/news/202607/news_1783576691_1665384_m_1.jpg",
-   "source": "데일리안",
-   "published": "2026-07-10T07:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "6월 서울 아파트 토지거래허가신청 가격 상승률, 10·15 이후 최고",
-   "link": "https://www.yna.co.kr/view/AKR20260709192400004?section=economy/all",
-   "image": "https://img6.yna.co.kr/photo/yna/YH/2026/06/25/PYH2026062522920001300_P4.jpg",
-   "source": "연합뉴스",
-   "published": "2026-07-10T06:00:02+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "\"6억 풀대출, 집 사려 했는데\" 하루아침에 3억 '반토막'...2030 '패닉' - 머니투데이",
-   "link": "https://www.mt.co.kr/amp/estate/2026/07/10/2026070919575597231",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=800,fit=cover,bg=whilte,f=auto,quality=high,sharpen=2,g=face/21/2026/07/2026070919575597231_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-07-10T05:30:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "[우보세]집값 보다 무서운 포모 - 머니투데이",
-   "link": "https://www.mt.co.kr/estate/2026/07/10/2026070911223263235",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026070911223263235_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-07-10T04:50:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "美 6월 주택 거래 2.4% 감소…집값은 사상 최고",
-   "link": "https://www.asiae.co.kr/article/2026071004330437632",
-   "image": "https://cphoto.asiae.co.kr/listimglink/1/2026071004301241012_1783625413.jpg",
-   "source": "아시아경제",
-   "published": "2026-07-10T04:33:04+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "장특공제, 보유-거주 모두 채워야 최대로 받아[부동산 빨간펜]",
-   "link": "https://www.donga.com/news/Economy/article/all/20260709/134269837/2",
-   "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/07/09/134270333.1.jpg",
-   "source": "동아일보",
-   "published": "2026-07-10T00:30:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "전세금 증액 권리분석, 계약시점이 중요하다[이주현의 경매 길라잡이]",
-   "link": "https://www.donga.com/news/Economy/article/all/20260709/134269833/2",
-   "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/07/09/134270130.1.jpg",
-   "source": "동아일보",
-   "published": "2026-07-10T00:30:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "6월 울산 아파트 경매 낙찰가율 4년여만에 최고",
-   "link": "https://www.ksilbo.co.kr/news/articleView.html?idxno=1061765",
-   "image": "https://cdn.ksilbo.co.kr/news/thumbnail/202607/1061765_641064_1521_v150.jpg",
-   "source": "경상일보",
-   "published": "2026-07-10T00:00:02+09:00",
-   "has_time": true
-  }
- ],
- "count": 12,
- "date": "2026-07-10"
+  "items": [
+    {
+      "keyword": "부동산 정책",
+      "title": "4050도 등 돌렸다… 이재명 정부 '부동산 성적표' 59.3%가 '낙제'",
+      "link": "https://www.yonginilbo.com/news/article.html?no=109713",
+      "image": "https://www.yonginilbo.com/data/photos/20260728/art_17836423329307_733e8c.jpg",
+      "source": "yonginilbo.com",
+      "published": "2026-07-10T09:12:51+09:00",
+      "has_time": true
+    },
+    {
+      "keyword": "대출규제",
+      "title": "KB국민은행, 주담대 3억원 상한…은행권 대출 규제 강화 신호탄",
+      "link": "https://www.cstimes.com/news/articleView.html?idxno=712882",
+      "image": "https://www.cstimes.com/news/photo/202607/712882_632915_3852.png",
+      "source": "컨슈머타임스(Consumertimes)",
+      "published": "2026-07-10T08:05:56+09:00",
+      "has_time": true
+    },
+    {
+      "keyword": "집값",
+      "title": "[스타트 경제] 서울 매매·전세 상승 폭 확대...'풍선효과' 영통 집값 '들썩'",
+      "link": "https://www.ytn.co.kr/_ln/0102_202607100727372122",
+      "image": "https://image.ytn.co.kr/general/jpg/2026/0710/202607100727372122_t.jpg",
+      "source": "YTN",
+      "published": "2026-07-10T07:27:00+09:00",
+      "has_time": true
+    },
+    {
+      "keyword": "대출규제",
+      "title": "[대출 규제 역설] 주담대 6억→3억 ‘반토막’…내 집 마련 더 멀어지나",
+      "link": "https://www.dailian.co.kr/news/view/1665384",
+      "image": "https://cdnimage.dailian.co.kr/news/202607/news_1783576691_1665384_m_1.jpg",
+      "source": "데일리안",
+      "published": "2026-07-10T07:00:00+09:00",
+      "has_time": true
+    },
+    {
+      "keyword": "부동산 정책",
+      "title": "6월 서울 아파트 토지거래허가신청 가격 상승률, 10·15 이후 최고",
+      "link": "https://www.yna.co.kr/view/AKR20260709192400004?section=economy/all",
+      "image": "https://img6.yna.co.kr/photo/yna/YH/2026/06/25/PYH2026062522920001300_P4.jpg",
+      "source": "연합뉴스",
+      "published": "2026-07-10T06:00:02+09:00",
+      "has_time": true
+    },
+    {
+      "keyword": "대출규제",
+      "title": "\"6억 풀대출, 집 사려 했는데\" 하루아침에 3억 '반토막'...2030 '패닉' - 머니투데이",
+      "link": "https://www.mt.co.kr/amp/estate/2026/07/10/2026070919575597231",
+      "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=800,fit=cover,bg=whilte,f=auto,quality=high,sharpen=2,g=face/21/2026/07/2026070919575597231_1.jpg",
+      "source": "머니투데이",
+      "published": "2026-07-10T05:30:00+09:00",
+      "has_time": true
+    },
+    {
+      "keyword": "집값",
+      "title": "[우보세]집값 보다 무서운 포모 - 머니투데이",
+      "link": "https://www.mt.co.kr/estate/2026/07/10/2026070911223263235",
+      "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026070911223263235_1.jpg",
+      "source": "머니투데이",
+      "published": "2026-07-10T04:50:00+09:00",
+      "has_time": true
+    },
+    {
+      "keyword": "집값",
+      "title": "美 6월 주택 거래 2.4% 감소…집값은 사상 최고",
+      "link": "https://www.asiae.co.kr/article/2026071004330437632",
+      "image": "https://cphoto.asiae.co.kr/listimglink/1/2026071004301241012_1783625413.jpg",
+      "source": "아시아경제",
+      "published": "2026-07-10T04:33:04+09:00",
+      "has_time": true
+    },
+    {
+      "keyword": "부동산 세금",
+      "title": "장특공제, 보유-거주 모두 채워야 최대로 받아[부동산 빨간펜]",
+      "link": "https://www.donga.com/news/Economy/article/all/20260709/134269837/2",
+      "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/07/09/134270333.1.jpg",
+      "source": "동아일보",
+      "published": "2026-07-10T00:30:00+09:00",
+      "has_time": true
+    },
+    {
+      "keyword": "아파트 경매",
+      "title": "전세금 증액 권리분석, 계약시점이 중요하다[이주현의 경매 길라잡이]",
+      "link": "https://www.donga.com/news/Economy/article/all/20260709/134269833/2",
+      "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/07/09/134270130.1.jpg",
+      "source": "동아일보",
+      "published": "2026-07-10T00:30:00+09:00",
+      "has_time": true
+    },
+    {
+      "keyword": "아파트 경매",
+      "title": "6월 울산 아파트 경매 낙찰가율 4년여만에 최고",
+      "link": "https://www.ksilbo.co.kr/news/articleView.html?idxno=1061765",
+      "image": "https://cdn.ksilbo.co.kr/news/thumbnail/202607/1061765_641064_1521_v150.jpg",
+      "source": "경상일보",
+      "published": "2026-07-10T00:00:02+09:00",
+      "has_time": true
+    }
+  ],
+  "count": 12,
+  "date": "2026-07-10"
 }
