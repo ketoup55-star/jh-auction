@@ -627,9 +627,12 @@ class SupabaseSource:
             pass
 
         def one(st):
-            if st == "전체":
-                return st, self.count_filtered(**kw)
-            return st, self.count_filtered(result_prefix=st, **kw)
+            try:
+                if st == "전체":
+                    return st, self.count_filtered(**kw)
+                return st, self.count_filtered(result_prefix=st, **kw)
+            except Exception:
+                return st, 0     # 카운트 1개 일시 실패(Supabase 500 등)해도 전체 통계 반환(500 방지·캐시/예열 안정화)
 
         tasks = ["전체"] + self.STATUS_ORDER
         with ThreadPoolExecutor(max_workers=3) as ex:   # 동시 Supabase 연결 과다→거부(WinError 10061) 방지

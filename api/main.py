@@ -1991,7 +1991,7 @@ def _enrich_list(items: list) -> None:
     with _cf.ThreadPoolExecutor(max_workers=5) as ex:
         f_brief = ex.submit(_safe, lambda: _load_briefs_from_db(keys, remote=False), None)
         f_sukbak = ex.submit(_safe, lambda: _load_briefs_from_db(_sukbak_keys, remote=True) if _sukbak_keys else None, None)
-        f_villa = ex.submit(_safe, lambda: auction_villa_ests(kjoin, compute=False), {})  # 빌라는 메모리캐시 없어 remote=True(keep-alive로 빠름·캐시도 채움)
+        f_villa = ex.submit(_safe, lambda: auction_villa_ests(kjoin, compute=False, remote=False), {})  # 로컬 메모리캐시만(apt와 동일) — Supabase 왕복 제거. 미캐시 시세는 프론트 fillVillaEstimates가 async 채움
         f_apt = ex.submit(_safe, lambda: auction_apt_ests(kjoin, compute=False, remote=False), {})
         f_grade = ex.submit(_safe, _grade_buckets, {})   # 캐시 즉시반환(워밍이 갱신)
         f_brief.result()
@@ -2150,6 +2150,27 @@ def auctions(
 
 _stats_cache: dict = {}          # 물건통계 캐시 key->(ts,counts). 같은 검색 재계산(>1000건=11카운트쿼리 2.5s) 방지.
 _STATS_TTL = 60.0                 # 초. 크롤러 갱신은 최대 이만큼 지연 반영(물건통계 배너라 무해).
+_STATS_DEFAULT_KEY = repr((None,) * 16 + (False,) + (None,) * 12)   # 무필터 기본검색 캐시키(아래 _ck 기본값과 동일)
+
+
+def _warm_default_stats() -> None:
+    """기본검색(무필터) 물건통계를 미리 계산해 캐시에 채움 → 첫 사용자도 콜드 없이 즉시."""
+    try:
+        import time as _t
+        _stats_cache[_STATS_DEFAULT_KEY] = (_t.time(), auction_db.status_stats())
+    except Exception:
+        pass
+
+
+def _stats_warm_loop() -> None:
+    import time as _t
+    _t.sleep(25)                     # startup 워밍(reg_index 등) 정착 후 시작 — 초기 경합 가중 방지
+    while True:
+        _warm_default_stats()
+        _t.sleep(50)                 # TTL(60s) 만료 전에 갱신 → 기본검색 항상 따뜻
+
+
+threading.Thread(target=_stats_warm_loop, daemon=True).start()
 
 
 @app.get("/auctions/stats")
