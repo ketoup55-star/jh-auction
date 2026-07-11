@@ -40,7 +40,9 @@
   .ftbl{width:100%;border-collapse:collapse;font-size:13px;border:1px solid var(--line);background:var(--card);margin-bottom:12px;}
   .ftbl th,.ftbl td{border:1px solid var(--line);padding:11px 12px;}
   .ftbl th{background:var(--label);color:var(--labeltx);font-weight:600;width:104px;white-space:nowrap;text-align:center;}
-  .ftbl input{height:34px;border:1px solid var(--line);border-radius:6px;padding:0 10px;font-size:13px;background:#fff;width:100%;max-width:340px;}
+  .ftbl input:not([type=checkbox]):not([type=radio]){height:34px;border:1px solid var(--line);border-radius:6px;padding:0 10px;font-size:13px;background:#fff;width:100%;max-width:340px;}
+  .ftbl input[type=checkbox],.ftbl input[type=radio]{width:17px;height:17px;vertical-align:-3px;margin:0 6px 0 0;accent-color:var(--primary);cursor:pointer;flex:none;}
+  .ftbl td label{display:inline-flex;align-items:center;margin:3px 22px 3px 0;font-size:14px;white-space:nowrap;}
   .notice{background:#fff7e6;border:1px solid #f0d9a8;border-radius:10px;padding:16px 20px;color:#9a6b0b;font-size:13px;line-height:1.8;}
   @media(max-width:900px){ .wrap{grid-template-columns:1fr;} }
   @keyframes natlBlink{0%,100%{opacity:1}50%{opacity:.35}}
