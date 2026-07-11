@@ -2205,6 +2205,31 @@ def auctions(
 _stats_cache: dict = {}          # 물건통계 캐시 key->(ts,counts). 같은 검색 재계산(>1000건=14카운트쿼리) 방지.
 _stats_building: dict = {}        # stale-while-revalidate: 재계산 중인 캐시키(중복 백그라운드 재계산 방지)
 _STATS_TTL = 180.0                # 초. 만료돼도 옛값 즉시반환+백그라운드 재계산이라 사용자 대기 0(3분 stale은 배너라 무해).
+_STATS_SB_TTL = 26 * 3600        # Supabase 저장분 수용 최대 나이(초). 롤링 날짜라 26h면 오늘분만 유효.
+
+
+def _stats_ckey(ck: str) -> str:
+    import hashlib
+    return "stats:" + hashlib.sha1(ck.encode("utf-8")).hexdigest()[:24]
+
+
+def _stats_persist(ck: str, counts: dict) -> None:
+    """계산된 물건통계를 Supabase(api_cache)에 저장 → 클라우드가 콜드 재시작/일일 날짜롤오버 후 첫 요청에
+    14개 카운트 계산 없이 즉시 읽음. 로컬 워머가 흔한 조합을 오늘 날짜로 미리 채움. 직접 upsert(로컬도 즉시 반영)."""
+    import time as _t
+    svc = os.environ.get("SUPABASE_SERVICE_KEY") or os.environ.get("SUPABASE_KEY")
+    if not svc or not counts:
+        return
+    url = (os.environ.get("SUPABASE_URL") or "https://jakwbngokvlzehpjiozh.supabase.co").rstrip("/")
+    try:
+        body = _json.dumps([{"cache_key": _stats_ckey(ck), "data": {"c": counts, "ts": _t.time()}}], ensure_ascii=False)
+        httpx.post(url + "/rest/v1/api_cache?on_conflict=cache_key",
+                   headers={"apikey": svc, "Authorization": "Bearer " + svc,
+                            "Content-Type": "application/json",
+                            "Prefer": "resolution=merge-duplicates,return=minimal"},
+                   content=body.encode("utf-8"), timeout=15)
+    except Exception:
+        pass
 # ⚠️ 상시 예열 데몬은 제거: status_stats(11카운트)를 50s마다 강제 실행하면 Supabase 지속 heavy 부하로
 #    다른 쿼리(용도필터+정렬)가 statement timeout(57014) → 500. 60초 캐시(요청 유발)만으로 충분.
 
@@ -2281,6 +2306,7 @@ def auction_stats(
             if len(_stats_cache) > 500:            # 무한증식 방지(희귀 필터 조합 누적)
                 _stats_cache.clear()
             _stats_cache[_ck] = (_t.time(), c)
+            _stats_persist(_ck, c)                 # Supabase에도 저장 → 다른 인스턴스·재시작 후 콜드에도 즉시
             return c
         finally:
             _stats_building.pop(_ck, None)
@@ -2293,7 +2319,22 @@ def auction_stats(
             _stats_building[_ck] = True
             threading.Thread(target=_compute_and_cache, daemon=True).start()
         return {"counts": _hit[1]}
-    # 캐시 전혀 없음(컨테이너 콜드 최초 1회만) → 동기 계산 후 반환.
+    # in-메모리 미스 → Supabase 저장분(로컬 워머가 오늘 날짜로 미리 채움/다른 인스턴스 계산분) 읽기
+    #  → 콜드 재시작·일일 롤오버 후 첫 요청도 14카운트 계산 없이 즉시.
+    try:
+        _sk = _stats_ckey(_ck)
+        _sd = (auction_db.cache_get_many([_sk]) or {}).get(_sk)
+        if isinstance(_sd, dict) and isinstance(_sd.get("c"), dict) and _sd["c"] \
+                and _now - (_sd.get("ts") or 0) < _STATS_SB_TTL:
+            _sts = _sd.get("ts") or _now
+            _stats_cache[_ck] = (_sts, _sd["c"])       # in-메모리에 올려 다음엔 즉시
+            if _now - _sts >= _STATS_TTL and not _stats_building.get(_ck):   # 오래됐으면 백그라운드 갱신
+                _stats_building[_ck] = True
+                threading.Thread(target=_compute_and_cache, daemon=True).start()
+            return {"counts": _sd["c"]}
+    except Exception:
+        pass
+    # Supabase에도 없음 → 동기 계산(진짜 최초 1회). 이후엔 위 경로들이 즉시 반환.
     _stats_building[_ck] = True
     return {"counts": _compute_and_cache()}
 
@@ -3613,6 +3654,41 @@ def _freshness_loop() -> None:
             pass
 
 
+def _stats_warm_loop() -> None:
+    """로컬 전용 — 흔한 물건통계 조합(기본뷰 + 규제구분)을 '오늘 날짜(매각기일 오늘~+3개월)'로 미리 계산해
+    Supabase에 저장. 클라우드가 콜드 재시작·일일 날짜롤오버 후 첫 요청에도 14카운트 계산 없이 즉시 표시.
+    2시간마다(롤링 날짜 대응). CLOUD_READER은 실행 안 함(클라우드는 이 값을 읽기만)."""
+    import time as _t
+    import datetime
+    import calendar
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        return
+
+    def _plus3(d):
+        m = d.month - 1 + 3
+        y = d.year + m // 12
+        m = m % 12 + 1
+        dim = calendar.monthrange(y, m)[1]
+        if d.day <= dim:
+            return d.replace(year=y, month=m)
+        return datetime.date(y, m, dim) + datetime.timedelta(days=d.day - dim)   # JS Date.setMonth(+3) 오버플로 재현(키 일치)
+
+    _t.sleep(45)     # 기동 후 다른 워밍 지난 뒤
+    while True:
+        try:
+            today = datetime.date.today()
+            frm, to = today.isoformat(), _plus3(today).isoformat()   # 프론트 sellFrom/sellTo 기본값과 동일 포맷
+            for extra in ("", "&reg=regulated", "&reg=metro", "&reg=none"):   # 기본뷰 + 규제 구분 3종
+                try:
+                    httpx.get(_SELF_BASE + "/auctions/stats?sell_from=" + frm + "&sell_to=" + to + extra, timeout=120)
+                except Exception:
+                    pass
+                _t.sleep(3)
+        except Exception:
+            pass
+        _t.sleep(2 * 3600)
+
+
 @app.on_event("startup")
 def _start_prewarm() -> None:
     import threading
@@ -3641,6 +3717,7 @@ def _start_prewarm() -> None:
     if not _cloud:
         # V-World를 수분간 순차 호출 → 클라우드(얇은 리더)선 스킵(로컬 워머가 Supabase landuse_cache에 채움).
         threading.Thread(target=_landuse_warm, daemon=True).start()  # 원천 누락 용도지역 V-World 보완(순차, ~수분)
+        threading.Thread(target=_stats_warm_loop, daemon=True).start()  # 물건통계(기본뷰·규제) 오늘날짜로 미리 계산→Supabase(클라우드 콜드 첫요청 즉시)
     try:
         _kb_apply_token()   # Supabase 공유 토큰(api_cache kb:auth) 로드 — 시작 시 1회, 가벼움(브라우저 없음)
     except Exception:
