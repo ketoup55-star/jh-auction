@@ -7083,26 +7083,30 @@ def _hero_usage_label(usage: str) -> str:
 def _hero_picks_compute() -> list:
     """매수양호 ∩ 아파트/다세대/도생 ∩ 진행중(현황) ∩ 사진있음 → 차익 상위 12.
     차익=시세(추정시세 캐시)−예상낙찰가(expbid/vexpbid 캐시, 없으면 최저가). 시세 없으면 제외. 예열 캐시만 읽음(계산X)."""
-    bk = _grade_buckets()
-    good = bk.get("매수양호") or set()
-    if not good:
-        bk = _grade_buckets(force=True)    # 콜드(예열 전) → 강제 빌드
-        good = bk.get("매수양호") or set()
-    if not good:
-        return []
+    # 매수양호를 buy_grade 컬럼 WHERE로(목록·CLOUD_READER와 동일) — 무겁고 재시작 후 콜드인 _grade_buckets 의존 제거.
+    #  컬럼 없을 때만 버킷 폴백. → 재시작 직후에도 히어로가 안정적으로 3천여 후보를 다 봄(1개만 뜨던 원인).
+    _use_col = _buy_grade_col_exists()
+    good = set()
+    if not _use_col:
+        good = _grade_buckets().get("매수양호") or _grade_buckets(force=True).get("매수양호") or set()
+        if not good:
+            return []
     cand: dict = {}
     off = 0
     while True:
         try:
-            r = auction_db._get("items", {"select": "item_key,usage_name,address,min_price,appraisal_price,thumb_url",
-                                          "data_class": "eq.현황", "or": _HERO_OR,
-                                          "thumb_url": "not.is.null", "limit": "1000", "offset": str(off)})
+            q = {"select": "item_key,usage_name,address,min_price,appraisal_price,thumb_url",
+                 "data_class": "eq.현황", "or": _HERO_OR,
+                 "thumb_url": "not.is.null", "limit": "1000", "offset": str(off)}
+            if _use_col:
+                q["buy_grade"] = "eq.매수양호"
+            r = auction_db._get("items", q)
             rows = r.json() if r.status_code in (200, 206) else []
         except Exception:
             break
         for x in rows:
             k = x.get("item_key")
-            if k and k in good and x.get("thumb_url") and _to_int(x.get("min_price")):
+            if k and x.get("thumb_url") and _to_int(x.get("min_price")) and (_use_col or k in good):
                 cand[k] = x
         if len(rows) < 1000:
             break
@@ -7174,7 +7178,9 @@ def _hero_picks_build() -> None:
     try:
         picks = _hero_picks_compute()
         if picks:                          # 빈 결과는 캐시 안 함(콜드 레이스 방지)
+            import time as _t
             _hero_picks_cache["picks"] = picks
+            _hero_picks_cache["ts"] = _t.time()
             try:
                 auction_db.cache_save("hero_picks:" + _HERO_V, {"picks": picks})
             except Exception:
@@ -7186,16 +7192,21 @@ def _hero_picks_build() -> None:
 @app.get("/hero_picks")
 def hero_picks() -> dict:
     """홈 히어로 캐러셀 — 매수양호+아파트/다세대/도생+진행중 차익 상위 12(예열 캐시)."""
+    import time as _t
     c = _hero_picks_cache
-    if c["picks"] is not None:
+    now = _t.time()
+    if c["picks"] is not None and (now - c.get("ts", 0)) < 600:   # 10분 신선 → 즉시
         return {"items": c["picks"]}
+    # 만료/미로드 → Supabase 블롭(로컬 워머가 갱신한 최신) 재읽기 → 클라우드도 재배포 없이 반영
     try:
         dc = auction_db.cache_get_many(["hero_picks:" + _HERO_V]).get("hero_picks:" + _HERO_V)
         if isinstance(dc, dict) and isinstance(dc.get("picks"), list):
-            c["picks"] = dc["picks"]
+            c["picks"] = dc["picks"]; c["ts"] = now
             return {"items": c["picks"]}
     except Exception:
         pass
+    if c["picks"] is not None:
+        return {"items": c["picks"]}          # 재읽기 실패 → 옛값 유지(빈 화면 방지)
     threading.Thread(target=_hero_picks_build, daemon=True).start()
     return {"items": [], "pending": True}
 
