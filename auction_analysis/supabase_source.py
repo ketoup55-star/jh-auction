@@ -427,7 +427,7 @@ class SupabaseSource:
                  result_prefix=None, special=None, item_keys=None,
                  appraisal_min=None, appraisal_max=None, price_min=None, price_max=None,
                  fail_min=None, fail_max=None, barea_min=None, barea_max=None,
-                 sell_from=None, sell_to=None, buy_grade=None) -> list[tuple]:
+                 sell_from=None, sell_to=None, buy_grade=None, reg=None) -> list[tuple]:
         """PostgREST 필터를 (key,value) 튜플 리스트로. 같은 컬럼 범위(gte+lte) 지원."""
         if caseno:                     # 특정 사건번호 검색 = 상태·매각기일 무관하게 그 물건을 찾는다
             result_prefix = None       #  프론트가 기본 status=진행물건 + 매각기일범위(오늘~+3개월)를 항상 붙이는데,
@@ -445,6 +445,8 @@ class SupabaseSource:
                 f.append(("buy_grade", f"in.({q})"))
             else:
                 f.append(("buy_grade", f"eq.{buy_grade}"))
+        if reg:                                # 규제 구분 컬럼 직접필터 — reg 컬럼(백필됨) 존재 시 main이 전달.
+            f.append(("reg", f"eq.{reg}"))     #  기존 _reg_filter_keys(5천여 item_key IN-리스트, 2.5초)를 인덱스 대체
         if special:                            # 특수물건: tags 부분일치(여러개=AND), '제외' 라벨은 NOT
             for s in special:
                 s = (s or "").strip()

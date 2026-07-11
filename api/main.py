@@ -663,19 +663,57 @@ def _reg_index(force: bool = False) -> dict:
     return _reg_idx["map"] or {}
 
 
+def _reg_col_backfill() -> None:
+    """신규 물건(items.reg 컬럼 NULL)만 규제 구분 백필 — 크롤러가 넣는 새 물건이 reg 컬럼 필터에서 빠지지
+    않게. 로컬 워머 전용(CLOUD_READER는 쓰기 금지), reg IS NULL만 UPDATE라 저비용. SQL은 _REG_ADDR_NAMES에서
+    생성해 _reg_by_addr와 100% 일치."""
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        return
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return
+    try:
+        import psycopg
+        names = " OR ".join("address LIKE '%" + n + "%'" for n in _REG_ADDR_NAMES)   # 단일 %(psycopg3 무파라미터=리터럴)
+        sql = ("UPDATE items SET reg = CASE "
+               "WHEN address LIKE '%서울%' OR " + names + " THEN 'regulated' "
+               "WHEN address LIKE '%경기%' OR address LIKE '%인천%' THEN 'metro' "
+               "ELSE 'none' END "
+               "WHERE reg IS NULL AND address IS NOT NULL AND address <> ''")
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            c.execute(sql)
+    except Exception:
+        pass
+
+
 def _reg_warm() -> None:
     try:
         _reg_index(force=True)
+        _reg_col_backfill()          # 신규 물건 reg 컬럼 백필(NULL만, 로컬 전용)
     except Exception:
         pass
 
 
 def _reg_filter_keys(reg) -> Optional[set]:
-    """규제 구분 필터 → item_key 집합. reg∈{regulated,metro,none}. 없으면 None(필터 안 함)."""
+    """규제 구분 필터 → item_key 집합. reg∈{regulated,metro,none}. 없으면 None(필터 안 함).
+    ⚠️ 폴백 전용 — reg 컬럼(백필) 있으면 컬럼 WHERE(_reg_col_ready)가 5천여 item_key IN-리스트(2.5초)를 대체."""
     if not reg or reg not in ("regulated", "metro", "none"):
         return None
     m = _reg_index()
     return {k for k, v in m.items() if v == reg}
+
+
+_reg_col_st = {"col": None}   # items.reg 컬럼 존재 여부(백필됨). 있으면 규제필터를 컬럼 WHERE로(IN-리스트 회피)
+
+
+def _reg_col_ready() -> bool:
+    if _reg_col_st["col"] is None:
+        try:
+            r = auction_db._get("items", {"select": "reg", "limit": "1"})
+            _reg_col_st["col"] = (r.status_code in (200, 206))
+        except Exception:
+            _reg_col_st["col"] = False
+    return bool(_reg_col_st["col"])
 
 
 _gm_reg = {"col": None}   # gongmae_items.reg 컬럼 존재 여부(백필 전이면 None 취급 → 규제필터 미적용)
@@ -2116,17 +2154,18 @@ def auctions(
         barea_min = barea_max = invest_min = invest_max = None        #  (2025타경100006=매수금지 물건이 매수양호 필터에 걸려 사라짐)
         group = usage = keyword = region = regions = sido = court = court_code = status = None
     _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로(IN-리스트 회피)
+    _reg_use_col = reg in ("regulated", "metro", "none") and _reg_col_ready()  # reg 컬럼(백필) 있으면 컬럼 WHERE로 → 5천 item_key IN-리스트(2.5초) 대체
     item_keys = _combine_item_keys(_type_filter_keys(type_filter), _fuel_filter_keys(fuel),
                                    _brand_filter_keys(brand), _zone_filter_keys(zone),
                                    None if _use_col else _grade_filter_keys(grade),
                                    _buy_ok_keys() if buy_ok else None,
                                    _barea_filter_keys(barea_min, barea_max),  # +건물면적(area_text 전용 파싱)
                                    _invest_filter_keys(invest_min, invest_max),  # +투자금(min_price+면적 산출)
-                                   _reg_filter_keys(reg))                        # +규제 구분(regulated/metro/none)
+                                   None if _reg_use_col else _reg_filter_keys(reg))   # 컬럼 쓰면 item_keys서 제외(폴백만 키셋)
     kw = dict(group=group, usages=usage, keyword=keyword,
               region=region, regions=regions, sido=sido, year=year, caseno=caseno, court=court, court_code=court_code,
               result_prefix=status, special=special, item_keys=item_keys,
-              buy_grade=(grade if _use_col else None),
+              buy_grade=(grade if _use_col else None), reg=(reg if _reg_use_col else None),
               appraisal_min=appraisal_min, appraisal_max=appraisal_max,
               price_min=price_min, price_max=price_max,
               fail_min=fail_min, fail_max=fail_max,
@@ -2217,16 +2256,17 @@ def auction_stats(
     if _hit and _t.time() - _hit[0] < _STATS_TTL:      # 60초 내 동일 검색 → 즉시(재계산 생략)
         return {"counts": _hit[1]}
     _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로
+    _reg_use_col = reg in ("regulated", "metro", "none") and _reg_col_ready()  # reg 컬럼 있으면 컬럼 WHERE로(IN-리스트 회피)
     item_keys = _combine_item_keys(_type_filter_keys(type_filter), _fuel_filter_keys(fuel),
                                    _brand_filter_keys(brand), _zone_filter_keys(zone),
                                    None if _use_col else _grade_filter_keys(grade),
                                    _buy_ok_keys() if buy_ok else None,
                                    _barea_filter_keys(barea_min, barea_max),  # +건물면적(area_text 전용 파싱)
                                    _invest_filter_keys(invest_min, invest_max),  # +투자금(min_price+면적 산출)
-                                   _reg_filter_keys(reg))                        # +규제 구분(regulated/metro/none)
+                                   None if _reg_use_col else _reg_filter_keys(reg))   # 컬럼 쓰면 item_keys서 제외(폴백만 키셋)
     counts = auction_db.status_stats(
         group=group, usages=usage, keyword=keyword, region=region, sido=sido, special=special,
-        item_keys=item_keys, buy_grade=(grade if _use_col else None),
+        item_keys=item_keys, buy_grade=(grade if _use_col else None), reg=(reg if _reg_use_col else None),
         year=year, caseno=caseno, court=court, court_code=court_code,
         appraisal_min=appraisal_min, appraisal_max=appraisal_max,
         price_min=price_min, price_max=price_max,
@@ -2471,7 +2511,16 @@ def _load_similar_cache() -> dict:
         with open(_SIMILAR_FILE, encoding="utf-8") as f:
             return _json.load(f)
     except Exception:
-        return {}
+        pass
+    # 로컬 파일 없음(클라우드 얇은 리더) → Supabase 공유 블롭에서 로드 → 유사거래 많은순 정렬 작동.
+    #  (로컬 워머가 _save_similar_cache 때 api_cache['similar_index']에 저장 → 클라우드가 startup에 읽음)
+    try:
+        d = (auction_db.cache_get_many(["similar_index"]) or {}).get("similar_index")
+        if isinstance(d, dict) and d:
+            return {k: v for k, v in d.items() if isinstance(v, int)}
+    except Exception:
+        pass
+    return {}
 
 
 _similar_cache: dict[str, int] = _load_similar_cache()   # item_key -> 유사거래 건수
@@ -2487,6 +2536,12 @@ def _save_similar_cache() -> None:
         with open(_SIMILAR_FILE, "w", encoding="utf-8") as f:
             _json.dump(_similar_cache, f, ensure_ascii=False)
         _similar_dirty = False
+    except Exception:
+        pass
+    # 클라우드 공유용 — Supabase 블롭(api_cache['similar_index'])에도 저장. 로컬만 계산하므로
+    #  이게 있어야 클라우드가 유사거래정렬을 사건번호순 폴백이 아닌 실제 유사거래수로 함.
+    try:
+        auction_db.cache_save("similar_index", dict(_similar_cache))
     except Exception:
         pass
 
