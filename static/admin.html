@@ -603,6 +603,7 @@ async function loadKakaoConfig(){
         +'<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">'
           +'<button class="btn" onclick="previewKakao(\''+k+'\')">미리보기</button>'
           +'<button class="btn primary" onclick="sendNowKakao(\''+k+'\')">지금 발송</button>'
+          +'<button class="btn" onclick="resetKakaoHistory(\''+k+'\')" title="오늘 발송 기록을 지워 설정 시각에 다시 자동발송되게 함(발송은 안 함)">이력 초기화</button>'
           +'<span class="kb-status" style="color:var(--muted,#78808c);font-size:13px;">'+hist+last+'</span>'
         +'</div>'
         +'<pre class="kb-prev" style="display:none;white-space:pre-wrap;background:#f6f8fa;border-radius:8px;padding:12px;margin-top:10px;max-height:360px;overflow:auto;font-size:13px;line-height:1.5;"></pre>'
@@ -622,6 +623,17 @@ async function saveKakaoCfg(k){
     if(!r.ok||!d.ok) throw new Error(d.detail||'저장 실패');
     _kbToast(k,'✅ 설정 저장됨');
   }catch(e){ _kbToast(k,'저장 실패: '+String(e.message||e)); }
+}
+async function resetKakaoHistory(k){
+  if(!confirm(KB_META[k].name+' 발송 이력을 초기화할까요?\n\n· 오늘 발송 기록(발송일·자동발송 처리)만 지웁니다. 방·시각·자동발송 설정은 유지됩니다.\n· 초기화 자체는 발송하지 않습니다.\n· 설정 발송시각이 아직 안 지났으면 그 시각에 자동발송됩니다. 이미 지났으면 오늘은 재발송되지 않습니다.')) return;
+  _kbToast(k,'초기화 중…');
+  try{
+    const r=await fetch('/admin/kakao/reset_history?kind='+k,{method:'POST'});
+    const d=await r.json();
+    if(!r.ok||!d.ok) throw new Error(d.detail||'실패');
+    await loadKakaoConfig();
+    _kbToast(k,'✅ 이력 초기화됨'+(d.note?(' — '+d.note):''));
+  }catch(e){ _kbToast(k,'초기화 실패: '+String(e.message||e)); }
 }
 async function previewKakao(k){
   const card=_kbCard(k), pre=card.querySelector('.kb-prev');

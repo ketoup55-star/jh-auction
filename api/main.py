@@ -4118,6 +4118,43 @@ def admin_kakao_config_set(body: dict = Body(...), admin: dict = Depends(require
     return {"ok": True}
 
 
+@app.post("/admin/kakao/reset_history")
+def admin_kakao_reset_history(kind: str, admin: dict = Depends(require_admin)) -> dict:
+    """발송 이력 초기화 — 그날 발송 기록(sent_date=발송한 매각기일 / auto_date=자동발송한 달력날짜 / last)만
+    삭제하고 방·시각·자동발송·키 설정은 보존. → '오늘 아직 자동발송 안 함' 상태로 되돌려서,
+    설정 발송시각이 아직 안 지났으면 스케줄러가 그 시각에 자동발송한다(수동 지금발송으로 이미 나가도 재발송 가능).
+    ⚠️ 초기화 자체는 발송하지 않음(상태만 리셋). 발송시각이 이미 지났으면(스케줄러 +2시간 창 밖) 오늘 재발송 안 됨.
+    ⚠️ sent_links(뉴스 기사 중복방지 목록)는 보존 — 뉴스가 옛 기사를 다시 보내지 않게."""
+    if kind not in ("news", "upcoming", "sold"):
+        raise HTTPException(400, "kind는 news/upcoming/sold 중 하나여야 합니다.")
+    kb = _kb()
+    st = kb.load_state()
+    c = st.setdefault(kind, {})
+    for f in ("sent_date", "auto_date", "last"):
+        c.pop(f, None)
+    kb.save_state(st)
+    # 다음 자동발송 안내(발송시각 대비 현재 위치)
+    import datetime as _dt
+    note = ""
+    t = (c.get("time") or "").strip()
+    if c.get("on") and (c.get("room") or "").strip() and len(t) == 5 and t[2] == ":":
+        try:
+            now = _dt.datetime.now()
+            sched = now.replace(hour=int(t[:2]), minute=int(t[3:5]), second=0, microsecond=0)
+            el = (now - sched).total_seconds()
+            if el < 0:
+                note = f"설정 발송시각 {t}에 자동발송됩니다."
+            elif el < 2 * 3600:
+                note = f"발송시각 {t}이 방금 지나 곧 자동발송됩니다(따라잡기)."
+            else:
+                note = f"오늘 발송시각 {t}이 지나 자동발송은 내일입니다(지금 보내려면 '지금 발송')."
+        except Exception:
+            pass
+    else:
+        note = "자동발송 꺼짐/방·시각 미설정 — 자동발송하려면 설정 후 자동발송을 켜세요."
+    return {"ok": True, "note": note}
+
+
 @app.post("/admin/kakao/send_now")
 def admin_kakao_send_now(kind: str, admin: dict = Depends(require_admin)) -> dict:
     """즉시 발송 — 카카오톡 GUI 자동조작은 수십 초~수 분 걸리므로 백그라운드 실행 후 즉시 응답.
