@@ -783,15 +783,21 @@ async function fillEstimates(){
   const miss=[];
   keys.forEach(k=>{ const m=cached[k]; if(m&&m.price!=null) _fillAptCell(byKey[k],m); else miss.push(k); });
   fillExpBids(); applyAptSort();
-  // ② 미캐시만 6개씩 compute=true 로 점진(느린 계산이 빠른 항목 막지 않게 소형청크)
-  for(let i=0;i<miss.length;i+=6){
-    const c=miss.slice(i,i+6);
-    try{
-      const r=await fetch("/auction/apt_ests?compute=true&keys="+encodeURIComponent(c.join(",")));
-      if(r.ok){ const map=await r.json(); c.forEach(k=>{ const el=byKey[k]; if(el) _fillAptCell(el, map[k]); }); }
-    }catch(e){}
-    applyAptSort();
+  // ② 미캐시만 6개씩 compute=true 점진 — 청크 3개를 '동시에'(순차→병렬로 체감 채움속도 ~3배).
+  //    기존 순차는 미캐시 79건이면 ~40초 트리클링이 원인이었음. molit 부하 고려해 동시 3워커로 제한.
+  const _acs=[]; for(let i=0;i<miss.length;i+=6) _acs.push(miss.slice(i,i+6));
+  let _aci=0;
+  async function _aptWorker(){
+    while(_aci<_acs.length){
+      const c=_acs[_aci++];
+      try{
+        const r=await fetch("/auction/apt_ests?compute=true&keys="+encodeURIComponent(c.join(",")));
+        if(r.ok){ const map=await r.json(); c.forEach(k=>{ const el=byKey[k]; if(el) _fillAptCell(el, map[k]); }); }
+      }catch(e){}
+      applyAptSort();
+    }
   }
+  await Promise.all([_aptWorker(),_aptWorker(),_aptWorker()]);
   fillExpBids(); applyAptSort();
 }
 // 예상낙찰가 독립 패스: 시세/차익을 어느 렌더경로가 그렸든(둘 다 data-done 찍음) 별도로 덧붙임(이중경로 함정 회피).
@@ -873,17 +879,22 @@ async function fillVillaEstimates(){
   const miss=[];
   keys.forEach(k=>{ const m=cached[k]; if(m&&m.price!=null) _fillVillaCell(byKey[k],m); else miss.push(k); });
   fillExpBids();                             // 캐시분 빌라 셀 예상낙찰(반경1km)
-  // ② 미캐시만 6개씩 compute=true 로 점진(느린 항목이 빠른 항목 막지 않게 소형청크)
-  for(let i=0;i<miss.length;i+=6){
-    const c=miss.slice(i,i+6);
-    try{
-      const r=await fetch("/auction/villa_ests?compute=true&keys="+encodeURIComponent(c.join(",")));
-      if(r.ok){ const map=await r.json(); c.forEach(k=>{ const el=byKey[k]; if(!el) return; const mm=map[k];
-        if(mm&&mm.price!=null){ _fillVillaCell(el,mm); }
-        else { el.innerHTML='<div class="ecsi"><span class="lbl nosise">시세 없음</span></div>'; el.dataset.done="1"; } }); }   // 산출불가 → 명시
-    }catch(e){}
-    applyAptSort();                          // 청크마다 차익 채운 뒤 재정렬
+  // ② 미캐시만 6개씩 compute=true 점진 — 청크 3개를 '동시에'(순차→병렬로 체감 채움속도 ~3배).
+  const _vcs=[]; for(let i=0;i<miss.length;i+=6) _vcs.push(miss.slice(i,i+6));
+  let _vci=0;
+  async function _villaWorker(){
+    while(_vci<_vcs.length){
+      const c=_vcs[_vci++];
+      try{
+        const r=await fetch("/auction/villa_ests?compute=true&keys="+encodeURIComponent(c.join(",")));
+        if(r.ok){ const map=await r.json(); c.forEach(k=>{ const el=byKey[k]; if(!el) return; const mm=map[k];
+          if(mm&&mm.price!=null){ _fillVillaCell(el,mm); }
+          else { el.innerHTML='<div class="ecsi"><span class="lbl nosise">시세 없음</span></div>'; el.dataset.done="1"; } }); }   // 산출불가 → 명시
+      }catch(e){}
+      applyAptSort();                        // 청크마다 차익 채운 뒤 재정렬
+    }
   }
+  await Promise.all([_villaWorker(),_villaWorker(),_villaWorker()]);
   applyAptSort();                            // 캐시분 채운 뒤 재정렬
   fillExpBids();                             // 빌라 예상낙찰 패스(점진분 포함)
 }

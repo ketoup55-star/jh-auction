@@ -224,6 +224,9 @@ def require_national_user(user: dict = Depends(require_user)) -> dict:
 def _load() -> None:
     report = ingest(MockSource(), store)
     print(report.summary())
+    # ※ enrich 인덱스(배당·다가구·경쟁)는 기동 시 미리 빌드하지 않는다 — 빌드가 첫 유저 요청의
+    #   list_auctions 쿼리와 동시에 Supabase를 때려 500을 유발했음. 대신 요청경로가 비차단({} 즉시반환)이라
+    #   첫 요청은 자기 쿼리를 끝낸 뒤 enrich에서 빌드를 백그라운드로 1회 트리거(_enrich_idx_lock 직렬화)한다.
 
 
 @app.get("/")
@@ -688,6 +691,9 @@ def _gm_reg_col_exists() -> bool:
     return bool(_gm_reg["col"])
 
 
+# enrich 무거운 인덱스(배당·다가구·경쟁) 백그라운드 재빌드 직렬화 락 — 3개가 동시에 Supabase를
+#  때리면(콜드스타트) 목록 쿼리까지 500 나던 것 방지(peak 부하 = 1빌드). 비차단은 유지(요청은 {} 즉시).
+_enrich_idx_lock = threading.Lock()
 _baedang_idx: dict = {"ts": 0.0, "map": None, "building": False}   # item_key -> 배당요구신청 건수(다가구·근린주택)
 
 
@@ -785,15 +791,18 @@ def _baedang_index(force: bool = False) -> dict:
                     _baedang_idx["building"] = False
             threading.Thread(target=_bg, daemon=True).start()
         return m
-    if not force:                          # 최초(map None) 요청 경로: 빌드 중이면 빈값(워밍이 곧 채움)
-        if _baedang_idx["building"]:
-            return {}
-        _baedang_idx["building"] = True
-        try:
-            _baedang_rebuild()
-        finally:
-            _baedang_idx["building"] = False
-        return _baedang_idx["map"] or {}
+    if not force:                          # 최초(map None) 요청 경로: 절대 동기 빌드 금지(~9초 stall) — 빈값 즉시 + 백그라운드 1회 빌드
+        if not _baedang_idx["building"]:
+            _baedang_idx["building"] = True
+
+            def _bg():
+                try:
+                    with _enrich_idx_lock:   # 다른 인덱스 빌드와 직렬화(동시 3빌드→Supabase 500 방지)
+                        _baedang_rebuild()
+                finally:
+                    _baedang_idx["building"] = False
+            threading.Thread(target=_bg, daemon=True).start()
+        return {}
     _baedang_rebuild()                     # force(시작 워밍) → 동기 빌드
     return _baedang_idx["map"] or {}
 
@@ -883,15 +892,18 @@ def _dagagu_index(force: bool = False) -> dict:
                     _dagagu_idx["building"] = False
             threading.Thread(target=_bg, daemon=True).start()
         return m
-    if not force:
-        if _dagagu_idx["building"]:
-            return {}
-        _dagagu_idx["building"] = True
-        try:
-            _dagagu_rebuild()
-        finally:
-            _dagagu_idx["building"] = False
-        return _dagagu_idx["map"] or {}
+    if not force:                          # 최초(map None) 요청 경로: 동기 빌드 금지 — 빈값 즉시 + 백그라운드 1회 빌드
+        if not _dagagu_idx["building"]:
+            _dagagu_idx["building"] = True
+
+            def _bg():
+                try:
+                    with _enrich_idx_lock:   # 다른 인덱스 빌드와 직렬화
+                        _dagagu_rebuild()
+                finally:
+                    _dagagu_idx["building"] = False
+            threading.Thread(target=_bg, daemon=True).start()
+        return {}
     _dagagu_rebuild()
     return _dagagu_idx["map"] or {}
 
@@ -993,15 +1005,18 @@ def _compete_index(force: bool = False) -> dict:
                     _compete_idx["building"] = False
             threading.Thread(target=_bg, daemon=True).start()
         return m
-    if not force:
-        if _compete_idx["building"]:
-            return {}
-        _compete_idx["building"] = True
-        try:
-            _compete_rebuild()
-        finally:
-            _compete_idx["building"] = False
-        return _compete_idx["map"] or {}
+    if not force:                          # 최초(map None) 요청 경로: 동기 빌드 금지 — 빈값 즉시 + 백그라운드 1회 빌드
+        if not _compete_idx["building"]:
+            _compete_idx["building"] = True
+
+            def _bg():
+                try:
+                    with _enrich_idx_lock:   # 다른 인덱스 빌드와 직렬화
+                        _compete_rebuild()
+                finally:
+                    _compete_idx["building"] = False
+            threading.Thread(target=_bg, daemon=True).start()
+        return {}
     _compete_rebuild()
     return _compete_idx["map"] or {}
 

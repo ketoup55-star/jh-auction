@@ -811,12 +811,19 @@ class SupabaseSource:
         return rows
 
     def filtered_item_keys(self, **kw) -> list:
-        """필터에 맞는 전체 item_key 목록(정렬 없이). 유사거래 전역 정렬(서버)용 — 메모리 캐시로 sort 후 페이지."""
+        """필터에 맞는 전체 item_key 목록. 유사거래 전역 정렬(서버)용 — 메모리 캐시로 sort 후 페이지.
+        ⚠️ order=case_sort 필수: 없으면 buy_grade+address(지역) 조합이 seq scan → Supabase statement_timeout,
+           그 결과가 status≠200 → 빈 페이지로 삼켜져 '검색 중' 멈춤/0건 오류. 부분인덱스(idx_items_hh_casesort)
+           인덱스 스캔이면 0.1초. OFFSET 페이지네이션도 order 있어야 행 누락/중복 없이 안정적."""
         keys, off = [], 0
         while True:
-            r = self._get("items", [("select", "item_key"), ("limit", "1000"),
-                                    ("offset", str(off))] + self._filters(**kw))
-            page = r.json() if r.status_code in (200, 206) else []
+            page = []
+            for _try in range(3):                         # 타임아웃(빈 결과)이 부분목록으로 굳지 않게 재시도
+                r = self._get("items", [("select", "item_key"), ("limit", "1000"),
+                                        ("order", "case_sort"), ("offset", str(off))] + self._filters(**kw))
+                if r.status_code in (200, 206):
+                    page = r.json()
+                    break
             keys += [x.get("item_key") for x in page if x.get("item_key")]
             if len(page) < 1000:
                 break
