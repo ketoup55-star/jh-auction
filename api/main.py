@@ -2202,8 +2202,9 @@ def auctions(
             "limit": limit, "items": items}
 
 
-_stats_cache: dict = {}          # 물건통계 캐시 key->(ts,counts). 같은 검색 재계산(>1000건=11카운트쿼리 2.5s) 방지.
-_STATS_TTL = 60.0                 # 초. 크롤러 갱신은 최대 이만큼 지연 반영(물건통계 배너라 무해).
+_stats_cache: dict = {}          # 물건통계 캐시 key->(ts,counts). 같은 검색 재계산(>1000건=14카운트쿼리) 방지.
+_stats_building: dict = {}        # stale-while-revalidate: 재계산 중인 캐시키(중복 백그라운드 재계산 방지)
+_STATS_TTL = 180.0                # 초. 만료돼도 옛값 즉시반환+백그라운드 재계산이라 사용자 대기 0(3분 stale은 배너라 무해).
 # ⚠️ 상시 예열 데몬은 제거: status_stats(11카운트)를 50s마다 강제 실행하면 Supabase 지속 heavy 부하로
 #    다른 쿼리(용도필터+정렬)가 statement timeout(57014) → 500. 60초 캐시(요청 유발)만으로 충분.
 
@@ -2253,31 +2254,48 @@ def auction_stats(
                 price_min, price_max, fail_min, fail_max, barea_min, barea_max,
                 invest_min, invest_max, sell_from, sell_to))
     _hit = _stats_cache.get(_ck)
-    if _hit and _t.time() - _hit[0] < _STATS_TTL:      # 60초 내 동일 검색 → 즉시(재계산 생략)
+    _now = _t.time()
+
+    def _compute_and_cache():
+        # 실제 물건통계 계산(14 카운트쿼리, 콜드 Supabase면 17~34초). 캡처한 필터 파라미터 사용.
+        try:
+            _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로
+            _reg_use_col = reg in ("regulated", "metro", "none") and _reg_col_ready()  # reg 컬럼 있으면 컬럼 WHERE로(IN-리스트 회피)
+            item_keys = _combine_item_keys(_type_filter_keys(type_filter), _fuel_filter_keys(fuel),
+                                           _brand_filter_keys(brand), _zone_filter_keys(zone),
+                                           None if _use_col else _grade_filter_keys(grade),
+                                           _buy_ok_keys() if buy_ok else None,
+                                           _barea_filter_keys(barea_min, barea_max),  # +건물면적(area_text 전용 파싱)
+                                           _invest_filter_keys(invest_min, invest_max),  # +투자금(min_price+면적 산출)
+                                           None if _reg_use_col else _reg_filter_keys(reg))   # 컬럼 쓰면 item_keys서 제외(폴백만 키셋)
+            c = auction_db.status_stats(
+                group=group, usages=usage, keyword=keyword, region=region, sido=sido, special=special,
+                item_keys=item_keys, buy_grade=(grade if _use_col else None), reg=(reg if _reg_use_col else None),
+                year=year, caseno=caseno, court=court, court_code=court_code,
+                appraisal_min=appraisal_min, appraisal_max=appraisal_max,
+                price_min=price_min, price_max=price_max,
+                fail_min=fail_min, fail_max=fail_max,
+                barea_min=None, barea_max=None,   # building_area 컬럼 NULL → 위 키셋으로 대체
+                sell_from=sell_from, sell_to=sell_to,
+            )
+            if len(_stats_cache) > 500:            # 무한증식 방지(희귀 필터 조합 누적)
+                _stats_cache.clear()
+            _stats_cache[_ck] = (_t.time(), c)
+            return c
+        finally:
+            _stats_building.pop(_ck, None)
+
+    if _hit:
+        if _now - _hit[0] < _STATS_TTL:            # 신선 → 즉시
+            return {"counts": _hit[1]}
+        # 만료 → 옛값 즉시반환 + 백그라운드 1회 재계산 → 사용자가 콜드 34초를 안 뭄(stale-while-revalidate).
+        if not _stats_building.get(_ck):
+            _stats_building[_ck] = True
+            threading.Thread(target=_compute_and_cache, daemon=True).start()
         return {"counts": _hit[1]}
-    _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로
-    _reg_use_col = reg in ("regulated", "metro", "none") and _reg_col_ready()  # reg 컬럼 있으면 컬럼 WHERE로(IN-리스트 회피)
-    item_keys = _combine_item_keys(_type_filter_keys(type_filter), _fuel_filter_keys(fuel),
-                                   _brand_filter_keys(brand), _zone_filter_keys(zone),
-                                   None if _use_col else _grade_filter_keys(grade),
-                                   _buy_ok_keys() if buy_ok else None,
-                                   _barea_filter_keys(barea_min, barea_max),  # +건물면적(area_text 전용 파싱)
-                                   _invest_filter_keys(invest_min, invest_max),  # +투자금(min_price+면적 산출)
-                                   None if _reg_use_col else _reg_filter_keys(reg))   # 컬럼 쓰면 item_keys서 제외(폴백만 키셋)
-    counts = auction_db.status_stats(
-        group=group, usages=usage, keyword=keyword, region=region, sido=sido, special=special,
-        item_keys=item_keys, buy_grade=(grade if _use_col else None), reg=(reg if _reg_use_col else None),
-        year=year, caseno=caseno, court=court, court_code=court_code,
-        appraisal_min=appraisal_min, appraisal_max=appraisal_max,
-        price_min=price_min, price_max=price_max,
-        fail_min=fail_min, fail_max=fail_max,
-        barea_min=None, barea_max=None,   # building_area 컬럼 NULL → 위 키셋으로 대체
-        sell_from=sell_from, sell_to=sell_to,
-    )
-    if len(_stats_cache) > 500:            # 무한증식 방지(희귀 필터 조합 누적)
-        _stats_cache.clear()
-    _stats_cache[_ck] = (_t.time(), counts)
-    return {"counts": counts}
+    # 캐시 전혀 없음(컨테이너 콜드 최초 1회만) → 동기 계산 후 반환.
+    _stats_building[_ck] = True
+    return {"counts": _compute_and_cache()}
 
 
 @app.get("/auctions/facets")
