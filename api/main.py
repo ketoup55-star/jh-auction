@@ -3458,7 +3458,20 @@ def _prewarm_nearby() -> None:
 
         def one(k):
             try:
-                auction_nearby_trades(k)        # 계산 + DB 저장(geo_ok 결과만)
+                nb = auction_nearby_trades(k)   # 계산 + DB 저장(geo_ok 결과만)
+                # 상세 표(loadNearbyMap)가 보여주는 '전체' 유사거래의 공시가격까지 예열 → 클라우드가 캐시서 즉시 표시.
+                #  (목록 시세 est는 상위 14건만 gongsi 캐시했음. 상세는 ~34건 → 나머지가 미캐시라 V-World 실시간=느림.)
+                #  auction_gongsi가 메모리·Supabase 캐시 우선이라 '미캐시분만' V-World 호출 → 일일쿼터 자연 제한.
+                if isinstance(nb, dict) and nb.get("geo_ok"):
+                    sgg = nb.get("sigungu_prefix") or ""
+                    gk = list({f"{(sgg + ' ' + (t.get('umd') or '') + ' ' + (t.get('jibun') or '')).strip()}"
+                               f"|{t.get('area') or ''}|{t.get('floor') or ''}"
+                               for t in (nb.get("trades") or []) if t.get("umd") and t.get("jibun")})
+                    for gi in range(0, len(gk), 30):
+                        try:
+                            auction_gongsi(";".join(gk[gi:gi + 30]))
+                        except Exception:
+                            pass
             except Exception:
                 pass
         if todo:
