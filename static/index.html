@@ -413,7 +413,7 @@ function goSearch(){
     playSlide();
   }
   function load(){
-    fetch("/hero_picks").then(function(r){return r.json();}).then(function(d){
+    fetch("/hero_picks",{cache:"no-store"}).then(function(r){return r.json();}).then(function(d){
       var items=(d&&d.items)||[];
       if(items.length){ render(items); }
       else if(tries++<6){ setTimeout(load,4000); }
