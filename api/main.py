@@ -3845,8 +3845,6 @@ def _start_prewarm() -> None:
         threading.Thread(target=_prewarm_pools_loop, daemon=True).start()   # 시군구 풀
         threading.Thread(target=_prewarm_nearby_loop, daemon=True).start()  # 주변 유사 실거래 → DB
         threading.Thread(target=_prewarm_docs_loop, daemon=True).start()    # 물건현황·권리분석·명세서 → DB
-        threading.Thread(target=_col_sync_loop, daemon=True).start()        # 컬럼화 동기화: api_cache→items(시세·예상낙찰·차익), 20분마다 변경분
-        threading.Thread(target=_est_col_warm_loop, daemon=True).start()    # est 직접기록 예열(cache_save 우회) — 아파트/오피 시세 커버리지 성장·유지
     # 매수판정 버킷 워밍·freshness는 DISABLE_PREWARM과 무관하게 항상 실행(경량·목록 배지/필터 필수)
     threading.Thread(target=_grade_warm_loop, daemon=True).start()      # 매수판정 버킷 워밍(목록 배지·필터)
     threading.Thread(target=_freshness_loop, daemon=True).start()       # 크롤러 갱신 감지 → 캐시 자동 무효화(경량, 항상 유지)
@@ -3861,6 +3859,10 @@ def _start_prewarm() -> None:
         # V-World를 수분간 순차 호출 → 클라우드(얇은 리더)선 스킵(로컬 워머가 Supabase landuse_cache에 채움).
         threading.Thread(target=_landuse_warm, daemon=True).start()  # 원천 누락 용도지역 V-World 보완(순차, ~수분)
         threading.Thread(target=_stats_warm_loop, daemon=True).start()  # 물건통계(기본뷰·규제) 오늘날짜로 미리 계산→Supabase(클라우드 콜드 첫요청 즉시)
+        # 🔴컬럼화 동기화·est 직접기록은 경량(SQL·400건배치)이라 DISABLE_PREWARM 무관하게 로컬이면 항상 실행.
+        #   (舊버그: else 블록에 있어 DISABLE_PREWARM=1이면 안 돌아 컬럼 자동유지·아파트 시세예열이 죽어있었음)
+        threading.Thread(target=_col_sync_loop, daemon=True).start()        # api_cache→items 컬럼(시세·예상낙찰·차익·호가·유사거래) 20분마다
+        threading.Thread(target=_est_col_warm_loop, daemon=True).start()    # est 직접기록 예열(cache_save 우회) — 아파트/오피 시세 커버리지 성장·유지
     try:
         _kb_apply_token()   # Supabase 공유 토큰(api_cache kb:auth) 로드 — 시작 시 1회, 가벼움(브라우저 없음)
     except Exception:
