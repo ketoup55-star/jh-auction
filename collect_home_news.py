@@ -12,6 +12,7 @@ import os
 import re
 import sys
 import json
+import asyncio
 import html as _html
 from datetime import datetime, timezone, timedelta, date
 from urllib.parse import quote_plus
@@ -118,6 +119,84 @@ class RecentNewsService(_BaseService):
         count = min(max(limit * 4, 20), 100)
         return (f"{self.SEARCH_URL}?q={query}&tbm=nws&hl=ko&gl=KR"
                 f"&num={count}&tbs=qdr:d,sbd:1")
+
+    # 2026-07-12 구글 뉴스탭 구조변경 대응 — 공용 크롤러(바탕화면 google_news_crawler.py)는
+    # 무수정 유지하고, 결과 파서만 여기서 오버라이드. 구글이 결과카드 클래스를
+    #   div.SoaBEf / div.dbsr / div.Gx5Zad / h3 / a.WlydOe  →  a.aJWbwf / div.n0jPhd
+    # 로 교체해 원본 셀렉터가 전부 0을 반환(후보 0)하던 것을, 새 셀렉터 + 구식카드 폴백 +
+    # '외부 뉴스 링크+제목급 텍스트' 클래스 독립 폴백(다음 구조변경에도 생존)으로 복구.
+    _RESULT_JS = r"""
+(() => {
+    const keyword = __KEYWORD__;
+    const limit = __LIMIT__;
+    const seen = new Set();
+    const results = [];
+    const clean = (t) => (t || "").replace(/\s+/g, " ").trim();
+    const isG = (u) => { const h = u.hostname.replace(/^www\./, ""); return h.startsWith("google.") || h.includes(".google."); };
+    const norm = (href) => {
+        try {
+            const u = new URL(href, location.href);
+            if (isG(u) && u.pathname === "/url") { const t = u.searchParams.get("q") || u.searchParams.get("url"); return t ? norm(t) : ""; }
+            return isG(u) ? "" : u.href;
+        } catch { return ""; }
+    };
+    const titleOf = (a) => {
+        const tn = a.querySelector(".n0jPhd, [role='heading'], h3, .JheGif");
+        let t = tn ? clean(tn.innerText || tn.textContent) : "";
+        if (!t) t = clean(a.innerText || a.textContent);
+        return t;
+    };
+    const add = (a) => {
+        if (results.length >= limit) return;
+        const link = norm(a.getAttribute("href"));
+        const title = titleOf(a);
+        if (!title || !link || seen.has(link)) return;
+        seen.add(link);
+        results.push({ keyword, title, link });
+    };
+    document.querySelectorAll("a.aJWbwf[href]").forEach(add);           // 1) 현재(2026-07) 구조
+    if (results.length < limit) {                                       // 2) 구식 카드(회귀 대비)
+        document.querySelectorAll("div.SoaBEf, div.dbsr, div.Gx5Zad").forEach((c) => {
+            const a = Array.from(c.querySelectorAll("a[href]")).find((x) => norm(x.getAttribute("href")));
+            if (a) add(a);
+        });
+    }
+    if (results.length < limit) {                                       // 3) 클래스 독립 폴백
+        document.querySelectorAll("a[href^='http']").forEach((a) => {
+            if (results.length >= limit) return;
+            const link = norm(a.getAttribute("href"));
+            if (!link || seen.has(link)) return;
+            if (titleOf(a).length < 16) return;                         // 메뉴·푸터 잡링크 제외
+            add(a);
+        });
+    }
+    return results.slice(0, limit);
+})()
+"""
+
+    async def _search_news_from_browser(self, browser, keyword, limit, headless,
+                                        timeout_ms, settle_ms):
+        timeout_seconds = max(timeout_ms / 1000, 1)
+        page = await asyncio.wait_for(
+            browser.get(self._build_search_url(keyword, limit)),
+            timeout=timeout_seconds,
+        )
+        try:
+            await page.wait_for_ready_state("interactive", timeout=timeout_seconds)
+        except TimeoutError:
+            pass
+        if settle_ms > 0:
+            await page.sleep(settle_ms / 1000)
+        if headless:
+            await page.sleep(2)
+            try:
+                await self._save_headless_search_debug(page, keyword)
+            except Exception:
+                pass
+        js = (self._RESULT_JS
+              .replace("__KEYWORD__", json.dumps(keyword, ensure_ascii=False))
+              .replace("__LIMIT__", str(int(limit))))
+        return await page.evaluate(js) or []
 
 
 def _walk(o):
