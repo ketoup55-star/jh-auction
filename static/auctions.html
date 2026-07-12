@@ -93,6 +93,13 @@
   .stat:hover{color:var(--primary);}
   .stat.on{color:var(--danger);font-weight:600;}
   .scrollx{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:10px;}
+  /* 검색 중 로딩 — 큰 글자 + 글자 중간높이의 점 3개가 하나씩 통통 튀어오름 */
+  .searching{padding:46px 20px;text-align:center;color:#5b6472;font-weight:700;font-size:22px;display:flex;align-items:center;justify-content:center;gap:9px;}
+  .searching .sdots{display:inline-flex;align-items:center;gap:7px;}
+  .searching .sdots i{width:9px;height:9px;border-radius:50%;background:currentColor;display:inline-block;animation:searchBounce 1s infinite ease-in-out;}
+  .searching .sdots i:nth-child(2){animation-delay:.16s;}
+  .searching .sdots i:nth-child(3){animation-delay:.32s;}
+  @keyframes searchBounce{0%,65%,100%{transform:translateY(0);opacity:.5;}30%{transform:translateY(-11px);opacity:1;}}
   .tbl{width:100%;border-collapse:collapse;min-width:900px;table-layout:fixed;}
   .tbl th{background:var(--label);color:var(--labeltx);font-size:11px;font-weight:600;padding:9px 6px;border-bottom:1px solid var(--line);}
   .tbl td{padding:10px 8px;border-bottom:1px solid var(--line);font-size:12px;vertical-align:top;}
@@ -1186,7 +1193,7 @@ function prefillFromResponse(list){
   applyAptSort();
 }
 async function doSearch(){
-  const _g=document.getElementById("grid"); if(_g) _g.innerHTML='<div style="padding:32px;text-align:center;color:#888;font-weight:600">🔎 검색 중…</div>';   // 클릭 즉시 피드백(버튼 눌렸는지 헷갈림 해소)
+  const _g=document.getElementById("grid"); if(_g) _g.innerHTML='<div class="searching">검색 중<span class="sdots"><i></i><i></i><i></i></span></div>';   // 클릭 즉시 피드백 + 통통 튀는 로딩 애니메이션
   const _c=document.getElementById("cnt"); if(_c) _c.textContent="검색 중…";
   loadStats();   // 물건통계 비동기 갱신(결과와 병렬) — 이 시점 _urlCaseno(상단 사건검색) 동기로 읽음
   const _q=buildQuery();   // 메인 쿼리도 _urlCaseno 읽음
@@ -1285,7 +1292,7 @@ function resetForm(){
   document.getElementById("sort").value="";
   document.getElementById("sort2").value="";
   document.getElementById("resultSel").value="진행물건";
-  doSearch();
+  // '검색 초기화' = 필터만 초기상태로 되돌림. 조회된 물건 목록은 그대로 유지(검색은 '검색하기' 버튼으로만) — 주인님 지정
 }
 function applyUrl(){
   const q=new URLSearchParams(location.search);
