@@ -1540,15 +1540,18 @@ def _buy_grade_col_exists() -> bool:
     if _buy_grade["col"] is None:
         try:
             r = auction_db._get("items", [("select", "buy_grade"), ("limit", "1")])
-            _buy_grade["col"] = (r.status_code == 200)
+            _buy_grade["col"] = (r.status_code in (200, 206))   # PostgREST는 206(Partial)도 정상 — 200만 보면 컬럼 오탐→필터 0건
         except Exception:
             _buy_grade["col"] = False
     return bool(_buy_grade["col"])
 
 
 def _buy_grade_ready() -> bool:
-    """컬럼이 있고 동기화됐으면 True → 컬럼 WHERE 사용 가능."""
-    return bool(_buy_grade["col"]) and _buy_grade["synced"]
+    """buy_grade 컬럼이 있으면 True → 매수판정 필터가 컬럼 WHERE 사용.
+    🔴 synced 플래그 의존을 제거(2026-07-12): 클라우드(CLOUD_READER)에서 _grade_warm_loop의
+    synced 세팅이 타이밍/환경에 따라 안 걸리면 빈 in-메모리 버킷 폴백→매수양호 등 필터가 0건으로
+    회귀하던 버그. 컬럼은 로컬 워머가 채운 authoritative 값이라, 존재하면 항상 신뢰가 안전."""
+    return _buy_grade_col_exists()
 
 
 def _sync_buy_grade(buckets: dict) -> None:
