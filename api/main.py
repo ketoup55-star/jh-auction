@@ -3777,6 +3777,59 @@ def _col_sync_loop() -> None:
         _t.sleep(1200)          # 20분마다 변경분 동기화
 
 
+def _est_col_warm() -> None:
+    """활성 아파트/오피스텔 est(추정시세)를 계산해 items.est_price 컬럼에 '직접' SQL 기록.
+    🔑근본: cache_save의 Supabase 업서트(4s 베스트에포트)가 부하·대용량서 타임아웃돼 예열 est가
+    api_cache에 안 남던 것(=예열해도 커버리지 0.8% 정체의 진짜 원인)을 우회. 직접기록은 무손실.
+    로컬 전용, 소량배치(400) 점진 → 커버리지 성장 + 신규물건 유지. [[project_auction_enrich_columnization]]"""
+    dsn = os.environ.get("SUPABASE_DB_URL")
+    if not dsn:
+        return
+    try:
+        import psycopg
+        conn = psycopg.connect(dsn, autocommit=True, connect_timeout=15)
+        cur = conn.cursor()
+        cur.execute("SET statement_timeout=90000")
+        cur.execute("""SELECT item_key FROM items WHERE data_class='현황'
+                       AND (usage_name ILIKE '%아파트%' OR usage_name ILIKE '%오피스텔%')
+                       AND est_price IS NULL ORDER BY sell_date DESC NULLS LAST LIMIT 400""")
+        keys = [r[0] for r in cur.fetchall()]
+        if not keys:
+            cur.close(); conn.close(); return
+
+        def _one(k):
+            try:
+                v = _apt_est_value(_apt_info_compute(k, 12))
+                if v and v.get("price"):
+                    return (int(v["price"]), k)
+            except Exception:
+                pass
+            return None
+        vals = []
+        with _cf.ThreadPoolExecutor(max_workers=6) as ex:
+            for rv in ex.map(_one, keys):
+                if rv:
+                    vals.append(rv)
+        if vals:
+            cur.executemany("UPDATE items SET est_price=%s WHERE item_key=%s AND est_price IS NULL", vals)
+            cur.execute("UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid")
+            print(f"[est_col] {len(vals)}/{len(keys)}건 est_price 직접기록", flush=True)
+        cur.close(); conn.close()
+    except Exception as e:
+        print(f"[est_col] skip {str(e)[:60]}", flush=True)
+
+
+def _est_col_warm_loop() -> None:
+    import time as _t
+    _t.sleep(150)
+    while True:
+        try:
+            _est_col_warm()
+        except Exception:
+            pass
+        _t.sleep(1800)          # 30분마다 400건 배치 → 점진 커버 + 유지
+
+
 @app.on_event("startup")
 def _start_prewarm() -> None:
     import threading
@@ -3793,6 +3846,7 @@ def _start_prewarm() -> None:
         threading.Thread(target=_prewarm_nearby_loop, daemon=True).start()  # 주변 유사 실거래 → DB
         threading.Thread(target=_prewarm_docs_loop, daemon=True).start()    # 물건현황·권리분석·명세서 → DB
         threading.Thread(target=_col_sync_loop, daemon=True).start()        # 컬럼화 동기화: api_cache→items(시세·예상낙찰·차익), 20분마다 변경분
+        threading.Thread(target=_est_col_warm_loop, daemon=True).start()    # est 직접기록 예열(cache_save 우회) — 아파트/오피 시세 커버리지 성장·유지
     # 매수판정 버킷 워밍·freshness는 DISABLE_PREWARM과 무관하게 항상 실행(경량·목록 배지/필터 필수)
     threading.Thread(target=_grade_warm_loop, daemon=True).start()      # 매수판정 버킷 워밍(목록 배지·필터)
     threading.Thread(target=_freshness_loop, daemon=True).start()       # 크롤러 갱신 감지 → 캐시 자동 무효화(경량, 항상 유지)
