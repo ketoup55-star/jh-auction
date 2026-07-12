@@ -3813,7 +3813,8 @@ def _est_col_warm() -> None:
         if vals:
             cur.executemany("UPDATE items SET est_price=%s WHERE item_key=%s AND est_price IS NULL", vals)
             cur.execute("UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid")
-            print(f"[est_col] {len(vals)}/{len(keys)}건 est_price 직접기록", flush=True)
+        # 0건이어도 항상 로그 → 루프 가동 확인 + molit 쿼터소진(계산 0) 판별
+        print(f"[est_col] {len(keys)}건 시도 → {len(vals)}건 est_price 기록", flush=True)
         cur.close(); conn.close()
     except Exception as e:
         print(f"[est_col] skip {str(e)[:60]}", flush=True)
