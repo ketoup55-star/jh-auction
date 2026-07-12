@@ -66,13 +66,16 @@
   ok, report = kb.selfcheck()                                                    # 자가진단
 
 --------------------------------------------------------------------------------
-4. 인증 (둘 다 대비: 배포/로컬)
+4. 인증 (우선순위)
 --------------------------------------------------------------------------------
-  우선순위 1) KB_SITE_TOKEN 환경변수 주입    → 브라우저 불필요(배포 권장). 모드A 완전동작.
-  우선순위 2) KB_EMAIL/KB_PW 로 카카오 자동로그인 → siteToken+인증헤더 캡처(로컬). 모드A/B 완전동작.
-  토큰은 메모리 캐시(기본 1h) + 401(만료) 시 자동 재발급.
-  ※ siteToken 얻는 법(수동): kbland.kr 로그인 후 콘솔에서
-    JSON.parse(localStorage.vuex).member.siteToken
+  1) ★KB_REFRESH_TOKEN (권장) → refresh_token OAuth 그랜트로 siteToken 무한 자동갱신.
+     카카오 재로그인·브라우저·CAPTCHA 없음. 서버/배포에 최적. (siteToken 수명 ~45h,
+     만료/401 시 자동 재발급, rotate된 refresh_token 은 .kb_token.json 에 저장돼 재사용)
+  2) KB_SITE_TOKEN → 정적 토큰 직접 주입(만료되면 수동 교체).
+  3) KB_EMAIL/KB_PW → 카카오 자동로그인(로컬, playwright 필요). 지역모드용 캡처헤더도 확보.
+  ※ 최초 refresh_token 얻는 법(딱 1회): kbland.kr 카카오 로그인 후 콘솔에서
+    JSON.parse(localStorage.vuex).member.refreshToken   → 이 값을 KB_REFRESH_TOKEN 에.
+    (siteToken 자체는 member.siteToken)
 
 --------------------------------------------------------------------------------
 5. 환경변수
@@ -135,12 +138,34 @@ from typing import Any
 import requests
 
 # ──────────────────────────────────────────────────────────────────────────
-# 0. 설정
+# 0. 설정 — 같은 폴더 .env 자동 로드(이미 설정된 env는 안 덮음). python-dotenv 불필요.
 # ──────────────────────────────────────────────────────────────────────────
+def _load_dotenv():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                k, v = line.split("=", 1)
+                k, v = k.strip(), v.strip().strip('"').strip("'")
+                if k and k not in os.environ:
+                    os.environ[k] = v
+    except FileNotFoundError:
+        pass
+
+
+_load_dotenv()
+
 DB_URL = os.environ.get("SUPABASE_DB_URL", "")
 KB_EMAIL = os.environ.get("KB_EMAIL", "")
 KB_PW = os.environ.get("KB_PW", "")
 KB_SITE_TOKEN_ENV = os.environ.get("KB_SITE_TOKEN", "")
+KB_REFRESH_TOKEN_ENV = os.environ.get("KB_REFRESH_TOKEN", "")   # ★무한갱신용(권장)
+# rotate된 refresh_token/siteToken 을 재시작 후에도 이어쓰도록 저장하는 파일
+KB_TOKEN_FILE = os.environ.get("KB_TOKEN_FILE") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), ".kb_token.json")
 REQUEST_DELAY = float(os.environ.get("KB_REQUEST_DELAY", "0.4"))
 
 BASE = "https://api.kbland.kr"
@@ -275,43 +300,115 @@ def _signed_headers(access_token: str) -> dict:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 2. 인증 (토큰/헤더 캐시) — 둘 다 대비: 토큰 주입 + 카카오 자동로그인
+# 2. 인증 — siteToken 무한 자동갱신 (refresh_token OAuth 그랜트)
+#    kbland 프론트가 쓰는 그랜트를 그대로 호출 → 카카오 재로그인·브라우저·CAPTCHA 없음.
+#    siteToken 수명 ~45h. 만료/401 시 refresh_token 으로 재발급. refresh_token 은
+#    rotate 될 수 있어 매번 저장(.kb_token.json). refresh_token 까지 무효화되면 최초 1회 재로그인.
 # ──────────────────────────────────────────────────────────────────────────
+_KB_OAUTH_URL = "https://api.kbland.kr/land-auth/oauth/token"
+# 클라이언트 인증(Basic)은 kbland JS에 공개된 고정값(비밀 아님)
+_KB_CLIENT_BASIC = "Basic " + base64.b64encode(b"localTestId:!QAZ@WSX3e").decode()
+
+
+def refresh_site_token(refresh_token: str) -> dict | None:
+    """refresh_token → 새 siteToken. 성공 시 {token, refresh_token, expires_in}."""
+    try:
+        r = requests.post(
+            _KB_OAUTH_URL,
+            data={"refresh_token": (refresh_token or "").strip(), "grant_type": "refresh_token"},
+            headers={"Content-Type": "application/x-www-form-urlencoded",
+                     "Authorization": _KB_CLIENT_BASIC,
+                     "User-Agent": "Mozilla/5.0", "Referer": "https://kbland.kr/"},
+            timeout=20)
+        j = r.json()
+    except Exception as e:  # noqa: BLE001
+        log.error("siteToken 갱신 통신실패 :: %s", e)
+        return None
+    if (j.get("dataHeader") or {}).get("resultCode") != "10000":
+        log.warning("siteToken 갱신 거절 dataHeader=%s", j.get("dataHeader"))
+        return None
+    d = (j.get("dataBody") or {}).get("data") or {}
+    at = (d.get("access_token") or "").strip()
+    if not at:
+        return None
+    return {"token": at,
+            "refresh_token": (d.get("refresh_token") or refresh_token).strip(),  # rotate 대비
+            "expires_in": int(d.get("expires_in") or 0)}
+
+
+def _load_token_store() -> dict:
+    try:
+        with open(KB_TOKEN_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def _save_token_store(d: dict) -> None:
+    try:
+        with open(KB_TOKEN_FILE, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False)
+    except Exception as e:  # noqa: BLE001
+        log.warning("토큰 저장 실패(%s): %s", KB_TOKEN_FILE, e)
+
+
 class _Auth:
-    """siteToken(서명용) + 캡처 인증헤더(지역 API용)를 캐시."""
+    """siteToken(서명용) 관리. 우선순위: refresh_token 자동갱신 > 정적 토큰 > 카카오 자동로그인."""
     def __init__(self):
         self.token: str | None = None
+        self.refresh_token: str | None = None
         self.captured_headers: dict | None = None
-        self.obtained_at: float = 0.0
-        self.ttl: float = 60 * 60  # 1시간 캐시(보수적). 실패 시 즉시 갱신.
+        self.expires_at: float = 0.0            # time.monotonic 기준
         self._lock = threading.Lock()
+        store = _load_token_store()
+        self.refresh_token = store.get("refresh_token") or KB_REFRESH_TOKEN_ENV or None
 
-    def _expired(self) -> bool:
-        return not self.token or (time.monotonic() - self.obtained_at) > self.ttl
+    def _valid(self) -> bool:
+        # 만료 5분 전이면 미리 갱신
+        return bool(self.token) and (time.monotonic() < self.expires_at - 300)
+
+    def _try_refresh(self) -> bool:
+        rt = self.refresh_token or KB_REFRESH_TOKEN_ENV
+        if not rt:
+            return False
+        res = refresh_site_token(rt)
+        if not res:
+            return False
+        self.token = res["token"]
+        self.refresh_token = res["refresh_token"]
+        # expires_in(초) 활용, 없으면 45h 가정. 안전을 위해 살짝 줄임.
+        ttl = res["expires_in"] or (45 * 3600)
+        self.expires_at = time.monotonic() + max(ttl - 60, 300)
+        _save_token_store({"refresh_token": self.refresh_token, "site_token": self.token,
+                           "expires_in": res["expires_in"]})
+        log.info("siteToken 갱신 성공 (expires_in=%ss)", res["expires_in"])
+        return True
 
     def get_token(self, force: bool = False) -> str:
         with self._lock:
-            if not force and not self._expired():
+            if not force and self._valid():
                 return self.token
-            # 1) 환경변수 토큰 주입 우선 (배포 친화)
+            # 1) refresh_token 무한갱신 (권장)
+            if self._try_refresh():
+                return self.token
+            # 2) 정적 토큰 주입 (KB_SITE_TOKEN)
             if KB_SITE_TOKEN_ENV:
                 self.token = KB_SITE_TOKEN_ENV
-                self.obtained_at = time.monotonic()
+                self.expires_at = time.monotonic() + 3600
                 return self.token
-            # 2) 카카오 자동로그인
+            # 3) 카카오 자동로그인 (최후)
             tok, hdrs = _kakao_login_capture(KB_EMAIL, KB_PW)
-            if not tok:
-                raise RuntimeError(
-                    "KB 인증 실패: KB_SITE_TOKEN 환경변수를 주입하거나 KB_EMAIL/KB_PW로 "
-                    "자동로그인이 되도록 설정하세요(서버는 playwright+chromium 필요)."
-                )
-            self.token, self.captured_headers = tok, hdrs
-            self.obtained_at = time.monotonic()
-            return self.token
+            if tok:
+                self.token, self.captured_headers = tok, hdrs
+                self.expires_at = time.monotonic() + 3600
+                return self.token
+            raise RuntimeError(
+                "KB 인증 실패: KB_REFRESH_TOKEN(권장) 또는 KB_SITE_TOKEN 을 설정하거나 "
+                "KB_EMAIL/KB_PW 자동로그인을 구성하세요.")
 
     def get_captured_headers(self) -> dict | None:
         """지역 API(stutCdFilter)용 캡처 헤더. 자동로그인 했을 때만 존재."""
-        if self.captured_headers is None and not KB_SITE_TOKEN_ENV:
+        if self.captured_headers is None and not (KB_REFRESH_TOKEN_ENV or KB_SITE_TOKEN_ENV or self.refresh_token):
             self.get_token()
         return self.captured_headers
 
@@ -508,10 +605,12 @@ def kb_count_by_trade(complex_no) -> dict:
     return (_body(r, "count").get("dataBody") or {}).get("data") or {}
 
 
-def kb_list_complex(complex_no, trade_code: str = "1", page: int = 1, size: int = 30) -> dict:
-    """단지 매물(propList/main, 서명). trade_code 1=매매,2=전세,3=월세."""
+def kb_list_complex(complex_no, trade_code: str = "1", page: int = 1, size: int = 30,
+                    prop_type: str = "01") -> dict:
+    """단지 매물(propList/main, 서명). trade_code 1=매매,2=전세,3=월세. prop_type 01=아파트,04=오피스텔.
+    (단지 API는 종별구분에 크게 구애받지 않으나 정확성 위해 파라미터화)"""
     body = {
-        "단지기본일련번호": complex_no, "매물종별구분": "01", "페이지번호": page,
+        "단지기본일련번호": complex_no, "매물종별구분": prop_type, "페이지번호": page,
         "페이지목록수": size, "중복타입": "02", "정렬타입": "date",
         "매물거래구분": trade_code, "면적일련번호": "", "전자계약여부": "0",
     }
@@ -527,10 +626,11 @@ def kb_list_complex(complex_no, trade_code: str = "1", page: int = 1, size: int 
     return (_body(r, "list_complex").get("dataBody") or {}).get("data") or {}
 
 
-def kb_list_complex_all(complex_no, trade_code: str = "1", size: int = 30, max_pages: int = 40) -> list[dict]:
+def kb_list_complex_all(complex_no, trade_code: str = "1", size: int = 30, max_pages: int = 40,
+                        prop_type: str = "01") -> list[dict]:
     out, page = [], 1
     while page <= max_pages:
-        data = kb_list_complex(complex_no, trade_code, page, size)
+        data = kb_list_complex(complex_no, trade_code, page, size, prop_type)
         pl = data.get("propertyList") or []
         out.extend(pl)
         total_pages = data.get("페이지개수") or 1
@@ -543,6 +643,14 @@ def kb_list_complex_all(complex_no, trade_code: str = "1", size: int = 30, max_p
                     complex_no, max_pages, len(out))
     log.debug("단지 %s 매매 수집 %d건", complex_no, len(out))
     return out
+
+
+def kb_photos(listing_id) -> list[dict]:
+    """매물 사진 목록(phtoList, 서명). 각 원소에 전체이미지경로(URL)·제목."""
+    r = _api("GET", PHOTO_URL, ctx=f"photo:{listing_id}",
+             headers=_signed_headers(AUTH.get_token()), params={"매물일련번호": listing_id})
+    data = (_body(r, "photo").get("dataBody") or {}).get("data") or {}
+    return data.get("psalePhtoList") or []
 
 
 def kb_list_region(lat: float, lng: float, lawd_code: str, property_types: str,
@@ -741,7 +849,9 @@ def _db_connect():
     if not DB_URL:
         raise RuntimeError("SUPABASE_DB_URL 환경변수가 필요합니다.")
     import psycopg
-    return psycopg.connect(DB_URL, connect_timeout=20)
+    # prepare_threshold=None: Supabase 풀러(pgbouncer transaction mode)는 prepared statement를
+    # 세션간 유지 못해 psycopg3 자동 prepare가 깨짐 → 비활성화(필수).
+    return psycopg.connect(DB_URL, connect_timeout=20, prepare_threshold=None)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -828,8 +938,9 @@ def selfcheck() -> tuple[bool, dict]:
         except Exception:
             chk(f"dep:{mod}", False, f"{need} — pip install {mod}")
     # 인증 설정
-    chk("auth", bool(KB_SITE_TOKEN_ENV or (KB_EMAIL and KB_PW)),
-        "KB_SITE_TOKEN 또는 KB_EMAIL/KB_PW 필요")
+    _has_rt = bool(KB_REFRESH_TOKEN_ENV or (AUTH.refresh_token if 'AUTH' in globals() else None))
+    chk("auth", bool(_has_rt or KB_SITE_TOKEN_ENV or (KB_EMAIL and KB_PW)),
+        "KB_REFRESH_TOKEN(권장) 또는 KB_SITE_TOKEN 또는 KB_EMAIL/KB_PW 필요")
     # DB 연결 + 테이블
     if DB_URL:
         try:
@@ -927,6 +1038,21 @@ def _upsert_listing(cur, p, complex_no, item_key):
           p.get("매물확인년월일"), p.get("특징광고내용"), _to_int(p.get("매물이미지개수")),
           _to_int(p.get("중복개수")), json.dumps(p, ensure_ascii=False)))
     return lid
+
+
+def _upsert_photos(cur, listing_id, photos) -> int:
+    """매물 사진 → kb_listing_photo (listing_id,seq) upsert."""
+    n = 0
+    for seq, ph in enumerate(photos):
+        url = ph.get("전체이미지경로")
+        if not url:
+            continue
+        cur.execute("""insert into kb_listing_photo (listing_id,seq,url,title)
+                       values (%s,%s,%s,%s)
+                       on conflict (listing_id,seq) do update set url=excluded.url,title=excluded.title""",
+                    (listing_id, seq, url, ph.get("제목")))
+        n += 1
+    return n
 
 
 def _deactivate_missing(cur, complex_no, item_key, current_ids):
@@ -1057,6 +1183,141 @@ def collect_region(address: str | None, lawd_code: str, property_types: str = "0
             "broker_count": len(brokers), "properties": props, "brokers": brokers}
 
 
+# 공매 아파트+오피 소스(전체주소는 data->>'name' 에 지번+단지명 있음)
+GONGMAE_SQL = """
+    select manage_no, data->>'name' as full_addr, usage from gongmae_items
+    where usage in ('주거용건물 아파트', '용도복합용건물 오피스텔')
+      and data->>'name' is not null
+"""
+
+
+def _collect_complex(cur, complex_no, item_key, best_raw, prop_type="01",
+                     with_photos=True, stat=None, dedup_by_complex=False):
+    """단지 하나의 매매매물+사진 수집·적재 (재사용). best_raw 없으면(갱신) 단지 counts만 업데이트."""
+    counts = kb_count_by_trade(complex_no)
+    listings = kb_list_complex_all(complex_no, trade_code="1", prop_type=prop_type)
+    counts["매매건수"] = len(listings)
+    if best_raw:
+        _upsert_complex(cur, complex_no, best_raw, counts)
+    else:
+        cur.execute("update kb_complex set deal_cnt=%s,last_seen=now(),updated_at=now() where complex_no=%s",
+                    (_to_int(counts.get("매매건수")), str(complex_no)))
+    ids = []
+    for p in listings:
+        lid = _upsert_listing(cur, p, complex_no, item_key)
+        if lid is None:
+            continue
+        ids.append(lid)
+        if stat is not None:
+            stat["listings"] = stat.get("listings", 0) + 1
+        if with_photos and _to_int(p.get("매물이미지개수")):
+            n = _upsert_photos(cur, lid, kb_photos(lid))
+            if stat is not None:
+                stat["photos"] = stat.get("photos", 0) + n
+    if dedup_by_complex:
+        cur.execute("""update kb_listing set is_active=false where complex_no=%s and is_active=true
+                       and not (listing_id = any(%s))""", (str(complex_no), ids or [-1]))
+    else:
+        _deactivate_missing(cur, complex_no, item_key, ids)
+    return listings, counts
+
+
+def collect_gongmae(limit: int | None = None, only_new: bool = True, skip_processed: bool = True,
+                    with_photos: bool = True, progress: dict | None = None) -> dict:
+    """[매일] 공매 아파트+오피 → KB단지 매칭 → (신규 단지만) 매매매물+사진 수집 → 적재.
+    item_key = 'GM|'+manage_no. only_new=True 면 kb_complex 기존 단지는 스킵.
+    skip_processed=True 면 이미 매칭한 공매 물건(kb_item_match)은 건너뜀 → 매일 신규만 빠르게."""
+    log.info("공매 수집 시작 (limit=%s, only_new=%s, skip_processed=%s, photos=%s)",
+             limit, only_new, skip_processed, with_photos)
+    AUTH.get_token()
+    con = _db_connect(); con.autocommit = False; cur = con.cursor()
+    cur.execute("select complex_no from kb_complex")
+    existing = {str(r[0]) for r in cur.fetchall()}
+    sql = GONGMAE_SQL
+    if skip_processed:
+        sql += " and ('GM|' || manage_no) not in (select item_key from kb_item_match)"
+    sql += " order by manage_no" + (f" limit {int(limit)}" if limit else "")
+    cur.execute(sql)
+    rows = cur.fetchall()
+    stat = {"target": len(rows), "processed": 0, "matched": 0, "unmatched": 0,
+            "new_complex": 0, "skipped_existing": 0, "listings": 0, "photos": 0,
+            "errors": 0, "status": "running"}
+    log.info("공매 대상 %d건 (기존 단지 %d개)", len(rows), len(existing))
+    if progress is not None:
+        progress.update(stat)
+    for manage_no, full_addr, usage in rows:
+        item_key = "GM|" + str(manage_no)
+        try:
+            m = match_address(full_addr or "")
+            _upsert_match(cur, item_key, m)
+            cno = m.get("complex_no")
+            if not cno:
+                stat["unmatched"] += 1; con.commit()
+            else:
+                stat["matched"] += 1
+                if only_new and str(cno) in existing:
+                    stat["skipped_existing"] += 1; con.commit()
+                else:
+                    prop_type = "04" if "오피스텔" in (usage or "") else "01"
+                    _collect_complex(cur, cno, item_key, m["best_raw"], prop_type, with_photos, stat)
+                    existing.add(str(cno))       # 같은 실행 내 중복 단지 재수집 방지
+                    stat["new_complex"] += 1
+                    con.commit()
+                    log.info("공매 신규단지 %s → %s (매물 누적 %d)", cno, m.get("kb_name"), stat["listings"])
+        except Exception as e:  # noqa: BLE001
+            con.rollback(); stat["errors"] += 1
+            log.exception("공매 수집오류 %s :: %s", item_key, e)
+        stat["processed"] += 1
+        if progress is not None:
+            progress.update(stat)
+        if stat["processed"] % 200 == 0:
+            log.info("공매 진행 %d/%d (신규단지%d 스킵%d 매물%d)", stat["processed"], stat["target"],
+                     stat["new_complex"], stat["skipped_existing"], stat["listings"])
+    cur.close(); con.close()
+    stat["status"] = "done"
+    log.info("공매 수집 완료: %s", {k: stat[k] for k in
+             ("target", "matched", "unmatched", "new_complex", "skipped_existing", "listings", "photos", "errors")})
+    if progress is not None:
+        progress.update(stat)
+    return stat
+
+
+def refresh_kb_all(limit: int | None = None, with_photos: bool = True,
+                   progress: dict | None = None) -> dict:
+    """[2주마다] kb_complex 전체(경매+공매)의 매물+사진 새로고침 → 신선도 유지."""
+    log.info("KB 전체 새로고침 시작 (limit=%s)", limit)
+    AUTH.get_token()
+    con = _db_connect(); con.autocommit = False; cur = con.cursor()
+    cur.execute("select complex_no from kb_complex order by complex_no" + (f" limit {int(limit)}" if limit else ""))
+    complexes = [r[0] for r in cur.fetchall()]
+    stat = {"target": len(complexes), "processed": 0, "listings": 0, "photos": 0,
+            "errors": 0, "status": "running"}
+    log.info("새로고침 대상 단지 %d개", len(complexes))
+    if progress is not None:
+        progress.update(stat)
+    for cno in complexes:
+        try:
+            # 갱신: best_raw 없음(단지정보 유지), 기존 매물 provenance 보존, 단지단위 비활성화
+            _collect_complex(cur, cno, None, None, "01", with_photos, stat, dedup_by_complex=True)
+            con.commit()
+        except Exception as e:  # noqa: BLE001
+            con.rollback(); stat["errors"] += 1
+            log.exception("새로고침 오류 단지 %s :: %s", cno, e)
+        stat["processed"] += 1
+        if progress is not None:
+            progress.update(stat)
+        if stat["processed"] % 200 == 0:
+            log.info("새로고침 진행 %d/%d (매물%d 사진%d)", stat["processed"], stat["target"],
+                     stat["listings"], stat["photos"])
+    cur.close(); con.close()
+    stat["status"] = "done"
+    log.info("KB 전체 새로고침 완료: %s", {k: stat[k] for k in
+             ("target", "processed", "listings", "photos", "errors")})
+    if progress is not None:
+        progress.update(stat)
+    return stat
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 7. FastAPI 라우터
 # ──────────────────────────────────────────────────────────────────────────
@@ -1133,7 +1394,9 @@ try:
         ok, rpt = selfcheck()
         return {
             "ready": ok,
-            "auth_mode": "token_injected" if KB_SITE_TOKEN_ENV else ("auto_login" if KB_EMAIL else "none"),
+            "auth_mode": ("refresh_token" if (KB_REFRESH_TOKEN_ENV or AUTH.refresh_token)
+                          else "token_injected" if KB_SITE_TOKEN_ENV
+                          else "auto_login" if KB_EMAIL else "none"),
             "token_cached": bool(AUTH.token),
             "request_delay": REQUEST_DELAY,
             "log_level": os.environ.get("KB_LOG_LEVEL", "INFO"),
@@ -1160,8 +1423,13 @@ def _cli(argv: list[str]) -> int:
     ap.add_argument("--init-db", action="store_true", help="kb_* 테이블 생성(idempotent)")
     ap.add_argument("--region", nargs="+", metavar=("ADDR", "LAWD"),
                     help="지역 수집: 주소 법정동코드 [물건종류=01] [거래유형=1] → JSON")
-    ap.add_argument("--collect", action="store_true", help="아파트 매매 수집(모드A, DB 적재)")
-    ap.add_argument("--limit", type=int, help="--collect 처리 건수 제한")
+    ap.add_argument("--collect", action="store_true", help="경매 아파트 매매 수집(모드A, DB 적재)")
+    ap.add_argument("--gongmae", action="store_true", help="[매일] 공매 아파트+오피 신규단지 수집→적재")
+    ap.add_argument("--refresh-all", action="store_true", help="[2주] kb_complex 전체(경매+공매) 매물+사진 새로고침")
+    ap.add_argument("--all", action="store_true", help="--gongmae 시 신규뿐 아니라 기존단지도 처리")
+    ap.add_argument("--reprocess", action="store_true", help="--gongmae 시 이미 매칭한 공매물건도 재처리")
+    ap.add_argument("--no-photos", action="store_true", help="사진 수집 생략")
+    ap.add_argument("--limit", type=int, help="처리 건수 제한")
     ap.add_argument("--dry", action="store_true", help="--collect 매칭만(적재 안함)")
     a = ap.parse_args(argv)
 
@@ -1191,6 +1459,15 @@ def _cli(argv: list[str]) -> int:
         print(json.dumps({k: stat[k] for k in
               ("target", "processed", "matched", "unmatched", "listings", "zero_listing", "errors")},
               ensure_ascii=False, indent=2))
+        return 0
+    if a.gongmae:
+        stat = collect_gongmae(limit=a.limit, only_new=not a.all,
+                               skip_processed=not a.reprocess, with_photos=not a.no_photos)
+        print(json.dumps(stat, ensure_ascii=False, indent=2))
+        return 0
+    if getattr(a, "refresh_all"):
+        stat = refresh_kb_all(limit=a.limit, with_photos=not a.no_photos)
+        print(json.dumps(stat, ensure_ascii=False, indent=2))
         return 0
     ap.print_help()
     return 0

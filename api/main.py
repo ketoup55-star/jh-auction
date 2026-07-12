@@ -8570,16 +8570,6 @@ def intro_page(request: Request) -> HTMLResponse:
     return HTMLResponse(html)
 
 
-@app.get("/download/sms_app")
-def download_sms_app():
-    """자동문자 보내기 앱(APK) — 정확한 MIME으로 강제 다운로드(부동산DB 페이지 버튼)."""
-    p = os.path.join(_ROOT, "static", "downloads", "리치빌더_자동문자보내기.apk")
-    if not os.path.exists(p):
-        raise HTTPException(404, "앱 파일을 찾을 수 없습니다.")
-    return FileResponse(p, media_type="application/vnd.android.package-archive",
-                        filename="리치빌더 자동문자보내기.apk")
-
-
 @app.get("/privacy")
 def privacy_page():
     """개인정보처리방침(클린 URL) — 포트원/다날 본인인증 신청·통신판매 표기용."""

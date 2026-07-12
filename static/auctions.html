@@ -1087,9 +1087,14 @@ function _aptCmp(key,a,b){
 function onAptSort(){
   // 유사거래 많은순은 '전역' 정렬이라 서버 재검색(전체 필터셋을 서버가 정렬). 그 외(준공·세대·차익·배당·주행)는 현재 페이지 클라이언트 정렬.
   if(v('aptSort1')==='sim_desc'||v('aptSort2')==='sim_desc'){ resetOffset(); doSearch(); }
-  else applyAptSort();
+  else _applyAptSortNow();          // 사용자 정렬 클릭은 즉시(디바운스 우회)
 }
-function applyAptSort(){
+let _aptSortT=null;
+function applyAptSort(){            // 디바운스: 병렬 시세채움이 청크마다 불러도 250ms에 1번만 실제 정렬
+  if(_aptSortT) return;            //  (150행 재정렬=querySelector 다발+reflow라, 6워커가 난사하면 메인스레드 마비→스크롤 멈춤)
+  _aptSortT=setTimeout(function(){ _aptSortT=null; _applyAptSortNow(); }, 250);
+}
+function _applyAptSortNow(){
   const s1=document.getElementById('aptSort1'), s2=document.getElementById('aptSort2');
   const tbody=document.querySelector('.tbl tbody');
   if(!s1 || !tbody) return;
@@ -1165,15 +1170,26 @@ async function doSearch(){
   const _q=buildQuery();   // 메인 쿼리도 _urlCaseno 읽음
   _urlCaseno="";           // ★상단 사건검색 caseno는 '초기 1회'만 적용 → 사용 직후 해제. 이후 어떤 필터 경로(상태·통계·검색하기 등)로 검색해도 사건번호 안 따라붙음
   let d;
-  try{
-    const _r=await fetch("/auctions?"+_q,{cache:"no-store"});
-    if(!_r.ok) throw new Error("HTTP "+_r.status);
-    d=await _r.json();
-    if(!d || typeof d.total!=="number" || !Array.isArray(d.items)) throw new Error("bad response");
-  }catch(e){   // 서버 다운·일시 오류 → '물건 없음'이 아니라 오류로 명확히(사건번호 버그로 오해 방지)
-    const _c2=document.getElementById("cnt"); if(_c2) _c2.textContent="일시적 오류";
-    document.getElementById("grid").innerHTML='<div class="kv" style="padding:26px;text-align:center;color:#c0392b;font-weight:600">⚠️ 목록을 불러오지 못했습니다 (일시적 서버 오류).<br><a href="javascript:doSearch()" style="color:var(--primary);font-weight:700">다시 시도</a> 하거나 잠시 후 새로고침해 주세요.</div>';
-    return;
+  // 일시적 서버 오류(Supabase 순간 500·콜드 지연·네트워크 blip)는 자동 재시도로 자가복구 —
+  // 최대 3회(700ms→1600ms 백오프) 조용히 재시도 후에도 실패할 때만 에러 표시.
+  for(let _try=0;;_try++){
+    try{
+      const _r=await fetch("/auctions?"+_q,{cache:"no-store"});
+      if(!_r.ok) throw new Error("HTTP "+_r.status);
+      d=await _r.json();
+      if(!d || typeof d.total!=="number" || !Array.isArray(d.items)) throw new Error("bad response");
+      break;                                   // 성공
+    }catch(e){
+      if(_try<2){                              // 700ms→1600ms 후 재시도(사용자엔 '검색 중' 유지)
+        const _cr=document.getElementById("cnt"); if(_cr) _cr.textContent="검색 중…";
+        await new Promise(r=>setTimeout(r, _try? 1600:700));
+        continue;
+      }
+      // 3회 모두 실패 → 오류로 명확히(사건번호 버그로 오해 방지)
+      const _c2=document.getElementById("cnt"); if(_c2) _c2.textContent="일시적 오류";
+      document.getElementById("grid").innerHTML='<div class="kv" style="padding:26px;text-align:center;color:#c0392b;font-weight:600">⚠️ 목록을 불러오지 못했습니다 (일시적 서버 오류).<br><a href="javascript:doSearch()" style="color:var(--primary);font-weight:700">다시 시도</a> 하거나 잠시 후 새로고침해 주세요.</div>';
+      return;
+    }
   }
   document.getElementById("cnt").innerHTML=`검색결과 <b>${d.total.toLocaleString()}</b>건`;
   if(!d.items.length){ document.getElementById("grid").innerHTML='<div class="kv" style="padding:20px;text-align:center">조건에 맞는 물건이 없습니다.</div>'; }
