@@ -1914,7 +1914,11 @@ async function loadNearbyMap(){
   const box=document.getElementById("mapBox"); if(!box) return;
   if(!/다세대|연립|빌라|도시형/.test((DETAIL&&DETAIL.usage)||"")) return;
   let r;
-  try{ r=await (await fetch("/auction/nearby_trades?item_key="+encodeURIComponent(itemKey))).json(); }catch(e){ return; }
+  try{ r=await (await fetch("/auction/nearby_trades?defer=1&item_key="+encodeURIComponent(itemKey))).json(); }catch(e){ return; }
+  for(let _t=0; r&&r.pending&&_t<5; _t++){   // 서버 백그라운드 계산 중(지오코딩) → 3초 간격 5회 재폴로 완료분 수신
+    await new Promise(rs=>setTimeout(rs,3000));
+    try{ r=await (await fetch("/auction/nearby_trades?defer=1&item_key="+encodeURIComponent(itemKey))).json(); }catch(e){ break; }
+  }
   if(!r||!r.available) return;
   box.innerHTML=`<div class="card"><h2>주변 유사 실거래<span class="mapsub">반경 500m · 면적 ±10㎡ · 최근 ${r.months}개월</span></h2>
     <div class="elevseg"><span class="elevseg-lb">승강기</span>
@@ -1972,18 +1976,26 @@ async function loadNearbyMap(){
   let _accOpen={}, _accInit=false, _gongsiMap={};
   const gkey=t=>`${sgg} ${t.umd} ${t.jibun}|${t.area||""}|${t.floor||""}`;
   async function loadGongsi(rows, onChunk){
-    // 온디맨드: 공시가격을 30개씩 병렬 청크로 가져오고, 도착하는 청크마다 즉시 재렌더(점진 표시).
-    // (한 번에 전부 요청 → 서버 120개 컷 + 전체 대기로 느렸던 문제 해결. 한 번 받은 값은 서버가 DB영구캐시.)
+    // 온디맨드: 공시가격 30개씩 병렬 청크. defer=1(논블로킹): 캐시분 즉시 반환, 미캐시는 서버가 백그라운드 계산 → 재폴로 채움.
     const keys=[...new Set(rows.filter(t=>t.jibun&&t.umd).map(gkey))];
     if(!keys.length) return;
-    const chunks=[]; for(let i=0;i<keys.length;i+=30) chunks.push(keys.slice(i,i+30));
-    await Promise.all(chunks.map(async c=>{
-      try{
-        const m=await (await fetch("/auction/gongsi?items="+encodeURIComponent(c.join(";")))).json();
-        Object.assign(_gongsiMap,m);
-        if(onChunk) onChunk();   // 도착 즉시 표(공시가격·요율) 갱신
-      }catch(e){}
-    }));
+    async function pass(klist){
+      const chunks=[]; for(let i=0;i<klist.length;i+=30) chunks.push(klist.slice(i,i+30));
+      await Promise.all(chunks.map(async c=>{
+        try{
+          const m=await (await fetch("/auction/gongsi?defer=1&items="+encodeURIComponent(c.join(";")))).json();
+          Object.assign(_gongsiMap,m);
+          if(onChunk) onChunk();   // 도착 즉시 표(공시가격·요율) 갱신
+        }catch(e){}
+      }));
+    }
+    await pass(keys);
+    for(let i=0;i<4;i++){          // 미캐시(백그라운드 계산 중)는 2.5초 간격 4회 재폴
+      const miss=keys.filter(k=>!(k in _gongsiMap));
+      if(!miss.length) break;
+      await new Promise(r=>setTimeout(r,2500));
+      await pass(miss);
+    }
   }
   async function loadElev(rows, onChunk){
     // 승강기(건축물대장)는 건당 ~4~5초로 느림 → 20개씩 병렬 청크 + 도착 즉시 재렌더(점진 표시).

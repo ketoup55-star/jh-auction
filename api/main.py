@@ -2075,6 +2075,8 @@ def _enrich_list(items: list) -> None:
         s = _similar_cache.get(k)
         if s:
             it["similar"] = s
+        elif it.get("similar_count") is not None:   # 컬럼 폴백 — 클라우드는 startup 블롭 대신 항상 최신 similar_count 컬럼 사용
+            it["similar"] = it["similar_count"]
         e = villa.get(k) or apt.get(k)
         if isinstance(e, dict) and e.get("price"):
             it["est"] = e["price"]
@@ -3732,6 +3734,10 @@ def _col_enrich_sync() -> None:
             FROM api_cache c WHERE c.cache_key='vexpbid:'||i.item_key AND (c.data->>'available')::bool AND (c.data->>'v')::int={_VEXPBID_V}
               AND (c.data->>'expected_bid') ~ '^[0-9.]+$' AND i.expected_bid IS DISTINCT FROM (c.data->>'expected_bid')::numeric::bigint""",
         "UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
+        # 유사거래 건수 — similar_index 블롭(jsonb) 전개 후 조인(변경분만). 舊 startup 블롭 방식 대체
+        """UPDATE items i SET similar_count = kv.value::int
+           FROM (SELECT key, value FROM api_cache, jsonb_each_text(data) WHERE cache_key='similar_index') kv
+           WHERE kv.key = i.item_key AND kv.value ~ '^[0-9]+$' AND i.similar_count IS DISTINCT FROM kv.value::int""",
         # 호가(KB 동일평형±3㎡ 매매 매물수) — kb_listing JOIN 집계(변경분만). KB크롤러 갱신 반영, Python 엔드포인트와 8/8 일치 검증
         """UPDATE items i SET kb_count = sub.cnt FROM (
              SELECT it.item_key, count(l.*)::int cnt FROM (
@@ -6320,7 +6326,7 @@ def _warm_similar_from_nearby(keys: list) -> None:
 
 
 @app.get("/auction/nearby_trades")
-def auction_nearby_trades(item_key: str, months: int = Query(12, le=24)) -> dict:
+def auction_nearby_trades(item_key: str, months: int = Query(12, le=24), defer: bool = False) -> dict:
     """빌라/도시형: 시군구 연립다세대 실거래(도시형생활주택 포함, 12개월) 중 ①면적±10㎡ ②층±1
     ③반경 1km(서버 V-World 지오코딩) 필터. 좌표 포함 반환 → 프론트는 지오코딩 없이 즉시 표시.
     결과는 ①메모리 →②DB(api_cache 'nearby:') →③계산 후 DB저장 (무거운 지오코딩 1회만)."""
@@ -6346,6 +6352,10 @@ def auction_nearby_trades(item_key: str, months: int = Query(12, le=24)) -> dict
                     pass
         _nearby_cache[item_key] = db               # v<2(구버전: 도로명주소 좌표버그)는 무시하고 재계산
         return _trim_to_radius(db)                 # 캐시(1km) → 현재 반경으로 트림
+    if defer:                                       # 상세 온디맨드: 무거운 지오코딩 계산을 백그라운드로 → 즉시 pending(프론트 재폴이 완료분 받음)
+        _bg_fill(["nearby:" + item_key],
+                 lambda _k: auction_nearby_trades(item_key, months))   # defer=False 재귀호출로 계산+캐시
+        return {"available": False, "pending": True}
     d = auction_db.get_auction(item_key)            # ③ 계산
     if not d:
         return {"available": False}
@@ -7911,7 +7921,7 @@ def auction_building_vat(addr: str, area: float = 0, land_area: float = 0, build
 
 
 @app.get("/auction/gongsi")
-def auction_gongsi(items: str) -> dict:
+def auction_gongsi(items: str, defer: bool = False) -> dict:
     """'주소|전용면적|층' 묶음(; 구분) → 각 호 공시가격(V-World, 면적·층 매칭). 동시처리+캐시.
     반환 {원본키: {price, year, name}} (실패 시 키 생략)."""
     parts = [p for p in items.split(";") if p.strip()][:120]
@@ -7937,19 +7947,22 @@ def auction_gongsi(items: str) -> dict:
             floor = int(seg[2]) if len(seg) > 2 and seg[2] else None
             pnu = _addr_to_pnu(addr)
             if not pnu:
-                return p, None
-            return p, gongsi.price(pnu, area=area, floor=floor)
+                return
+            v = gongsi.price(pnu, area=area, floor=floor)
+            if v:                           # 실패(V-World 할당량 등)는 캐시 안 함 → 다음에 재시도(오염 방지)
+                _gongsi_cache[p] = v
+                try:
+                    auction_db.cache_save("gongsi:" + p, v)   # DB에도 영구 저장
+                except Exception:
+                    pass
         except Exception:
-            return p, None
+            pass
     if todo:
-        with _cf.ThreadPoolExecutor(max_workers=8) as ex:
-            for p, v in ex.map(one, todo):
-                if v:                       # 실패(V-World 할당량 등)는 캐시 안 함 → 다음에 재시도(오염 방지)
-                    _gongsi_cache[p] = v
-                    try:
-                        auction_db.cache_save("gongsi:" + p, v)   # DB에도 영구 저장
-                    except Exception:
-                        pass
+        if defer:                           # 상세 온디맨드: 요청 블로킹 금지 → 캐시된 것만 반환, 미캐시는 백그라운드(프론트 재폴이 채움)
+            _bg_fill(todo, one)
+        else:                               # 내부 호출·예열: 기존 동기 계산
+            with _cf.ThreadPoolExecutor(max_workers=8) as ex:
+                list(ex.map(one, todo))
     for p in parts:
         v = _gongsi_cache.get(p)
         if v:

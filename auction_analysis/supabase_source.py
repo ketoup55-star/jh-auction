@@ -723,7 +723,7 @@ class SupabaseSource:
                 "area_text,land_area,building_area,tags,appraisal_price,min_price,"
                 "sale_price,sale_rate,fail_count,sell_date,result,status_reason,"
                 "bid_count,sale_2nd_price,hit_count,thumb_url,buy_grade,data_class,"
-                "est_price,expected_bid,expbid_count,profit,kb_count")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익·호가 포함(fetch 왕복 제거)
+                "est_price,expected_bid,expbid_count,profit,kb_count,similar_count")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익·호가·유사거래 포함(fetch 왕복 제거)
         iks = kw.get("item_keys")
         if iks is not None and len(iks) > 600:
             # 큰 item_keys 집합 → 청크별 상위(offset+limit) 조회 후 병합·정렬·슬라이스(분산 top-k).
@@ -956,6 +956,7 @@ class SupabaseSource:
             "expbid_count": row.get("expbid_count"),  # 예상낙찰 사례수(윗첨자)
             "profit": row.get("profit"),              # 차익 = est_price − expected_bid 컬럼화(서버 정렬 가능)
             "kb_count": row.get("kb_count"),          # 호가(KB 동일평형±3㎡ 매매 매물수) 컬럼화
+            "similar_count": row.get("similar_count"),# 유사거래 건수 컬럼화(舊 startup 블롭 → 항상 최신 컬럼)
         }
 
     def _detail(self, row: dict) -> dict:
