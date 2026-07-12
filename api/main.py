@@ -2513,7 +2513,15 @@ _DOCVIEW_CSS = """
 
 @app.get("/docview")
 def docview(item_key: str, kind: str = "현황조사서") -> HTMLResponse:
-    """HTML 서류(부동산표시·사건내역·기일내역·문건접수송달·현황조사서)를 우리 스타일로 입혀 렌더. 원본 /pub/ 깨진 이미지·외부 CSS/JS 제거."""
+    """HTML 서류(부동산표시·사건내역·기일내역·문건접수송달·현황조사서)를 우리 스타일로 입혀 렌더. 원본 /pub/ 깨진 이미지·외부 CSS/JS 제거.
+    가공결과(정규식 클린 완료본)를 api_cache(docview:)에 영구 캐시 → 반복 조회는 R2 재fetch+정규식 없이 즉시(캐시문제 해소)."""
+    _dvck = "docview:" + item_key + "|" + kind
+    try:
+        _c = auction_db.cache_get_many([_dvck]).get(_dvck)
+        if isinstance(_c, dict) and _c.get("html"):
+            return HTMLResponse(_c["html"])
+    except Exception:
+        pass
     url = auction_db.media_url(item_key, kind)
     if not url:
         return HTMLResponse(f'<div style="padding:30px;font-family:sans-serif">{kind} 문서가 없습니다.</div>')
@@ -2543,6 +2551,10 @@ def docview(item_key: str, kind: str = "현황조사서") -> HTMLResponse:
         html = re.sub(r'(<body[^>]*>)', r'\1' + header, html, count=1, flags=re.I)
     else:
         html = css + header + html
+    try:
+        auction_db.cache_save(_dvck, {"html": html})   # 가공완료본 캐시 → 다음 조회는 R2 재fetch·정규식 없이 즉시
+    except Exception:
+        pass
     return HTMLResponse(html)
 
 

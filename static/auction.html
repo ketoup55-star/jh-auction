@@ -361,7 +361,7 @@
   .lb{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;z-index:100;
     align-items:center;justify-content:center;cursor:zoom-out;}
   .lb.on{display:flex;}
-  .lb img{max-width:88vw;max-height:88vh;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.5);cursor:default;}
+  .lb img{width:92vw;height:90vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 40px rgba(0,0,0,.5);cursor:default;}
   .lb .x{position:absolute;top:18px;right:24px;color:#fff;font-size:34px;line-height:1;
     cursor:pointer;font-weight:300;}
   .lb .nav{position:absolute;top:50%;transform:translateY(-50%);color:#fff;font-size:56px;
@@ -376,6 +376,7 @@
   .objsel{margin-left:10px;height:28px;max-width:240px;font-size:13px;font-weight:600;color:var(--text);border:1px solid var(--primary);border-radius:7px;padding:0 8px;cursor:pointer;vertical-align:middle;background:#fff;}
   .cthead-l .caseno{margin-top:5px;}
   .cthead-l .caseno .badge{margin-left:8px;font-weight:500;vertical-align:middle;}
+  .cthead-l .ct-addr{font-size:14px;font-weight:600;color:#374151;margin-top:6px;line-height:1.45;max-width:640px;}
   .cthead-c{text-align:center;flex:1;padding-top:2px;}
   .cthead-c .gye{font-size:13px;color:var(--muted);}
   .cthead-r{text-align:right;align-self:flex-end;}
@@ -631,6 +632,7 @@ async function load(){
             <div class="cthead-l">
               <div class="court">${d.court_name||d.court||"-"}<span id="objBox"></span></div>
               <div class="caseno">${d.case_label||d.case_no||""}${d.result?((d.result.includes("유찰")?`<span class="badge b-warn">`:`<span class="badge b-safe">`)+d.result+`</span>`):""}</div>
+              ${d.address?`<div class="ct-addr">📍 ${(d.address||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`:""}
               ${d.tags?`<div class="dtags">⚠ ${(d.tags||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;')}</div>`:""}
             </div>
             ${d.court_division?`<div class="cthead-c"><div class="gye">${d.court_division}</div></div>`:""}
@@ -1089,8 +1091,10 @@ function renderLoanGuide(){
 }
 function renderAptAI(){
   const row=document.querySelector('#aiBox .airow');
-  if(!APT_AI || !row) return;
-  if(APT_AI.demand && !row.querySelector('.demand-item')){
+  if(!row) return;
+  const _colEst=(typeof DETAIL!=='undefined'&&DETAIL&&DETAIL.est_price)?+DETAIL.est_price:null;   // 목록 est_price 컬럼(상세 즉석계산 실패 시 폴백)
+  if(!APT_AI && !_colEst) return;
+  if(APT_AI && APT_AI.demand && !row.querySelector('.demand-item')){
     const dm=APT_AI.demand, good=dm.status==='양호';
     const el=document.createElement('div'); el.className='aiitem demand-item';
     el.innerHTML=`<span class="k">매수세</span>`
@@ -1098,8 +1102,8 @@ function renderAptAI(){
       +`<span class="demand-sub">최근 6개월 ${dm.count6}건</span>`;
     row.appendChild(el);
   }
-  if(APT_AI.available && !row.querySelector('.est-item')){
-    const est=APT_AI.est, summ=APT_AI.summary;
+  if(((APT_AI&&APT_AI.available)||_colEst) && !row.querySelector('.est-item')){
+    const est=APT_AI&&APT_AI.est, summ=APT_AI&&APT_AI.summary;
     const el=document.createElement('div'); el.className='aiitem est-item';
     el.innerHTML = (est && est.price)
       ? `<span class="k">추정시세</span>`
@@ -1109,7 +1113,11 @@ function renderAptAI(){
         ? `<span class="k">최근 실거래</span>`
           +`<span class="v" style="color:var(--hotblue);font-size:15px">${won(summ.recent)}</span>`
           +`<span class="demand-sub">추정시세 산출불가 → 최근 실거래가(${summ.recent_date||""})</span>`
-        : `<span class="k">추정시세</span><span class="demand-sub">산출불가(유사 실거래 없음)</span>`);
+        : (_colEst
+          ? `<span class="k">추정시세</span>`
+            +`<span class="v" style="color:var(--hotblue);font-size:15px">${won(_colEst)}</span>`
+            +`<span class="demand-sub">유사 실거래 기준 추정</span>`
+          : `<span class="k">추정시세</span><span class="demand-sub">산출불가(유사 실거래 없음)</span>`));
     row.appendChild(el);
   }
   if(typeof ssApplyEst==='function') ssApplyEst();   // 추정시세 → 단기매도 매도가 자동
