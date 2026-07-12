@@ -2081,6 +2081,9 @@ def _enrich_list(items: list) -> None:
             it["est_kind"] = e.get("kind")
             if e.get("trades_3m") is not None:
                 it["trades_3m"] = e["trades_3m"]
+        elif it.get("est_price"):                 # 컬럼화 폴백 — 로컬캐시 미스(특히 클라우드 CLOUD_READER)면 items.est_price 컬럼으로 즉시 표시(apt_ests fetch 왕복 제거)
+            it["est"] = it["est_price"]
+            it["est_kind"] = "est"
         g = grade_rev.get(k) or it.get("buy_grade")   # in-메모리 버킷(로컬) 우선 → 없으면 items.buy_grade 컬럼(클라우드)
         if g:
             it["grade"] = g
@@ -3702,6 +3705,61 @@ def _stats_warm_loop() -> None:
         _t.sleep(2 * 3600)
 
 
+def _col_enrich_sync() -> None:
+    """컬럼화 동기화 — 워머가 api_cache(apt:/villaest:/expbid:/vexpbid:)에 채운 값을
+    items 컬럼(est_price·expected_bid·expbid_count·profit)으로 복사(재계산 0, 변경분만 UPDATE).
+    목록 쿼리가 시세·예상낙찰·차익을 컬럼으로 즉시 반환(fetch 왕복 제거)하게 유지. 로컬 전용.
+    이게 '두더지잡기' 종료의 핵심 — 예열이 채우면 자동으로 컬럼에 반영돼 목록이 1쿼리로 완결."""
+    dsn = os.environ.get("SUPABASE_DB_URL")
+    if not dsn:
+        return
+    try:
+        import psycopg
+    except Exception:
+        return
+    stmts = [
+        f"""UPDATE items i SET est_price=COALESCE((c.data->'est'->>'price')::numeric::bigint,(c.data->'summary'->>'recent')::numeric::bigint)
+            FROM api_cache c WHERE c.cache_key='apt:'||i.item_key AND (c.data->>'v')::int>={APT_VER}
+              AND COALESCE(c.data->'est'->>'price',c.data->'summary'->>'recent') ~ '^[0-9.]+$'
+              AND i.est_price IS DISTINCT FROM COALESCE((c.data->'est'->>'price')::numeric::bigint,(c.data->'summary'->>'recent')::numeric::bigint)""",
+        """UPDATE items i SET est_price=(c.data->>'price')::numeric::bigint
+            FROM api_cache c WHERE c.cache_key='villaest:'||i.item_key AND (c.data->>'price') ~ '^[0-9.]+$'
+              AND i.est_price IS DISTINCT FROM (c.data->>'price')::numeric::bigint""",
+        f"""UPDATE items i SET expected_bid=(c.data->>'expected_bid')::numeric::bigint, expbid_count=(c.data->>'count')::int
+            FROM api_cache c WHERE c.cache_key='expbid:'||i.item_key AND (c.data->>'available')::bool AND (c.data->>'v')::int={_EXPBID_V}
+              AND (c.data->>'expected_bid') ~ '^[0-9.]+$' AND i.expected_bid IS DISTINCT FROM (c.data->>'expected_bid')::numeric::bigint""",
+        f"""UPDATE items i SET expected_bid=(c.data->>'expected_bid')::numeric::bigint, expbid_count=(c.data->>'count')::int
+            FROM api_cache c WHERE c.cache_key='vexpbid:'||i.item_key AND (c.data->>'available')::bool AND (c.data->>'v')::int={_VEXPBID_V}
+              AND (c.data->>'expected_bid') ~ '^[0-9.]+$' AND i.expected_bid IS DISTINCT FROM (c.data->>'expected_bid')::numeric::bigint""",
+        "UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
+    ]
+    try:
+        with psycopg.connect(dsn, autocommit=True, connect_timeout=15) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SET statement_timeout=120000")
+                cur.execute("SET lock_timeout=10000")
+                total = 0
+                for s in stmts:
+                    try:
+                        cur.execute(s)
+                        if cur.rowcount and cur.rowcount > 0:
+                            total += cur.rowcount
+                    except Exception:
+                        pass
+        if total:
+            print(f"[col_sync] 컬럼화 동기화 {total}행 갱신", flush=True)
+    except Exception as _e:
+        print(f"[col_sync] skip: {str(_e)[:80]}", flush=True)
+
+
+def _col_sync_loop() -> None:
+    import time as _t
+    _t.sleep(90)                # 기동 직후 부하 회피
+    while True:
+        _col_enrich_sync()
+        _t.sleep(1200)          # 20분마다 변경분 동기화
+
+
 @app.on_event("startup")
 def _start_prewarm() -> None:
     import threading
@@ -3717,6 +3775,7 @@ def _start_prewarm() -> None:
         threading.Thread(target=_prewarm_pools_loop, daemon=True).start()   # 시군구 풀
         threading.Thread(target=_prewarm_nearby_loop, daemon=True).start()  # 주변 유사 실거래 → DB
         threading.Thread(target=_prewarm_docs_loop, daemon=True).start()    # 물건현황·권리분석·명세서 → DB
+        threading.Thread(target=_col_sync_loop, daemon=True).start()        # 컬럼화 동기화: api_cache→items(시세·예상낙찰·차익), 20분마다 변경분
     # 매수판정 버킷 워밍·freshness는 DISABLE_PREWARM과 무관하게 항상 실행(경량·목록 배지/필터 필수)
     threading.Thread(target=_grade_warm_loop, daemon=True).start()      # 매수판정 버킷 워밍(목록 배지·필터)
     threading.Thread(target=_freshness_loop, daemon=True).start()       # 크롤러 갱신 감지 → 캐시 자동 무효화(경량, 항상 유지)

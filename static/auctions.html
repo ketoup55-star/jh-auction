@@ -1152,8 +1152,20 @@ function prefillFromResponse(list){
   document.querySelectorAll('.villaest[data-key],.aptest[data-key]').forEach(el=>{
     const L=m[el.dataset.key]; if(!L||L.est==null) return;
     _fillVillaCell(el, {price:L.est, kind:L.est_kind, trades_3m:L.trades_3m});
+    if(L.expected_bid){                          // 컬럼화: 예상낙찰가·차익이 응답(items 컬럼)에 있으면 즉시 렌더 → expbid_batch fetch 생략
+      el.dataset.expdone="1";
+      const sise=el.querySelector('.ecsi');
+      const expHtml=`<div class="ecsi"><span class="lbl">예상낙찰<sup style="font-size:9px;color:#999;font-weight:400">${L.expbid_count||''}</sup> :</span><span class="amt" style="color:#c0392b">${won(L.expected_bid)}</span></div>`;
+      if(sise) sise.insertAdjacentHTML('afterend', expHtml); else el.insertAdjacentHTML('beforeend', expHtml);
+      const pf=(L.profit!=null)?+L.profit:((+L.est||0)-(+L.expected_bid));   // 차익=시세−예상낙찰(profit 컬럼 우선)
+      const inner=`<span class="lbl">차익 :</span><span class="amt">${pf>=0?'+':'−'}${won(Math.abs(pf))}</span>`;
+      const pfEl=el.querySelector('.eprofit, .eloss');
+      if(pfEl){ pfEl.className=pf>=0?'eprofit':'eloss'; pfEl.innerHTML=inner; }
+      else el.insertAdjacentHTML('beforeend', `<div class="${pf>=0?'eprofit':'eloss'}">${inner}</div>`);
+      const tr=el.closest('tr'); if(tr) tr.dataset.diff=pf;
+    }
   });
-  fillExpBids();                            // 예상낙찰가(임베드 경로에서도 떠야 함 — 독립 패스)
+  fillExpBids();                            // 예상낙찰가(임베드 경로에서도 떠야 함 — 독립 패스; 컬럼 없는 행만 fetch)
   // ③ 매수판정 배지 → .gradechip
   const gcls={'매수양호':'g-ok','매수검토':'g-mid','매수금지':'g-no'};
   document.querySelectorAll('.gradechip[data-key]').forEach(el=>{

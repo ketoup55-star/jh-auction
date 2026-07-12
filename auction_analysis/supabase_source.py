@@ -722,7 +722,8 @@ class SupabaseSource:
         cols = ("item_key,case_no,obj_no,court_name,usage_name,search_group,address,"
                 "area_text,land_area,building_area,tags,appraisal_price,min_price,"
                 "sale_price,sale_rate,fail_count,sell_date,result,status_reason,"
-                "bid_count,sale_2nd_price,hit_count,thumb_url,buy_grade,data_class")
+                "bid_count,sale_2nd_price,hit_count,thumb_url,buy_grade,data_class,"
+                "est_price,expected_bid,expbid_count,profit")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익 포함(fetch 왕복 제거)
         iks = kw.get("item_keys")
         if iks is not None and len(iks) > 600:
             # 큰 item_keys 집합 → 청크별 상위(offset+limit) 조회 후 병합·정렬·슬라이스(분산 top-k).
@@ -950,6 +951,10 @@ class SupabaseSource:
             "hit_count": row.get("hit_count"),
             "thumb_url": row.get("thumb_url"),
             "buy_grade": row.get("buy_grade"),   # 매수판정 컬럼 — 클라우드는 이 값으로 배지(로컬은 in-메모리 버킷 우선)
+            "est_price": row.get("est_price"),        # 추정시세 컬럼화 — 목록 즉시표시(fetch 왕복 제거), 없으면 프론트가 apt_ests/villa_ests 폴백
+            "expected_bid": row.get("expected_bid"),  # 예상낙찰가 컬럼화
+            "expbid_count": row.get("expbid_count"),  # 예상낙찰 사례수(윗첨자)
+            "profit": row.get("profit"),              # 차익 = est_price − expected_bid 컬럼화(서버 정렬 가능)
         }
 
     def _detail(self, row: dict) -> dict:
