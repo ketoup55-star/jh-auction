@@ -1,5 +1,150 @@
 {
- "items": [],
- "count": 0,
+ "items": [
+  {
+   "keyword": "빌라 경매",
+   "title": "서울 빌라 경매 시장 활황, 낙찰가율 급등으로 투자자 관심 증가",
+   "link": "http://www.gokorea.kr/news/articleView.html?idxno=871859",
+   "image": "https://cdn.gokorea.kr/news/thumbnail/202607/871859_149014_5431_v150.jpg",
+   "source": "공감신문",
+   "published": "2026-07-12T09:54:34+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "정부, 청년층 실수요자 대상 주택담보대출 규제 완화 검토",
+   "link": "https://www.2news.co.kr/news/articleView.html?idxno=15292",
+   "image": "https://cdn.2news.co.kr/news/photo/202606/mn_15292_20260712091700_1.jpg",
+   "source": "에너지뉴스",
+   "published": "2026-07-12T09:17:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "금융위, 15일 부동산 공개 토론회⋯ 청년 주거대책 등 논의",
+   "link": "https://www.etoday.co.kr/news/view/2602730",
+   "image": "https://img.etoday.co.kr/pto_db/2026/07/20260707124730_2356049_1200_819.JPG",
+   "source": "이투데이",
+   "published": "2026-07-12T09:15:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "\"낙찰 즉시 전세금 회수\"…서울 빌라 경매시장 '후끈'",
+   "link": "https://www.youthdaily.co.kr/news/article.html?no=222797",
+   "image": "https://www.youthdaily.co.kr/data/photos/20260728/art_17838151247734_b50865.jpg",
+   "source": "youthdaily.co.kr",
+   "published": "2026-07-12T09:13:03+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "“집값은 오픈AI 주식으로 주세요”…‘IPO 희망회로’ 부동산도 들썩",
+   "link": "https://www.mk.co.kr/news/world/12096291",
+   "image": "https://pimg.mk.co.kr/news/cms/202607/12/news-p.v1.20260710.e6c42720558541faabc848388fc94345_R.jpg",
+   "source": "매일경제",
+   "published": "2026-07-12T09:09:11+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "치솟는 서울 아파트 전월세…빌라 경매시장도 '꿈틀'",
+   "link": "https://biz.sbs.co.kr/article/20000321925",
+   "image": "https://img.biz.sbs.co.kr/upload/2026/07/12/KP41783815264535-850.jpg",
+   "source": "biz.sbs.co.kr",
+   "published": "2026-07-12T09:09:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "대통령까지 직접 집값 토론…이달 23일 열린다",
+   "link": "http://news.bizwatch.co.kr/article/real_estate/2026/07/10/0038",
+   "image": "https://cdn.bizwatch.co.kr/news/photo/2025/02/07/8305d168733cedbd8b4802db49d32582.jpg",
+   "source": "비즈니스워치",
+   "published": "2026-07-12T09:00:02+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "정부, 이번주 부동산 정책 공론화… 23일 李 주재 대토론회",
+   "link": "https://www.newscj.com/news/articleView.html?idxno=3416300",
+   "image": "https://cdn.newscj.com/news/thumbnail/202607/3416300_3523995_5936_v150.jpg",
+   "source": "천지일보",
+   "published": "2026-07-12T09:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "토허제 9개월에도 서울 집값 '최대 상승'…급매 소진 후 반등",
+   "link": "https://www.thescoop.co.kr/news/articleView.html?idxno=310871",
+   "image": "https://cdn.thescoop.co.kr/news/thumbnail/202607/310871_227238_4743_v150.jpg",
+   "source": "더스쿠프",
+   "published": "2026-07-12T08:54:21+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "업무보고·부동산 토론회·개각까지…李대통령, 내치 고삐 죈다",
+   "link": "https://news.einfomax.co.kr/news/articleView.html?idxno=4424510",
+   "image": "https://cdn.news.einfomax.co.kr/news/thumbnail/202607/4424510_328797_392_v150.jpg",
+   "source": "연합인포맥스",
+   "published": "2026-07-12T08:38:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "中 실질집값 2005년 밑돌아…굴착기는 26% 급증",
+   "link": "https://www.g-enews.com/article/Global-Biz/2026/07/2026071207274960842bd56fbc3c_1",
+   "image": "https://nimage.g-enews.com/phpwas/restmb_allidxmake.php?idx=5&simg=20260712072906083612bd56fbc3c21121419978.jpg",
+   "source": "글로벌이코노믹",
+   "published": "2026-07-12T07:31:05+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "대출규제 토론회, 부동산 유튜버·중개업자·건설사까지 '총출동' 한다 - 머니투데이",
+   "link": "https://www.mt.co.kr/finance/2026/07/12/2026071017295073868",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026071017295073868_1.jpg",
+   "source": "머니투데이",
+   "published": "2026-07-12T05:50:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "금융위, 청년 주거지원책 고심…매매보다 전월세 초점 예상",
+   "link": "https://www.yna.co.kr/amp/view/AKR20260711048800002",
+   "image": "https://img8.yna.co.kr/photo/yna/YH/2026/06/21/PYH2026062107060001300_P4.jpg",
+   "source": "연합뉴스",
+   "published": "2026-07-12T05:49:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "양도세 장특공제 비거주 축소·폐지 갈림길…매물 잠김 우려도",
+   "link": "https://www.yna.co.kr/view/AKR20260711033500002",
+   "image": "https://img8.yna.co.kr/photo/yna/YH/2026/07/10/PYH2026071006830001300_P4.jpg",
+   "source": "연합뉴스",
+   "published": "2026-07-12T05:47:02+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "부동산 보유·거래세 동시 손질 예고...시장 긴장감↑",
+   "link": "https://m.ytn.co.kr/news_view.amp.php?version=1&param=0102_202607120538231522",
+   "image": "https://image.ytn.co.kr/general/jpg/2026/0712/202607120538231522_t.jpg",
+   "source": "YTN",
+   "published": "2026-07-12T05:38:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "아파트 전세난이 부른 '빌라의 역습'…경매족 무차별 돌격",
+   "link": "https://news.nate.com/view/20260712n03814",
+   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/en/2026/07/12/1716005_745392_357.jpg",
+   "source": "네이트 뉴스",
+   "published": "2026-07-12T00:00:00+09:00",
+   "has_time": false
+  }
+ ],
+ "count": 16,
  "date": "2026-07-12"
 }
