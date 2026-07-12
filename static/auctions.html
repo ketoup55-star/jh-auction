@@ -1173,6 +1173,12 @@ function prefillFromResponse(list){
     el.dataset.done="1";
     if(gcls[L.grade]) el.innerHTML=`<span class="gbadge ${gcls[L.grade]}">${L.grade}</span>`;
   });
+  // ④ 호가(KB 동일평형±3㎡ 매매 매물수) → .kbchip (컬럼화 — kb_counts fetch 생략)
+  document.querySelectorAll('.kbchip[data-key]').forEach(el=>{
+    const L=m[el.dataset.key]; if(!L||L.kb_count==null) return;
+    el.dataset.done="1";
+    if(L.kb_count>0) el.innerHTML=`<span class="kbcnt" data-tip="KB부동산에 호가로 올라온 동일평형(전용±3㎡) 매매 매물 수">호가 ${L.kb_count}건</span>`;
+  });
   applyAptSort();
 }
 async function doSearch(){

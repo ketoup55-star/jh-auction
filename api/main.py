@@ -3732,6 +3732,17 @@ def _col_enrich_sync() -> None:
             FROM api_cache c WHERE c.cache_key='vexpbid:'||i.item_key AND (c.data->>'available')::bool AND (c.data->>'v')::int={_VEXPBID_V}
               AND (c.data->>'expected_bid') ~ '^[0-9.]+$' AND i.expected_bid IS DISTINCT FROM (c.data->>'expected_bid')::numeric::bigint""",
         "UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
+        # 호가(KB 동일평형±3㎡ 매매 매물수) — kb_listing JOIN 집계(변경분만). KB크롤러 갱신 반영, Python 엔드포인트와 8/8 일치 검증
+        """UPDATE items i SET kb_count = sub.cnt FROM (
+             SELECT it.item_key, count(l.*)::int cnt FROM (
+                SELECT item_key, kb_complex_no::text cno,
+                       NULLIF(substring(area_text from '전용[[:space:]]*([0-9.]+)'),'')::numeric area
+                FROM items WHERE kb_complex_no IS NOT NULL AND data_class='현황'
+             ) it
+             LEFT JOIN kb_listing l ON l.complex_no::text=it.cno AND l.trade_type='매매'
+                  AND (it.area IS NULL OR (l.area_excl IS NOT NULL AND abs(l.area_excl-it.area)<=3))
+             GROUP BY it.item_key
+           ) sub WHERE i.item_key=sub.item_key AND i.kb_count IS DISTINCT FROM sub.cnt""",
     ]
     try:
         with psycopg.connect(dsn, autocommit=True, connect_timeout=15) as conn:
