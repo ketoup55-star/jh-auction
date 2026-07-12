@@ -877,7 +877,11 @@ async function fillVillaEstimates(){
     }
   }catch(e){}
   const miss=[];
-  keys.forEach(k=>{ const m=cached[k]; if(m&&m.price!=null) _fillVillaCell(byKey[k],m); else miss.push(k); });
+  keys.forEach(k=>{ const m=cached[k];
+    if(m&&m.price!=null){ _fillVillaCell(byKey[k],m); }
+    else if(m&&m.none){ const el=byKey[k]; el.innerHTML='<div class="ecsi"><span class="lbl nosise">시세 없음</span></div>'; el.dataset.done="1"; }   // 캐시된 '시세 없음' → 즉시 표시(compute=true 생략)
+    else miss.push(k);
+  });
   fillExpBids();                             // 캐시분 빌라 셀 예상낙찰(반경1km)
   // ② 미캐시만 6개씩 compute=true 점진 — 청크 3개를 '동시에'(순차→병렬로 체감 채움속도 ~3배).
   const _vcs=[]; for(let i=0;i<miss.length;i+=6) _vcs.push(miss.slice(i,i+6));

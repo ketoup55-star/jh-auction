@@ -3784,6 +3784,7 @@ def _est_col_warm() -> None:
     로컬 전용, 소량배치(400) 점진 → 커버리지 성장 + 신규물건 유지. [[project_auction_enrich_columnization]]"""
     dsn = os.environ.get("SUPABASE_DB_URL")
     if not dsn:
+        print("[est_col] SUPABASE_DB_URL 환경변수 없음 → skip", flush=True)
         return
     try:
         import psycopg
@@ -3791,7 +3792,7 @@ def _est_col_warm() -> None:
         cur = conn.cursor()
         cur.execute("SET statement_timeout=90000")
         cur.execute("""SELECT item_key FROM items WHERE data_class='현황'
-                       AND (usage_name ILIKE '%아파트%' OR usage_name ILIKE '%오피스텔%')
+                       AND usage_name ILIKE '%아파트%'
                        AND est_price IS NULL ORDER BY sell_date DESC NULLS LAST LIMIT 400""")
         keys = [r[0] for r in cur.fetchall()]
         if not keys:
@@ -3822,12 +3823,12 @@ def _est_col_warm() -> None:
 
 def _est_col_warm_loop() -> None:
     import time as _t
-    _t.sleep(150)
+    _t.sleep(120)
     while True:
         try:
             _est_col_warm()
-        except Exception:
-            pass
+        except Exception as _e:
+            print(f"[est_col] loop 예외 {str(_e)[:80]}", flush=True)
         _t.sleep(1800)          # 30분마다 400건 배치 → 점진 커버 + 유지
 
 
@@ -3863,7 +3864,7 @@ def _start_prewarm() -> None:
         # 🔴컬럼화 동기화·est 직접기록은 경량(SQL·400건배치)이라 DISABLE_PREWARM 무관하게 로컬이면 항상 실행.
         #   (舊버그: else 블록에 있어 DISABLE_PREWARM=1이면 안 돌아 컬럼 자동유지·아파트 시세예열이 죽어있었음)
         threading.Thread(target=_col_sync_loop, daemon=True).start()        # api_cache→items 컬럼(시세·예상낙찰·차익·호가·유사거래) 20분마다
-        threading.Thread(target=_est_col_warm_loop, daemon=True).start()    # est 직접기록 예열(cache_save 우회) — 아파트/오피 시세 커버리지 성장·유지
+        threading.Thread(target=_est_col_warm_loop, daemon=True).start()    # est 직접기록 예열(cache_save 우회) — 아파트 시세 커버리지 성장·유지
     try:
         _kb_apply_token()   # Supabase 공유 토큰(api_cache kb:auth) 로드 — 시작 시 1회, 가벼움(브라우저 없음)
     except Exception:
@@ -5257,6 +5258,8 @@ def auction_villa_ests(keys: str, compute: bool = True, remote: bool = True) -> 
         if isinstance(d, dict) and d.get("price"):
             v = {"price": d["price"], "kind": "est"}
             out[k] = v; _villa_cache[k] = v       # 메모리에도 올려 다음엔 즉시
+        elif isinstance(d, dict) and d.get("none"):   # 캐시된 '시세 없음' → 재계산 안 함(느림 제거). 프론트가 즉시 '시세 없음' 표시
+            out[k] = {"none": True}; _villa_cache[k] = {"none": True}
         else:
             out[k] = None
             if remote:
@@ -5271,6 +5274,11 @@ def auction_villa_ests(keys: str, compute: bool = True, remote: bool = True) -> 
                     except Exception:
                         pass
                     return k, {"price": v["price"], "kind": "est"}
+                try:
+                    auction_db.cache_save("villaest:" + k, {"none": True})   # '시세 없음'도 캐시 → 다음 조회 즉시(rural 재계산 방지)
+                except Exception:
+                    pass
+                return k, {"none": True}
             except Exception:
                 pass
             return k, None
