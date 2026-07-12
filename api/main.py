@@ -4799,17 +4799,48 @@ def auction_apt_brief(item_key: str) -> dict:
     return r
 
 
+_bg_fill_lock = threading.Lock()
+_bg_fill_active: set = set()
+
+
+def _bg_fill(todo: list, compute_one, save=None, workers: int = 6) -> None:
+    """미캐시 키를 '백그라운드'에서 계산 — 요청 스레드를 절대 블로킹하지 않음.
+    캐시 미스 시 그 자리에서 계산(briefs 40초·similar 2.6초·문서파싱 수초)하던 게
+    목록·상세를 얼리던 근본 패턴. 계산을 백그라운드로 돌리고 응답은 캐시된 것만 즉시 반환
+    → 프론트(fillAptBriefs/fillSimilar가 미응답 키 1.5초×5 재폴)가 완료분을 채움.
+    진행 중 키는 중복 계산 스킵."""
+    with _bg_fill_lock:
+        fresh = [k for k in todo if k not in _bg_fill_active]
+        _bg_fill_active.update(fresh)
+    if not fresh:
+        return
+
+    def _work():
+        try:
+            with _cf.ThreadPoolExecutor(max_workers=workers) as ex:
+                list(ex.map(compute_one, fresh))
+            if save:
+                try:
+                    save()
+                except Exception:
+                    pass
+        finally:
+            with _bg_fill_lock:
+                _bg_fill_active.difference_update(fresh)
+
+    threading.Thread(target=_work, daemon=True).start()
+
+
 @app.get("/auction/briefs")
 def auction_briefs(keys: str) -> dict:
-    """검색목록용 배치: 여러 item_key를 서버에서 동시 조회해 한 번에 반환(순차호출 제거)."""
+    """검색목록용 배치: 캐시된 것만 즉시 반환. 미캐시는 백그라운드 계산(요청 블로킹 금지)
+    → 프론트 재폴이 완료분을 채움. (舊: 미캐시를 요청 스레드에서 계산해 최대 40초 프리즈)."""
     klist = [k for k in keys.split(",") if k][:80]
-    _load_briefs_from_db(klist)                    # ① Supabase building_brief 일괄 로딩
+    _load_briefs_from_db(klist)                    # Supabase building_brief 일괄 로딩(빠름)
     todo = [k for k in klist if k not in _brief_cache]
-    if todo:                                        # ② 없는 것만 계산(계산 시 DB 저장)
-        with _cf.ThreadPoolExecutor(max_workers=8) as ex:
-            list(ex.map(_get_brief, todo))
-        _save_brief_cache()
-    return {k: _brief_cache.get(k, {"available": False}) for k in klist}
+    if todo:
+        _bg_fill(todo, _get_brief, _save_brief_cache)
+    return {k: _brief_cache[k] for k in klist if k in _brief_cache}
 
 
 def _compute_similar(item_key: str):
@@ -4836,13 +4867,12 @@ def _get_similar(item_key: str):
 
 @app.get("/auction/similar")
 def auction_similar(keys: str) -> dict:
-    """목록용 유사거래 건수 배치(비동기). brief와 분리해 준공/세대/승강기 지연 방지."""
+    """목록용 유사거래 건수 배치 — 캐시된 것만 즉시 반환, 미캐시는 백그라운드(요청 블로킹 금지).
+    (舊: 미캐시를 요청 스레드에서 계산 → 웜에도 2.6초. _compute_similar가 반경1km 유사거래라 무거움)"""
     klist = [k for k in keys.split(",") if k][:80]
     todo = [k for k in klist if k not in _similar_cache]
     if todo:
-        with _cf.ThreadPoolExecutor(max_workers=8) as ex:
-            list(ex.map(_get_similar, todo))
-        _save_similar_cache()
+        _bg_fill(todo, _get_similar, _save_similar_cache)
     return {k: _similar_cache[k] for k in klist if k in _similar_cache}
 
 
