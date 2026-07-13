@@ -4086,25 +4086,47 @@ def _kb():
 
 
 def _kakao_do_send(room, payload):
-    """지정 방(들)에 실제 전송. payload=str이면 텍스트, list이면 시퀀스(사진→정보). 실패 시 예외 전파."""
+    """지정 방(들)에 실제 전송 — 방별로 격리해 하나가 실패해도 나머지는 정상 발송.
+    ⚠️ 재시도는 '전송(Enter) 前 실패'(KakaoTalkControlError=방 검색/열기 실패)에만 건다 → 이미 보낸 뒤
+       재시도하는 일이 없어 같은 방에 중복 발송이 원천적으로 불가능하다. Enter를 누른 뒤의 오류는 재시도 안 함.
+    반환 {sent:[성공방...], failed:[실패방...]}."""
     import sys as _sys
+    import time as _t
     _root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if _root not in _sys.path:
         _sys.path.insert(0, _root)
-    if isinstance(payload, list):
-        from kakao_sender import send_kakao_sequence
-        seq, tmp = _kakao_materialize(payload)
-        try:
-            send_kakao_sequence(room, seq)
-        finally:
-            for p in tmp:
+    from kakao_sender import send_kakao_message, send_kakao_sequence, KakaoTalkControlError
+    rooms = [r.strip() for r in (room or "").split(",") if r.strip()]
+    is_seq = isinstance(payload, list)
+    seq, tmp = (_kakao_materialize(payload) if is_seq else (None, []))
+    sent, failed = [], []
+    try:
+        for rm in rooms:
+            ok = False
+            for attempt in range(3):        # 원문 1회 + 재시도 2회 — '전송 前' 실패에만
                 try:
-                    os.remove(p)
-                except Exception:
-                    pass
-    else:
-        from kakao_sender import send_kakao_message
-        send_kakao_message(room, payload, send_now=True)
+                    if is_seq:
+                        send_kakao_sequence(rm, seq)
+                    else:
+                        send_kakao_message(rm, payload, send_now=True)
+                    ok = True
+                    break
+                except KakaoTalkControlError as e:   # 방 검색/열기 실패 = 아직 미전송 → 안전 재시도(중복 없음)
+                    print(f"[kakao]   ↻ '{rm}' 시도{attempt + 1} 전송前 실패: {e}", flush=True)
+                    _t.sleep(1.0)
+                    continue
+                except Exception as e:               # 전송 중/후일 수 있음 → 재시도 금지(중복 방지)
+                    print(f"[kakao]   ✗ '{rm}' 오류(재시도 안 함): {type(e).__name__}: {e}", flush=True)
+                    break
+            (sent if ok else failed).append(rm)
+            print(f"[kakao]   {'✓' if ok else '✗'} '{rm}'", flush=True)
+    finally:
+        for p in tmp:
+            try:
+                os.remove(p)
+            except Exception:
+                pass
+    return {"sent": sent, "failed": failed}
 
 
 def _kakao_materialize(items):
@@ -4167,9 +4189,13 @@ def _kakao_run(kind, force=False):
     else:
         return {"ok": False, "msg": f"알 수 없는 종류: {kind}"}
     try:
-        _kakao_do_send(room, payload)
+        _res = _kakao_do_send(room, payload)
     except Exception as e:
         return {"ok": False, "msg": f"카카오 전송 실패(방 이름·로그인 확인): {e}"}
+    sent_rooms = _res.get("sent", []) if isinstance(_res, dict) else []
+    failed_rooms = _res.get("failed", []) if isinstance(_res, dict) else []
+    if not sent_rooms:      # 성공한 방이 하나도 없음 → 이력(sent_links/sent_date) 갱신 안 함(다음 발송에 다시 시도)
+        return {"ok": False, "msg": f"전송 실패 — 성공한 방 없음(실패: {', '.join(failed_rooms) or '없음'})"}
     import datetime as _dt
     now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
     if kind == "news":
@@ -4182,7 +4208,9 @@ def _kakao_run(kind, force=False):
     kb.save_state(st)
     cnt = len(payload) if isinstance(payload, list) else len(payload)
     unit = "개 항목" if isinstance(payload, list) else "자"
-    return {"ok": True, "msg": f"발송 완료({cnt}{unit})", "date": date}
+    _room_msg = f"성공 {len(sent_rooms)}방" + (f" · 실패 {len(failed_rooms)}방({', '.join(failed_rooms)})" if failed_rooms else "")
+    return {"ok": True, "msg": f"발송 완료({cnt}{unit}) — {_room_msg}", "date": date,
+            "sent_rooms": sent_rooms, "failed_rooms": failed_rooms}
 
 
 _KAKAO_FIRED = {}   # kind -> "YYYY-MM-DD HH:MM"(같은 분 재발화 방지)

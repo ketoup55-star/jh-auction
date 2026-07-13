@@ -196,6 +196,7 @@ class KakaoTalkService:
         chat_window = self.open_chat_and_input_message(chat_name, message_)
         message_input = self._find_message_input(chat_window)
         time.sleep(self.config.action_delay_seconds)
+        self._ensure_input_filled(message_input, message_)   # 빈 입력창이면 재붙여넣기(유실→빈 Enter 방지)
         self._click_window(message_input)
         self._press_key(self.win32con.VK_RETURN)
 
@@ -230,6 +231,7 @@ class KakaoTalkService:
                     continue
                 self._clear_message_input(message_input)
                 self._paste_text(text)
+                self._ensure_input_filled(message_input, text)   # 텍스트 말풍선 유실 방지(Enter 前)
             time.sleep(self.config.action_delay_seconds)
             self._click_window(message_input)
             self._press_key(self.win32con.VK_RETURN)
@@ -413,6 +415,28 @@ class KakaoTalkService:
             return self.pyperclip.paste()
         except Exception:
             return None
+
+    def _ensure_input_filled(self, message_input: int, expected_text: str, tries: int = 3) -> bool:
+        """Enter(전송) 前에 입력창에 내용이 실제로 들어갔는지 확인 — 비어 있으면(클립보드 경합 등으로
+        붙여넣기가 유실된 경우) 다시 붙여넣는다. 오늘 리치빌더처럼 '창은 열렸는데 내용 유실 → 빈 Enter'로
+        메시지가 조용히 안 가던 것을 막는다.
+        ⚠️ 여기는 아직 Enter를 누르기 前 단계라, 몇 번을 재붙여넣어도 중복 발송이 원천적으로 불가능하다."""
+        expected = (expected_text or "").strip()
+        if not expected:
+            return True
+        for _ in range(max(1, tries)):
+            try:
+                length = self.win32gui.SendMessage(
+                    message_input, self.win32con.WM_GETTEXTLENGTH, 0, 0)
+            except Exception:
+                return True   # 길이 확인 자체가 실패하면, 오검출로 재붙여넣다 꼬이지 않게 그냥 진행
+            if length and int(length) > 0:
+                return True   # 내용 있음 → 정상, Enter 진행
+            # 입력창이 비어있음 → 아직 전송 안 했으니 다시 붙여넣기(중복 위험 없음)
+            self._clear_message_input(message_input)
+            self._paste_text(expected)
+            time.sleep(self.config.action_delay_seconds)
+        return False
 
     def _click_window(self, window: int) -> None:
         left, top, right, bottom = self.win32gui.GetWindowRect(window)
