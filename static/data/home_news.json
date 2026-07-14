@@ -2,140 +2,122 @@
  "items": [
   {
    "keyword": "부동산 정책",
-   "title": "李대통령, 이번주 '정책 슈퍼위크'…국가 재정·부동산 토론·업무보고까지",
-   "link": "https://www.newspim.com/news/view/20260713000152",
-   "image": "https://img.newspim.com/news/2026/06/30/260630153352493_t1.jpg",
+   "title": "李, 민선 9기 첫 국무회의… 오세훈과 ‘부동산 정책’ 격론 주목",
+   "link": "https://www.newscj.com/news/articleView.html?idxno=3416779",
+   "image": "https://cdn.newscj.com/news/thumbnail/202607/3416779_3524784_466_v150.jpg",
+   "source": "천지일보",
+   "published": "2026-07-14T09:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "[이효지의 숫자 너머] 부동산 시장은 미래를 먹고 산다",
+   "link": "https://kbthink.com/news-list/view.html?newsId=20260714080257811",
+   "image": "https://kbthink.com/content/dam/tam-dcp-cms/kbthink/KB의 생각_한글.png",
+   "source": "KB의 생각",
+   "published": "2026-07-14T08:02:56+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "[대출 규제 역설] 2030 내 집 마련 차단한 ‘잔인한 금융’…청년 주거지원 해법은",
+   "link": "https://www.dailian.co.kr/news/view/1666646/%EB%8C%80%EC%B6%9C-%EA%B7%9C%EC%A0%9C-%EC%97%AD%EC%84%A4-2030-%EB%82%B4-%EC%A7%91-%EB%A7%88%EB%A0%A8-2026",
+   "image": "https://cdnimage.dailian.co.kr/news/202606/news_1782283693_1659467_m_1.jpg",
+   "source": "데일리안",
+   "published": "2026-07-14T07:08:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "집값 뛰자 세금카드 앞서 민심부터… 李정부, '보유세 뇌관' 안고 공론화 첫발",
+   "link": "https://daily.hankooki.com/news/articleView.html?idxno=1385535",
+   "image": "https://cdn.daily.hankooki.com/news/thumbnail/202607/1385535_1567020_478_v150.jpg",
+   "source": "데일리한국",
+   "published": "2026-07-14T07:05:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "이혼 준비 중 급등한 집값 8억→15억…\"아내, 공주처럼 떠받들어\" - 머니투데이",
+   "link": "https://www.mt.co.kr/amp/society/2026/07/14/2026071406092051533",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=567,fit=cover,bg=whilte,f=auto,quality=high,sharpen=2,g=face/21/2026/07/2026071406092051533_1.jpg",
+   "source": "머니투데이",
+   "published": "2026-07-14T06:48:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "5대 시중 은행 주담대 한도 소진 가시권…하반기 서울 외곽 거래 절벽 심화 우려",
+   "link": "https://www.newspim.com/news/view/20260713000928",
+   "image": "https://img.newspim.com/news/2026/07/13/2607131524486350_t1.jpg",
    "source": "뉴스핌",
-   "published": "2026-07-13T09:08:00+09:00",
+   "published": "2026-07-14T06:30:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "집값",
-   "title": "[요즘 부동산+/⑲]반도체가 바꾼 집값 공식…'셔세권'이 재편하는 수도권 남부 부동산",
-   "link": "https://www.businessplus.kr/news/articleView.html?idxno=114027",
-   "image": "https://cdn.businessplus.kr/news/thumbnail/202607/114027_111482_3759_v150.jpg",
-   "source": "비즈니스플러스",
-   "published": "2026-07-13T08:52:27+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "“갑자기 3억을 어디서 빌리나”…주담대 반토막에 ‘이 동네’ 집값 오른다? [잇슈 머니]",
-   "link": "https://news.kbs.co.kr/news/view.do?ncd=8608691",
-   "image": "http://news.kbs.co.kr/data/news/2026/07/13/20260713_Fsmg0G.jpg",
+   "keyword": "부동산 정책",
+   "title": "국토부, 오늘 부동산 정책 첫 토론회…공급 방안 논의",
+   "link": "https://news.kbs.co.kr/news/view.do?ncd=8609815",
+   "image": "http://news.kbs.co.kr/data/news/title_image/newsmp4/newsplaza_p1/2026/07/14/70_8609815.jpg",
    "source": "KBS 뉴스",
-   "published": "2026-07-13T06:56:53+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "“실거주 아니면 공제 축소”…고가 1주택 세금 늘어나나[Pick코노미]",
-   "link": "https://www.sedaily.com/article/20066797",
-   "image": "https://wimg.sedaily.com/news/cms/2026/07/13/rcv.YNA.20260712.PYH2026071205630001300_R.jpg",
-   "source": "서울경제",
-   "published": "2026-07-13T06:31:05+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "“서울 전세도 부모 도움 있어야…소득에 맞춰 대출 풀어야”",
-   "link": "https://www.sedaily.com/article/20066681",
-   "image": "https://wimg.sedaily.com/news/cms/2026/07/12/rcv.YNA.20260301.PYH2026030105020001300_R.jpg",
-   "source": "서울경제",
-   "published": "2026-07-13T06:31:04+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "[원빌딩 시선] 막히는 주담대, 열리는 꼬마빌딩",
-   "link": "https://www.newstopkorea.com/news/articleView.html?idxno=46200",
-   "image": "https://cdn.newstopkorea.com/news/photo/202607/46200_47100_156.png",
-   "source": "뉴스톱",
-   "published": "2026-07-13T06:03:07+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "'부동산 대토론회' 앞두고…여·야 보유세 공방 이어져",
-   "link": "https://m.news.nate.com/view/20260713n01529?issue_sq=11000",
-   "image": "https://news.nateimg.co.kr/orgImg/js/2026/07/13/17838764281783876428_mgmg.jpg",
-   "source": "모바일 네이트 뉴스",
-   "published": "2026-07-13T06:01:06+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "아파트 전세난에 빌라 경매시장 과열",
-   "link": "https://www.segye.com/newsView/20260712512160?OutUrl=google",
-   "image": "https://www.segye.com/content/image/2026/07/12/20260712513895.jpg",
-   "source": "세계일보",
-   "published": "2026-07-13T06:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "전세대출 규제 '뜨거운감자'… 2030 목소리 커질듯 - 머니투데이",
-   "link": "https://www.mt.co.kr/finance/2026/07/13/2026071219234414953",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026071219234414953_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-07-13T04:10:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "공급·금융·세제 첫 공개토론회…부동산 정책 '운명의 일주일' - 머니투데이",
-   "link": "https://www.mt.co.kr/economy/2026/07/13/2026071214491712041",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026071214491712041_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-07-13T04:00:00+09:00",
+   "published": "2026-07-14T06:15:46+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "전쟁에 집값 침몰?… 고유가 → 고물가 → 고금리 연쇄충격이 관건",
-   "link": "https://www.kmib.co.kr/article/view_amp.asp?arcid=1783578470",
-   "image": "https://image.kmib.co.kr/online_image/2026/0713/2026071222220572674_1783862525_1783578470.jpg",
-   "source": "국민일보",
-   "published": "2026-07-13T02:20:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "“부동산 의견 듣겠다” 몸 낮춘 靑, 증세 전 민심 달래기 무게",
-   "link": "https://www.kmib.co.kr/article/view_amp.asp?arcid=1783843337",
-   "image": "https://image.kmib.co.kr/online_image/2026/0713/2026071222351172723_1783863311_1783843337.jpg",
-   "source": "국민일보",
-   "published": "2026-07-13T02:04:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "빌라 경매",
-   "title": "서울 집값 상승에… ‘대체재’ 빌라 매매-전월세 가격 급등",
-   "link": "https://www.donga.com/news/Economy/article/all/20260712/134283214/2",
-   "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/07/12/134284358.1.jpg",
-   "source": "동아일보",
-   "published": "2026-07-13T00:30:00+09:00",
+   "title": "\"이혼 직전 '집값 급등' 아내 말 듣고 8억에 산 집, 15억 됐다…관계 회복\"",
+   "link": "https://www.news1.kr/society/general-society/6226498",
+   "image": "https://i3n.news1.kr/system/photos/2026/3/23/7812392/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-07-14T05:15:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "[리셋 코리아] 부동산 보유세 높이려면 거래세 먼저 낮춰야",
-   "link": "https://www.joongang.co.kr/article/25444478",
-   "image": "https://assets.joongang.co.kr/images/share/ja-opengraph-img.png",
-   "source": "중앙일보",
-   "published": "2026-07-13T00:08:00+09:00",
+   "title": "[서진형 칼럼] 부동산 토론회로 정책 결정 가능한가",
+   "link": "https://www.sedaily.com/article/20067053?ref=zum",
+   "image": "https://wimg.sedaily.com/news/cms/2026/07/13/news-p.v1.20260713.6e658f36505f43db8929c4841c75a9b0_R.jpg",
+   "source": "서울경제",
+   "published": "2026-07-14T05:00:01+09:00",
    "has_time": true
   },
   {
-   "keyword": "빌라 경매",
-   "title": "전월세난에 되살아난 빌라 시장…올해 거래량 16% 늘어",
-   "link": "https://www.joongang.co.kr/article/25444472",
-   "image": "https://pds.joongang.co.kr/news/component/htmlphoto_mmdata/202607/13/a159acf8-eb5b-4b01-80ed-9a3b838f2d44.jpg",
-   "source": "중앙일보",
-   "published": "2026-07-13T00:02:00+09:00",
+   "keyword": "대출규제",
+   "title": "오늘부터 부동산 릴레이 토론…'공급 해법' 찾는다",
+   "link": "https://www.yna.co.kr/amp/view/MYH20260714000600038",
+   "image": "https://img0.yna.co.kr/mpic/YH/2026/07/14/MYH20260714000600038_P1.jpg",
+   "source": "연합뉴스",
+   "published": "2026-07-14T00:42:10+09:00",
    "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "[오늘의 브릿지경제 1면] 세금·대출·공급 모두 충돌… 부동산 대토론회 셈법 복잡",
+   "link": "https://www.viva100.com/article/20260713501260",
+   "image": "https://stqnq5ux4599.edge.naverncp.com/data2//content/image/2026/07/14/.cache/512/20260714500032.jpg?v=20260714093013",
+   "source": "브릿지경제",
+   "published": "2026-07-14T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "오세훈, 오늘 국무회의서 부동산 규제 완화 직접 건의…'세금보다 공급'",
+   "link": "https://v.daum.net/v/20260714050158930?f=p",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/14/NEWS1/20260714050200091kfai.jpg",
+   "source": "Daum",
+   "published": "2026-07-14T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "빌라 경매",
+   "title": "아파트 전세난에 빌라 경매시장 과열",
+   "link": "https://www.msn.com/ko-kr/money/topstories/%EC%95%84%ED%8C%8C%ED%8A%B8-%EC%A0%84%EC%84%B8%EB%82%9C%EC%97%90-%EB%B9%8C%EB%9D%BC-%EA%B2%BD%EB%A7%A4%EC%8B%9C%EC%9E%A5-%EA%B3%BC%EC%97%B4/ar-AA27KZhX",
+   "image": null,
+   "source": "msn.com",
+   "published": "2026-07-14T00:00:00+09:00",
+   "has_time": false
   }
  ],
- "count": 15,
- "date": "2026-07-13"
+ "count": 13,
+ "date": "2026-07-14"
 }
