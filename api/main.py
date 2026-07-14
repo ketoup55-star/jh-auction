@@ -7350,6 +7350,7 @@ def _hero_picks_compute() -> list:
     _pull_est(apt_keys, auction_apt_ests, 120)
     _pull_est(villa_keys, auction_villa_ests, 100)
     expb: dict = {}
+    expb_cnt: dict = {}
 
     def _pull_expb(ks, prefix, ver):
         for i in range(0, len(ks), 200):
@@ -7362,8 +7363,10 @@ def _hero_picks_compute() -> list:
                 v = cc.get(prefix + k)
                 if isinstance(v, dict) and v.get("v") == ver and v.get("available") and v.get("expected_bid"):
                     expb[k] = _to_int(v["expected_bid"])
+                    expb_cnt[k] = _to_int(v.get("count")) or 0   # 예상낙찰가 산출에 쓰인 매각사례 수(표본)
     _pull_expb(apt_keys, "expbid:", _EXPBID_V)
     _pull_expb(villa_keys, "vexpbid:", _VEXPBID_V)
+    _villa_set = set(villa_keys)           # 빌라·연립·도시형(비아파트)
     picks = []
     for k in keys:
         sise = est.get(k)
@@ -7375,6 +7378,14 @@ def _hero_picks_compute() -> list:
         bid = expb.get(k)                  # 예상낙찰가만 사용
         if not bid:
             continue                       # ★ 예상낙찰가 없는 물건은 노출 안 함(주인님 지정)
+        minp = _to_int(cand[k].get("min_price"))
+        if minp and bid < minp:
+            continue                       # ★ 예상낙찰가<최저가 = 불가능한 예측(이상치 매각사례로 산출된 허수) → 제외
+        if k in _villa_set:                # 빌라·도생: 표본 얇으면 시세·예상낙찰 신뢰 낮아 차익이 엉터리 → 근거 있는 것만(주인님 지정)
+            if _similar_cache.get(k, 0) < 3:
+                continue                   # 유사거래(시세 근거) 3건 미만 제외
+            if expb_cnt.get(k, 0) < 2:
+                continue                   # 예상낙찰가가 단일 매각사례(이상치)로 산출된 것 제외 — 은평 4144만 같은 허수 차단
         profit = sise - bid                # 차익 = 시세 − 예상낙찰가
         if profit <= 0:
             continue
