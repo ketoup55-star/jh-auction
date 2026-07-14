@@ -160,7 +160,7 @@ def _pick_type(kind, date, tparam, est_kind, n=2):
     if not isinstance(ests, dict): ests = {}   # 에러응답(dict/str)·None 방어
     if not isinstance(exps, dict): exps = {}
     out = []
-    THRESH = 30000000   # 매수양호 기준: 차익 3천만원 이상만 발송(손해·약한 물건 제외 — 주인님 지시)
+    THRESH = 30000000   # 순수익(대출·이자·취득세·종소세 반영) 3천만원 이상만 발송 — 차익만 크고 실익 없는 물건 제외(주인님 지시)
     for x in good:
         k = x["item_key"]
         _e = ests.get(k); price = _e.get("price") if isinstance(_e, dict) else None
@@ -181,14 +181,26 @@ def _pick_type(kind, date, tparam, est_kind, n=2):
         if not bid:
             continue
         diff = price - bid
-        if diff < THRESH:
-            continue                                 # 차익 3천만원 미만(손해 포함) 제외 — 매수양호만 발송
+        # 순수익 기준 필터 — 차익(price-bid)은 3천만↑이어도 대출이자·취득세·종소세 빼면 실익 거의 없는
+        #   물건(순수익 241만 등)이 발송되던 것 방지(주인님 지시). ss.calc=물건상세 단타계산기와 동일 산식.
+        _appr = M._to_int(x.get("appraisal_price"))
+        _dp = _dep(x.get("deposit"))
+        _ar = _area(x.get("building_area"))
+        try:
+            _fin = ss.calc(bid=bid, sell=price, appraisal=_appr, deposit=_dp, exclusive_area=_ar)
+            net = _fin.get("net")                    # ss.calc net=round()=부호 있는 정수(손해면 음수). ⚠️_to_int 쓰면 음수부호 탈락→손해가 이익으로 뒤집힘
+            if not isinstance(net, (int, float)):
+                net = None
+        except Exception:
+            net = None
+        if net is None or net < THRESH:
+            continue                                 # 순수익 3천만원 미만(손해=음수 포함) 제외 — 매수양호+실익 있는 물건만
         out.append({"item_key": k, "addr": (x.get("address") or "").split("(")[0].strip(),
                     "thumb": x.get("thumb_url") or "",
-                    "price": price, "bid": bid, "bid_lbl": bid_lbl, "diff": diff,
-                    "appraisal": M._to_int(x.get("appraisal_price")), "deposit": _dep(x.get("deposit")),
-                    "area": _area(x.get("building_area")), "bid_count": M._to_int(x.get("bid_count"))})
-    out.sort(key=lambda r: r["diff"], reverse=True)
+                    "price": price, "bid": bid, "bid_lbl": bid_lbl, "diff": diff, "net": net,
+                    "appraisal": _appr, "deposit": _dp,
+                    "area": _ar, "bid_count": M._to_int(x.get("bid_count"))})
+    out.sort(key=lambda r: r["net"], reverse=True)   # 순수익 큰 순
     return out[:n]
 
 
