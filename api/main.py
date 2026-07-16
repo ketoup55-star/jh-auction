@@ -3809,6 +3809,14 @@ def _col_sync_loop() -> None:
     _t.sleep(90)                # 기동 직후 부하 회피
     while True:
         _col_enrich_sync()
+        # ★재발방지: 신규 물건 파생컬럼(area_excl·fuel·brand·car_ok·invest_amount)을 20분마다 백필.
+        #   기존엔 _area_warm/_invest_warm이 '기동 1회'만 돌아, 크롤러가 넣는 새 물건이 다음 재시작까지
+        #   컬럼 NULL→필터에서 누락(=시간 지나면 목록이 불완전해지는 재발). NULL만 UPDATE라 저비용.
+        try:
+            _area_col_backfill()
+            _filter_cols_backfill()
+        except Exception:
+            pass
         _t.sleep(1200)          # 20분마다 변경분 동기화
 
 
