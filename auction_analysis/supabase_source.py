@@ -431,7 +431,8 @@ class SupabaseSource:
                  appraisal_min=None, appraisal_max=None, price_min=None, price_max=None,
                  fail_min=None, fail_max=None, barea_min=None, barea_max=None,
                  sell_from=None, sell_to=None, buy_grade=None, reg=None,
-                 has_expbid=None, has_est=None) -> list[tuple]:
+                 has_expbid=None, has_est=None,
+                 fuel=None, brand=None, car_ok=None, invest_min=None, invest_max=None) -> list[tuple]:
         """PostgREST 필터를 (key,value) 튜플 리스트로. 같은 컬럼 범위(gte+lte) 지원."""
         if caseno:                     # 특정 사건번호 검색 = 상태·매각기일 무관하게 그 물건을 찾는다
             result_prefix = None       #  프론트가 기본 status=진행물건 + 매각기일범위(오늘~+3개월)를 항상 붙이는데,
@@ -455,6 +456,18 @@ class SupabaseSource:
             f.append(("expected_bid", "not.is.null"))
         if has_est:                            # + 시세(추정시세) 있음 — 백데이터는 예상낙찰+시세 둘 다 있는 것(주인님 기준)
             f.append(("est_price", "not.is.null"))
+        if fuel:                               # 연료(차량) — items.fuel 컬럼(백필: _classify_fuel 5분류). 기존 _fuel_buckets 키셋(8516행 콜드스캔·2.5초) 대체
+            q = ",".join('"' + str(x).replace('"', "") + '"' for x in (fuel if isinstance(fuel, (list, tuple, set)) else [fuel]))
+            f.append(("fuel", f"in.({q})"))
+        if brand:                              # 브랜드(차량) — items.brand 컬럼(백필)
+            q = ",".join('"' + str(x).replace('"', "") + '"' for x in (brand if isinstance(brand, (list, tuple, set)) else [brand]))
+            f.append(("brand", f"in.({q})"))
+        if car_ok:                             # 차량 매수양호 — items.car_ok 컬럼(백필: buy_grade.ok). 기존 _buy_ok_keys(8516행 콜드스캔·3.3초) 대체
+            f.append(("car_ok", "is.true"))
+        if invest_min is not None:             # 투자금(선금) — items.invest_amount 컬럼(백필: _invest_of). 기존 _invest_index 키셋(전체 26k 스캔·1.8초) 대체
+            f.append(("invest_amount", f"gte.{invest_min}"))
+        if invest_max is not None:
+            f.append(("invest_amount", f"lte.{invest_max}"))
         if special:                            # 특수물건: tags 부분일치(여러개=AND), '제외' 라벨은 NOT
             for s in special:
                 s = (s or "").strip()

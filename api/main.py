@@ -533,6 +533,46 @@ def _area_warm() -> None:
     _area_col_backfill()             # 신규 물건 area_excl 컬럼 백필(NULL만, 로컬 전용)
 
 
+def _filter_cols_backfill() -> None:
+    """신규 물건의 필터 컬럼(fuel/brand/car_ok/invest_amount) 백필 — 기존 버킷함수 재사용(캐시라 저비용).
+    invest_amount IS NULL(=신규)인 행만 UPDATE. 로컬 워머 전용(CLOUD_READER 쓰기금지)."""
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        return
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return
+    try:
+        import psycopg
+        fuel_of: dict = {}
+        brand_of: dict = {}
+        for lab, ks in _fuel_buckets().items():
+            for k in ks:
+                fuel_of[k] = lab
+        for lab, ks in _brand_buckets().items():
+            for k in ks:
+                brand_of[k] = lab
+        ok = _buy_ok_keys()
+        inv = _invest_index()
+        allk = set(fuel_of) | set(brand_of) | set(ok) | set(inv)
+        rows = [(k, fuel_of.get(k), brand_of.get(k), (k in ok), inv.get(k)) for k in allk]
+        if not rows:
+            return
+        conn = psycopg.connect(dburl, prepare_threshold=None, connect_timeout=20, autocommit=False)
+        try:
+            cur = conn.cursor()
+            cur.execute("CREATE TEMP TABLE _fcb(item_key text primary key, fuel text, brand text, car_ok boolean, invest_amount bigint)")
+            with cur.copy("COPY _fcb(item_key,fuel,brand,car_ok,invest_amount) FROM STDIN") as cp:
+                for r in rows:
+                    cp.write_row(r)
+            cur.execute("""UPDATE items i SET fuel=_fcb.fuel, brand=_fcb.brand, car_ok=_fcb.car_ok, invest_amount=_fcb.invest_amount
+                           FROM _fcb WHERE i.item_key=_fcb.item_key AND i.invest_amount IS NULL""")  # NULL(신규)만
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
+
+
 _invest_idx: dict = {"ts": 0.0, "map": None, "building": False}   # item_key -> 투자금(단기매도 선금=총필요금액−종소세). min_price+area_text 산출.
 
 
@@ -631,6 +671,7 @@ def _invest_warm() -> None:
         _invest_index(force=True)
     except Exception:
         pass
+    _filter_cols_backfill()          # 신규 물건 fuel/brand/car_ok/invest_amount 컬럼 백필(NULL만, 로컬 전용)
 
 
 # ── 규제 구분 색인(주소 기준) — 목록 규제필터용. _invest_index와 동일 패턴(30분 캐시 + Supabase 공유). ──
@@ -2146,12 +2187,12 @@ def auctions(
     _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로(IN-리스트 회피)
     _reg_use_col = reg in ("regulated", "metro", "none") and _reg_col_ready()  # reg 컬럼(백필) 있으면 컬럼 WHERE로 → 5천 item_key IN-리스트(2.5초) 대체
     _expbid_col = bool(type_filter) and set(type_filter) <= {"apt_expbid", "villa_expbid"}  # 백데이터 유형필터만 → expected_bid·est_price 컬럼 WHERE(usage는 프론트가 함께 전송). 아파트 0건고장·villa 15청크count(5.8초) 대체
-    item_keys = _combine_item_keys(_type_filter_keys(None if _expbid_col else type_filter), _fuel_filter_keys(fuel),
-                                   _brand_filter_keys(brand), _zone_filter_keys(zone),
+    item_keys = _combine_item_keys(_type_filter_keys(None if _expbid_col else type_filter), None,  # 연료=fuel 컬럼(아래)
+                                   None, _zone_filter_keys(zone),  # 브랜드=brand 컬럼(아래) / zone은 아직 키셋
                                    None if _use_col else _grade_filter_keys(grade),
-                                   _buy_ok_keys() if buy_ok else None,
+                                   None,  # 차량 매수양호 = car_ok 컬럼(아래 car_ok)
                                    None,  # 건물(전용)면적 = area_excl 숫자컬럼 WHERE로 처리(아래 barea_min/max) — 키셋(39.6초) 폐지
-                                   _invest_filter_keys(invest_min, invest_max),  # +투자금(min_price+면적 산출)
+                                   None,  # 투자금 = invest_amount 컬럼(아래 invest_min/max) — 키셋(1.8초) 폐지
                                    None if _reg_use_col else _reg_filter_keys(reg))   # 컬럼 쓰면 item_keys서 제외(폴백만 키셋)
     kw = dict(group=group, usages=usage, keyword=keyword,
               region=region, regions=regions, sido=sido, year=year, caseno=caseno, court=court, court_code=court_code,
@@ -2161,6 +2202,7 @@ def auctions(
               price_min=price_min, price_max=price_max,
               fail_min=fail_min, fail_max=fail_max,
               barea_min=barea_min, barea_max=barea_max,   # area_excl 숫자컬럼(백필) WHERE로 직접 필터(키셋 39.6초 → 0.15초)
+              fuel=fuel, brand=brand, car_ok=(True if buy_ok else None), invest_min=invest_min, invest_max=invest_max,  # 차량속성·투자금 컬럼 WHERE(키셋 폐지)
               has_expbid=(True if _expbid_col else None), has_est=(True if _expbid_col else None),  # 백데이터=예상낙찰·시세 컬럼 NOT NULL
               sell_from=sell_from, sell_to=sell_to)
     # 큰 item_keys(용도지역 등) 필터에서 목록·카운트를 병렬 실행하면 청크 IN-리스트 카운트가 0으로
@@ -2270,12 +2312,12 @@ def auction_stats(
             _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로
             _reg_use_col = reg in ("regulated", "metro", "none") and _reg_col_ready()  # reg 컬럼 있으면 컬럼 WHERE로(IN-리스트 회피)
             _expbid_col = bool(type_filter) and set(type_filter) <= {"apt_expbid", "villa_expbid"}  # 백데이터 = 컬럼 WHERE(물건통계도 동일)
-            item_keys = _combine_item_keys(_type_filter_keys(None if _expbid_col else type_filter), _fuel_filter_keys(fuel),
-                                           _brand_filter_keys(brand), _zone_filter_keys(zone),
+            item_keys = _combine_item_keys(_type_filter_keys(None if _expbid_col else type_filter), None,  # 연료=fuel 컬럼
+                                           None, _zone_filter_keys(zone),  # 브랜드=brand 컬럼 / zone은 키셋
                                            None if _use_col else _grade_filter_keys(grade),
-                                           _buy_ok_keys() if buy_ok else None,
-                                           None,  # 건물(전용)면적 = area_excl 숫자컬럼 WHERE로 처리(아래 barea_min/max) — 키셋(39.6초) 폐지
-                                           _invest_filter_keys(invest_min, invest_max),  # +투자금(min_price+면적 산출)
+                                           None,  # 차량 매수양호 = car_ok 컬럼
+                                           None,  # 건물(전용)면적 = area_excl 숫자컬럼 WHERE
+                                           None,  # 투자금 = invest_amount 컬럼
                                            None if _reg_use_col else _reg_filter_keys(reg))   # 컬럼 쓰면 item_keys서 제외(폴백만 키셋)
             c = auction_db.status_stats(
                 group=group, usages=usage, keyword=keyword, region=region, sido=sido, special=special,
@@ -2285,6 +2327,7 @@ def auction_stats(
                 price_min=price_min, price_max=price_max,
                 fail_min=fail_min, fail_max=fail_max,
                 barea_min=barea_min, barea_max=barea_max,   # area_excl 컬럼 WHERE(물건통계도 동일 적용)
+                fuel=fuel, brand=brand, car_ok=(True if buy_ok else None), invest_min=invest_min, invest_max=invest_max,  # 차량속성·투자금 컬럼
                 has_expbid=(True if _expbid_col else None), has_est=(True if _expbid_col else None),  # 백데이터 컬럼조건
                 sell_from=sell_from, sell_to=sell_to,
             )
