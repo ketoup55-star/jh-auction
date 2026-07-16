@@ -432,7 +432,8 @@ class SupabaseSource:
                  fail_min=None, fail_max=None, barea_min=None, barea_max=None,
                  sell_from=None, sell_to=None, buy_grade=None, reg=None,
                  has_expbid=None, has_est=None,
-                 fuel=None, brand=None, car_ok=None, invest_min=None, invest_max=None) -> list[tuple]:
+                 fuel=None, brand=None, car_ok=None, invest_min=None, invest_max=None, zone=None,
+                 over85_ok=None, deposit_unknown=None) -> list[tuple]:
         """PostgREST 필터를 (key,value) 튜플 리스트로. 같은 컬럼 범위(gte+lte) 지원."""
         if caseno:                     # 특정 사건번호 검색 = 상태·매각기일 무관하게 그 물건을 찾는다
             result_prefix = None       #  프론트가 기본 status=진행물건 + 매각기일범위(오늘~+3개월)를 항상 붙이는데,
@@ -468,6 +469,12 @@ class SupabaseSource:
             f.append(("invest_amount", f"gte.{invest_min}"))
         if invest_max is not None:
             f.append(("invest_amount", f"lte.{invest_max}"))
+        if zone:                               # 용도지역 — items.zone 컬럼(백필: _zone_build). 기존 _zone_filter_keys(detail_text 스캔 + 1249 IN-리스트·0.9초) 대체
+            f.append(("zone", f"eq.{zone}"))
+        if over85_ok:                          # 아파트 85초과+차익 — items.over85_ok 컬럼(백필: _apt_over85_compute). 키셋 IN-리스트 count(4.5초) 대체
+            f.append(("over85_ok", "is.true"))
+        if deposit_unknown:                    # 보증금미상 아파트 — items.deposit_unknown 컬럼(백필). 키셋 대체
+            f.append(("deposit_unknown", "is.true"))
         if special:                            # 특수물건: tags 부분일치(여러개=AND), '제외' 라벨은 NOT
             for s in special:
                 s = (s or "").strip()
