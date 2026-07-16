@@ -423,6 +423,14 @@ class SupabaseSource:
         # 유사거래 많은순 — 컬럼화된 similar_count로 DB 정렬(+item_key tiebreak=안정 페이지네이션).
         #  기존 main의 '전체 키 조회→_similar_cache 메모리 정렬→재조회'(3.6천건 15.5초)를 대체. NULL은 뒤로(기존 -1과 동일).
         "유사거래많은": "similar_count.desc.nullslast,item_key.asc",
+        # ★목록 위 정렬(준공·세대·주행·차익)도 items 컬럼으로 서버 전역정렬 — 클라이언트 재정렬(비동기 채움 중 순서 요동) 폐지.
+        "준공최신": "build_year.desc.nullslast,item_key.asc",
+        "준공오래된": "build_year.asc.nullslast,item_key.asc",
+        "세대많은": "households.desc.nullslast,item_key.asc",
+        "세대적은": "households.asc.nullslast,item_key.asc",
+        "주행적은": "mileage.asc.nullslast,item_key.asc",
+        "주행많은": "mileage.desc.nullslast,item_key.asc",
+        "차익높은": "profit.desc.nullslast,item_key.asc",
     }
 
     def _filters(self, *, group=None, usages=None, keyword=None, data_class="현황",

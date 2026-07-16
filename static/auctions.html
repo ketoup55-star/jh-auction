@@ -690,13 +690,18 @@ function buildQuery(){
   const p=filterParams();
   const _hasType=document.querySelectorAll('.tpchk:checked').length>0;   // 유형별 필터 켜면 과거(매각완료) 물건도 보이게 '진행물건'(기본값)만 자동 해제.
   if(!p.has('caseno') && selectedStatus && !(_hasType && selectedStatus==="진행물건"))p.set('status',selectedStatus);   // 사건번호 검색이면 상태필터도 해제(그 외엔 사용자가 고른 상태 반영)
-  const _sv=v('sort');
-  if(_sv){ p.set('sort',_sv); if(v('sort2'))p.set('sort2',v('sort2')); }
-  else {   // 기본: 사건번호순. 단 매각기일을 여러 날(범위)로 설정했으면 → 매각기일 우선 + 날짜 내 사건번호
-    if(v('sellFrom')!==v('sellTo')){ p.set('sort','매각기일'); p.set('sort2','사건번호'); }
+  // ★목록 위 정렬(준공·세대·주행·차익·유사거래)은 items 컬럼 기반 '서버 전역정렬'로 위임 — 클라이언트 재정렬(비동기 채움 중 요동) 폐지.
+  //  baedang/t3m은 서버응답에 즉시 실리는 값이라 클라 정렬 유지(요동 없음) → APTSRV에 없어 아래 else(검색폼 sort)로 감.
+  const _a1=v('aptSort1'), _a2=v('aptSort2');
+  const APTSRV={year_desc:'준공최신',year_asc:'준공오래된',hh_desc:'세대많은',hh_asc:'세대적은',km_asc:'주행적은',km_desc:'주행많은',diff_desc:'차익높은'};
+  if(_a1==='sim_desc'||_a2==='sim_desc'){ p.set('simsort','1'); }          // 유사거래 많은순
+  else if(APTSRV[_a1]){ p.set('sort',APTSRV[_a1]); if(APTSRV[_a2]) p.set('sort2',APTSRV[_a2]); }  // 준공·세대·주행·차익
+  else {
+    const _sv=v('sort');
+    if(_sv){ p.set('sort',_sv); if(v('sort2'))p.set('sort2',v('sort2')); }
+    else if(v('sellFrom')!==v('sellTo')){ p.set('sort','매각기일'); p.set('sort2','사건번호'); }  // 매각기일 범위면 매각기일 우선
     else { p.set('sort','사건번호'); }
   }
-  if(v('aptSort1')==='sim_desc'||v('aptSort2')==='sim_desc')p.set('simsort','1');  // 유사거래 많은순=서버 전역정렬
   p.set('limit',LIMIT); p.set('offset',offset);
   return p;
 }
@@ -1096,8 +1101,10 @@ function _aptCmp(key,a,b){
   return desc? (bv-av) : (av-bv);
 }
 function onAptSort(){
-  // 유사거래 많은순은 '전역' 정렬이라 서버 재검색(전체 필터셋을 서버가 정렬). 그 외(준공·세대·차익·배당·주행)는 현재 페이지 클라이언트 정렬.
-  if(v('aptSort1')==='sim_desc'||v('aptSort2')==='sim_desc'){ resetOffset(); doSearch(); }
+  // ★준공·세대·주행·차익·유사거래 = 서버 전역정렬(items 컬럼) → 재검색으로 서버가 정렬해 내려줌(클라 재정렬 폐지=요동 제거).
+  //  baedang·t3m만 서버응답 즉시값이라 현재 페이지 클라이언트 정렬(요동 없음).
+  var SRV=['sim_desc','year_desc','year_asc','hh_desc','hh_asc','km_asc','km_desc','diff_desc'];
+  if(SRV.indexOf(v('aptSort1'))>=0||SRV.indexOf(v('aptSort2'))>=0){ resetOffset(); doSearch(); }
   else _applyAptSortNow();          // 사용자 정렬 클릭은 즉시(디바운스 우회)
 }
 let _aptSortT=null;
@@ -1110,11 +1117,12 @@ function _applyAptSortNow(){
   const tbody=document.querySelector('.tbl tbody');
   if(!s1 || !tbody) return;
   const k1=s1.value, k2=s2?s2.value:'';
-  // 유사거래 많은순(sim_desc)은 서버가 전역 정렬해 순서대로 내려준다(similar_count.desc.nullslast,item_key).
-  //  여기서 클라이언트 재정렬을 하면, fillSimilar가 유사거래를 비동기 청크로 채우는 도중 아직 null인 행이
-  //  뒤로 밀렸다가 채워지며 앞으로 튀는 '중간 요동'이 생겨 '유사거래 많은순인데 중간에 작은 게 껴있다'로 보인다.
-  //  → sim_desc면 서버 순서를 무조건 유지(클라이언트 재정렬 안 함). 유사거래 많은순이 항상 우선.
-  if(k1==='sim_desc' || k2==='sim_desc') return;
+  // ★준공·세대·주행·차익·유사거래는 items 컬럼 기반 '서버 전역정렬'로 내려온다(buildQuery가 sort/simsort로 위임).
+  //  이들을 클라이언트가 재정렬하면, 준공/세대/주행/시세가 비동기로 채워지는 동안 데이터 없는 행이 뒤로 갔다
+  //  채워지며 앞으로 튀어 '순서 요동'이 생긴다(유사거래·차익에서 겪은 현상). → 서버 정렬 종류는 재정렬 안 함.
+  //  baedang·t3m만 서버응답 즉시값이라 클라 정렬 유지(요동 없음).
+  var SRV_SORTED=['sim_desc','year_desc','year_asc','hh_desc','hh_asc','km_asc','km_desc','diff_desc'];
+  if(SRV_SORTED.indexOf(k1)>=0 || SRV_SORTED.indexOf(k2)>=0) return;
   const rows=[...tbody.children];
   const idx=tr=>+(tr.dataset.idx||0);
   if(!k1 && !k2){ rows.sort((a,b)=>idx(a)-idx(b)); rows.forEach(r=>tbody.appendChild(r)); return; }

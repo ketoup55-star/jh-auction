@@ -546,6 +546,34 @@ def _area_col_backfill() -> None:
         print(f"[col_sync] area_excl 백필 실패: {str(e)[:80]}", flush=True)
 
 
+def _sort_cols_backfill() -> None:
+    """신규 물건의 정렬 컬럼(build_year·households·mileage) 백필 — api_cache brief·vehicle_specs에서.
+    목록 위 정렬(준공·세대·주행)이 서버 전역정렬(items 컬럼)로 동작하게 신선도 유지 → 클라 재정렬(요동) 폐지.
+    로컬 워머 전용(CLOUD_READER 쓰기금지), NULL(신규)만 UPDATE라 저비용."""
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        return
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return
+    try:
+        import psycopg
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            c.execute("SET lock_timeout='25s'")
+            r1 = c.execute("""UPDATE items i SET
+                build_year = NULLIF(regexp_replace(coalesce(ac.data->>'build_year',''),'[^0-9]','','g'),'')::smallint,
+                households = NULLIF(regexp_replace(coalesce(ac.data->>'households',''),'[^0-9]','','g'),'')::integer
+                FROM api_cache ac WHERE ac.cache_key = 'brief:'||i.item_key AND (ac.data->>'available')='true'
+                  AND i.build_year IS NULL""")
+            n1 = r1.rowcount
+            r2 = c.execute("""UPDATE items i SET mileage = vs.mileage_km FROM vehicle_specs vs
+                WHERE vs.item_key = i.item_key AND vs.mileage_km IS NOT NULL AND i.mileage IS NULL""")
+            n2 = r2.rowcount
+            if n1 or n2:
+                print(f"[col_sync] 정렬컬럼 백필: 준공/세대 {n1}행·주행 {n2}행(신규)", flush=True)
+    except Exception as e:
+        print(f"[col_sync] 정렬컬럼 백필 실패: {str(e)[:80]}", flush=True)
+
+
 def _area_warm() -> None:
     try:
         _area_index(force=True)
@@ -3880,6 +3908,7 @@ def _col_sync_loop() -> None:
         try:
             _area_col_backfill()
             _filter_cols_backfill()
+            _sort_cols_backfill()          # 정렬컬럼(준공·세대·주행) 신규 백필 — 목록 위 정렬 서버화 유지
         except Exception:
             pass
         _t.sleep(1200)          # 20분마다 변경분 동기화
