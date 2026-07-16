@@ -420,6 +420,9 @@ class SupabaseSource:
         "최저가높은": "min_price.desc.nullslast",
         "최저가낮은": "min_price.asc.nullslast",
         "유찰많은": "fail_count.desc.nullslast",
+        # 유사거래 많은순 — 컬럼화된 similar_count로 DB 정렬(+item_key tiebreak=안정 페이지네이션).
+        #  기존 main의 '전체 키 조회→_similar_cache 메모리 정렬→재조회'(3.6천건 15.5초)를 대체. NULL은 뒤로(기존 -1과 동일).
+        "유사거래많은": "similar_count.desc.nullslast,item_key.asc",
     }
 
     def _filters(self, *, group=None, usages=None, keyword=None, data_class="현황",

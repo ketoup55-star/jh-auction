@@ -2182,20 +2182,11 @@ def auctions(
     # 큰 item_keys(용도지역 등) 필터에서 목록·카운트를 병렬 실행하면 청크 IN-리스트 카운트가 0으로
     #  깨지는 경우가 있어, item_keys가 큰 경우는 순차 실행(작은 경우는 병렬 유지로 속도).
     if simsort:
-        # 유사거래 많은순: 필터셋 '전체' item_key를 _similar_cache(반경500m 카운트) 기준 전역 정렬 후 페이지.
-        # ⚠️ item_keys(유형필터/용도지역 등)를 _filters에 그대로 넣으면 큰 IN-리스트로 URL이 깨져 0건/에러 →
-        #    item_keys는 파이썬 교집합으로 처리(다른 필터만 _filters로).
-        kw2 = dict(kw); ikset = kw2.pop("item_keys", None)
-        if isinstance(ikset, (set, list)) and not any(v not in (None, [], "") for v in kw2.values()):
-            all_keys = list(ikset)                              # 유형필터만 → 키셋 그대로(쿼리 불필요)
-        else:
-            all_keys = auction_db.filtered_item_keys(**kw2)     # 지역·상태 등 다른 필터만 적용
-            if isinstance(ikset, (set, list)):
-                _s = set(ikset); all_keys = [k for k in all_keys if k in _s]
-        all_keys.sort(key=lambda k: _similar_cache.get(k, -1), reverse=True)
-        total = len(all_keys)
-        items = auction_db.summaries_by_keys(all_keys[offset:offset + limit])
-    elif isinstance(item_keys, set) and len(item_keys) > 250:
+        # 유사거래 많은순 = items.similar_count 컬럼으로 DB 정렬(ORDER BY)로 처리.
+        #  기존엔 필터셋 '전체' item_key(3.6천건)를 다 가져와 _similar_cache로 메모리 정렬 후 재조회 → 15.5초.
+        #  컬럼 정렬은 결과 동일(상위 349→282→…)하면서 40배 빠름. NULL은 nullslast(기존 -1 취급과 동일).
+        sort, sort2 = "유사거래많은", None
+    if isinstance(item_keys, set) and len(item_keys) > 250:
         items = auction_db.list_auctions(limit=limit, offset=offset, sort=sort, sort2=sort2, **kw)
         total = auction_db.count_filtered(**kw)
     else:
