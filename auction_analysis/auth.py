@@ -109,12 +109,20 @@ class UserStore:
 
     def _run(self, sql: str, params: tuple, fetch: Optional[str]):
         cur = self.conn.execute(sql, params)
+        # ★읽기도 반드시 트랜잭션 종료(commit). autocommit=False라 SELECT도 암묵 BEGIN을 열어,
+        #   안 닫으면 커넥션이 'idle in transaction'으로 방치→pooler 커넥션 점유·풀 고갈→타 요청 커넥션 대기(간헐 1초+).
+        #   (읽기전용이라 commit=rollback과 동일 효과, 트랜잭션만 닫음.)
         if fetch == "one":
-            return cur.fetchone()
+            row = cur.fetchone()
+            self.conn.commit()
+            return row
         if fetch == "all":
-            return cur.fetchall()
+            rows = cur.fetchall()
+            self.conn.commit()
+            return rows
         if fetch == "val":
             row = cur.fetchone()
+            self.conn.commit()
             if not row:
                 return None
             return next(iter(row.values()))
