@@ -1110,6 +1110,11 @@ function _applyAptSortNow(){
   const tbody=document.querySelector('.tbl tbody');
   if(!s1 || !tbody) return;
   const k1=s1.value, k2=s2?s2.value:'';
+  // 유사거래 많은순(sim_desc)은 서버가 전역 정렬해 순서대로 내려준다(similar_count.desc.nullslast,item_key).
+  //  여기서 클라이언트 재정렬을 하면, fillSimilar가 유사거래를 비동기 청크로 채우는 도중 아직 null인 행이
+  //  뒤로 밀렸다가 채워지며 앞으로 튀는 '중간 요동'이 생겨 '유사거래 많은순인데 중간에 작은 게 껴있다'로 보인다.
+  //  → sim_desc면 서버 순서를 무조건 유지(클라이언트 재정렬 안 함). 유사거래 많은순이 항상 우선.
+  if(k1==='sim_desc' || k2==='sim_desc') return;
   const rows=[...tbody.children];
   const idx=tr=>+(tr.dataset.idx||0);
   if(!k1 && !k2){ rows.sort((a,b)=>idx(a)-idx(b)); rows.forEach(r=>tbody.appendChild(r)); return; }
