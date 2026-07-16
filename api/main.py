@@ -539,9 +539,11 @@ def _area_col_backfill() -> None:
                r"substring(area_text from '전용[[:space:]]*([0-9]+\.?[0-9]*)')::double precision "
                r"WHERE area_excl IS NULL AND area_text ~ '전용[[:space:]]*[0-9]'")
         with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
-            c.execute(sql)
-    except Exception:
-        pass
+            _cur = c.execute(sql)
+            if _cur.rowcount:
+                print(f"[col_sync] area_excl 백필 {_cur.rowcount}행(신규)", flush=True)
+    except Exception as e:
+        print(f"[col_sync] area_excl 백필 실패: {str(e)[:80]}", flush=True)
 
 
 def _area_warm() -> None:
@@ -599,11 +601,13 @@ def _filter_cols_backfill() -> None:
             cur.execute("UPDATE items SET over85_ok=NULL, deposit_unknown=NULL, zone=NULL WHERE over85_ok IS NOT NULL OR deposit_unknown IS NOT NULL OR zone IS NOT NULL")
             cur.execute("""UPDATE items i SET over85_ok=_fcb.over85_ok, deposit_unknown=_fcb.deposit_unknown, zone=_fcb.zone
                            FROM _fcb WHERE i.item_key=_fcb.item_key AND (_fcb.over85_ok OR _fcb.deposit_unknown OR _fcb.zone IS NOT NULL)""")
+            _mem = cur.rowcount
             conn.commit()
+            print(f"[col_sync] 필터컬럼 재동기: 멤버십 {_mem}행 set (over85={len(over85)}/deposit={len(deposit)}/zone={len(zone_of)})", flush=True)
         finally:
             conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[col_sync] 필터컬럼 백필 실패: {str(e)[:80]}", flush=True)
 
 
 _invest_idx: dict = {"ts": 0.0, "map": None, "building": False}   # item_key -> 투자금(단기매도 선금=총필요금액−종소세). min_price+area_text 산출.
