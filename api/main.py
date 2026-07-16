@@ -618,6 +618,7 @@ def _filter_cols_backfill() -> None:
         try:
             cur = conn.cursor()
             cur.execute("SET lock_timeout='25s'")
+            cur.execute("DROP TABLE IF EXISTS _fcb")   # Supabase pooler 커넥션 재사용 시 이전 세션 temp가 잔존 → 'already exists' 간헐실패 회피
             cur.execute("CREATE TEMP TABLE _fcb(item_key text primary key, fuel text, brand text, car_ok boolean, invest_amount bigint, over85_ok boolean, deposit_unknown boolean, zone text)")
             with cur.copy("COPY _fcb(item_key,fuel,brand,car_ok,invest_amount,over85_ok,deposit_unknown,zone) FROM STDIN") as cp:
                 for r in rows:
