@@ -42,7 +42,7 @@ httpx.post = _shared_httpx_post
 from fastapi import (FastAPI, HTTPException, Query, Depends, Response, Cookie, Body,
                      Request, UploadFile, File, Form)
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse
+from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse, ORJSONResponse
 from pydantic import BaseModel, Field
 
 from auction_analysis import (
@@ -57,7 +57,7 @@ from .serializers import (
     listing_summary, analysis_to_dict, distribution_to_dict, compute_stats,
 )
 
-app = FastAPI(title="경매 정보 API", version="0.1.0")
+app = FastAPI(title="경매 정보 API", version="0.1.0", default_response_class=ORJSONResponse)  # orjson=표준 json보다 3~5배 빠른 직렬화(150건 172KB 응답 CPU 절감→2vCPU 동시처리량↑)
 
 
 @app.middleware("http")
