@@ -506,11 +506,31 @@ def _barea_filter_keys(bmin, bmax) -> Optional[set]:
     return out
 
 
+def _area_col_backfill() -> None:
+    """신규 물건(items.area_excl NULL)만 전용면적 백필 — area_text의 '전용 NN' 파싱해 숫자컬럼에 채움.
+    barea 컬럼필터(area_excl WHERE)가 새 물건도 잡게 신선도 유지. 로컬 워머 전용(CLOUD_READER 쓰기금지), NULL만 UPDATE라 저비용."""
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        return
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return
+    try:
+        import psycopg
+        sql = (r"UPDATE items SET area_excl = "
+               r"substring(area_text from '전용[[:space:]]*([0-9]+\.?[0-9]*)')::double precision "
+               r"WHERE area_excl IS NULL AND area_text ~ '전용[[:space:]]*[0-9]'")
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            c.execute(sql)
+    except Exception:
+        pass
+
+
 def _area_warm() -> None:
     try:
         _area_index(force=True)
     except Exception:
         pass
+    _area_col_backfill()             # 신규 물건 area_excl 컬럼 백필(NULL만, 로컬 전용)
 
 
 _invest_idx: dict = {"ts": 0.0, "map": None, "building": False}   # item_key -> 투자금(단기매도 선금=총필요금액−종소세). min_price+area_text 산출.
@@ -1261,85 +1281,47 @@ def _apt_senior_lease_keys() -> set:
 
 
 def _apt_expbid_keys() -> set:
-    """아파트 중 예상낙찰가(동일건물 매각사례 평균)가 산출된 물건 item_key 집합 — '아파트:백데이터' 필터용."""
-    keys, off = [], 0
+    """아파트 중 예상낙찰가+시세 있는 item_key 집합 — '아파트:백데이터' 필터.
+    items.expected_bid·est_price 컬럼(로컬 워머 백필)로 단일 쿼리. 기존 '전체 페이지네이션 + expbid캐시
+    200개씩 다왕복 + est 재조회'(클라우드 읽기경로 불일치로 0건 고장·2.9초)를 대체 — 909건 복구·0.2초."""
+    keys: set = set()
+    off = 0
     while True:
         try:
             r = auction_db._get("items", {"select": "item_key", "data_class": "eq.현황",
-                                          "usage_name": "ilike.*아파트*", "limit": "1000", "offset": str(off)})
+                                          "usage_name": "ilike.*아파트*",
+                                          "expected_bid": "not.is.null", "est_price": "not.is.null",
+                                          "limit": "1000", "offset": str(off)})
             rows = r.json() if r.status_code in (200, 206) else []
         except Exception:
             break
-        keys += [x["item_key"] for x in rows if x.get("item_key")]
+        keys.update(x["item_key"] for x in rows if x.get("item_key"))
         if len(rows) < 1000:
             break
         off += 1000
-    match: set = set()
-    for i in range(0, len(keys), 200):
-        ch = keys[i:i + 200]
-        try:
-            cc = auction_db.cache_get_many(["expbid:" + k for k in ch])
-        except Exception:
-            cc = {}
-        for k in ch:
-            v = cc.get("expbid:" + k)
-            if isinstance(v, dict) and v.get("v") == _EXPBID_V and v.get("available"):
-                match.add(k)
-    # 시세(추정시세) 없는 물건은 백데이터 필터에서 제외 — 시세 있는 것만(주인님 요청 2026-06-30)
-    if match:
-        ml = list(match); match = set()
-        for i in range(0, len(ml), 150):
-            ch = ml[i:i + 150]
-            try:
-                ests = auction_apt_ests(",".join(ch), compute=False)
-            except Exception:
-                ests = {}
-            for k in ch:
-                v = ests.get(k)
-                if isinstance(v, dict) and v.get("price"):
-                    match.add(k)
-    return match
+    return keys
 
 
 def _villa_expbid_keys() -> set:
-    """빌라/도생 중 예상낙찰가(반경1km)가 산출된 물건 item_key 집합 — '빌라:백데이터' 필터용."""
-    keys, off = [], 0
+    """빌라/도생 중 예상낙찰가+시세 있는 item_key 집합 — '빌라:백데이터' 필터.
+    items.expected_bid·est_price 컬럼(로컬 워머 백필)로 단일 쿼리 — 기존 전체 페이지네이션+vexpbid캐시
+    다왕복+villa_ests 재조회(1.7초) 대체. 결과 동일(3,724건)·훨씬 빠름."""
+    keys: set = set()
+    off = 0
     while True:
         try:
             r = auction_db._get("items", {"select": "item_key", "data_class": "eq.현황",
-                                          "or": _VILLA_OR, "limit": "1000", "offset": str(off)})
+                                          "or": _VILLA_OR,
+                                          "expected_bid": "not.is.null", "est_price": "not.is.null",
+                                          "limit": "1000", "offset": str(off)})
             rows = r.json() if r.status_code in (200, 206) else []
         except Exception:
             break
-        keys += [x["item_key"] for x in rows if x.get("item_key")]
+        keys.update(x["item_key"] for x in rows if x.get("item_key"))
         if len(rows) < 1000:
             break
         off += 1000
-    match: set = set()
-    for i in range(0, len(keys), 200):
-        ch = keys[i:i + 200]
-        try:
-            cc = auction_db.cache_get_many(["vexpbid:" + k for k in ch])
-        except Exception:
-            cc = {}
-        for k in ch:
-            v = cc.get("vexpbid:" + k)
-            if isinstance(v, dict) and v.get("v") == _VEXPBID_V and v.get("available"):
-                match.add(k)
-    # 시세(추정시세) 없는 물건은 백데이터 필터에서 제외 — 시세 있는 것만(주인님 요청 2026-06-30)
-    if match:
-        ml = list(match); match = set()
-        for i in range(0, len(ml), 100):                 # villa_ests는 keys 120개 캡 → 100씩
-            ch = ml[i:i + 100]
-            try:
-                ests = auction_villa_ests(",".join(ch), compute=False)
-            except Exception:
-                ests = {}
-            for k in ch:
-                v = ests.get(k)
-                if isinstance(v, dict) and v.get("price"):
-                    match.add(k)
-    return match
+    return keys
 
 
 def _car_expbid_keys() -> set:
@@ -2163,11 +2145,12 @@ def auctions(
         group = usage = keyword = region = regions = sido = court = court_code = status = None
     _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로(IN-리스트 회피)
     _reg_use_col = reg in ("regulated", "metro", "none") and _reg_col_ready()  # reg 컬럼(백필) 있으면 컬럼 WHERE로 → 5천 item_key IN-리스트(2.5초) 대체
-    item_keys = _combine_item_keys(_type_filter_keys(type_filter), _fuel_filter_keys(fuel),
+    _expbid_col = bool(type_filter) and set(type_filter) <= {"apt_expbid", "villa_expbid"}  # 백데이터 유형필터만 → expected_bid·est_price 컬럼 WHERE(usage는 프론트가 함께 전송). 아파트 0건고장·villa 15청크count(5.8초) 대체
+    item_keys = _combine_item_keys(_type_filter_keys(None if _expbid_col else type_filter), _fuel_filter_keys(fuel),
                                    _brand_filter_keys(brand), _zone_filter_keys(zone),
                                    None if _use_col else _grade_filter_keys(grade),
                                    _buy_ok_keys() if buy_ok else None,
-                                   _barea_filter_keys(barea_min, barea_max),  # +건물면적(area_text 전용 파싱)
+                                   None,  # 건물(전용)면적 = area_excl 숫자컬럼 WHERE로 처리(아래 barea_min/max) — 키셋(39.6초) 폐지
                                    _invest_filter_keys(invest_min, invest_max),  # +투자금(min_price+면적 산출)
                                    None if _reg_use_col else _reg_filter_keys(reg))   # 컬럼 쓰면 item_keys서 제외(폴백만 키셋)
     kw = dict(group=group, usages=usage, keyword=keyword,
@@ -2177,7 +2160,8 @@ def auctions(
               appraisal_min=appraisal_min, appraisal_max=appraisal_max,
               price_min=price_min, price_max=price_max,
               fail_min=fail_min, fail_max=fail_max,
-              barea_min=None, barea_max=None,   # building_area 컬럼은 NULL이라 위 키셋으로 대체(컬럼필터 끔)
+              barea_min=barea_min, barea_max=barea_max,   # area_excl 숫자컬럼(백필) WHERE로 직접 필터(키셋 39.6초 → 0.15초)
+              has_expbid=(True if _expbid_col else None), has_est=(True if _expbid_col else None),  # 백데이터=예상낙찰·시세 컬럼 NOT NULL
               sell_from=sell_from, sell_to=sell_to)
     # 큰 item_keys(용도지역 등) 필터에서 목록·카운트를 병렬 실행하면 청크 IN-리스트 카운트가 0으로
     #  깨지는 경우가 있어, item_keys가 큰 경우는 순차 실행(작은 경우는 병렬 유지로 속도).
@@ -2285,11 +2269,12 @@ def auction_stats(
         try:
             _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로
             _reg_use_col = reg in ("regulated", "metro", "none") and _reg_col_ready()  # reg 컬럼 있으면 컬럼 WHERE로(IN-리스트 회피)
-            item_keys = _combine_item_keys(_type_filter_keys(type_filter), _fuel_filter_keys(fuel),
+            _expbid_col = bool(type_filter) and set(type_filter) <= {"apt_expbid", "villa_expbid"}  # 백데이터 = 컬럼 WHERE(물건통계도 동일)
+            item_keys = _combine_item_keys(_type_filter_keys(None if _expbid_col else type_filter), _fuel_filter_keys(fuel),
                                            _brand_filter_keys(brand), _zone_filter_keys(zone),
                                            None if _use_col else _grade_filter_keys(grade),
                                            _buy_ok_keys() if buy_ok else None,
-                                           _barea_filter_keys(barea_min, barea_max),  # +건물면적(area_text 전용 파싱)
+                                           None,  # 건물(전용)면적 = area_excl 숫자컬럼 WHERE로 처리(아래 barea_min/max) — 키셋(39.6초) 폐지
                                            _invest_filter_keys(invest_min, invest_max),  # +투자금(min_price+면적 산출)
                                            None if _reg_use_col else _reg_filter_keys(reg))   # 컬럼 쓰면 item_keys서 제외(폴백만 키셋)
             c = auction_db.status_stats(
@@ -2299,7 +2284,8 @@ def auction_stats(
                 appraisal_min=appraisal_min, appraisal_max=appraisal_max,
                 price_min=price_min, price_max=price_max,
                 fail_min=fail_min, fail_max=fail_max,
-                barea_min=None, barea_max=None,   # building_area 컬럼 NULL → 위 키셋으로 대체
+                barea_min=barea_min, barea_max=barea_max,   # area_excl 컬럼 WHERE(물건통계도 동일 적용)
+                has_expbid=(True if _expbid_col else None), has_est=(True if _expbid_col else None),  # 백데이터 컬럼조건
                 sell_from=sell_from, sell_to=sell_to,
             )
             if len(_stats_cache) > 500:            # 무한증식 방지(희귀 필터 조합 누적)
