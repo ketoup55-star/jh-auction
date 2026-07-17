@@ -432,10 +432,9 @@ function addLocation(){
   var q=[sd,gu,de].filter(Boolean).join(' ');    // 백엔드 regions용(토큰 AND)
   if(_locations.some(function(l){return l.q===q;})) return;   // 중복 방지
   _locations.push({label:label, q:q});
-  renderLocChips();
-  if(typeof search==='function') search();   // 칩 추가 즉시 필터 반영
+  renderLocChips();   // 칩은 '검색조건 편집'일 뿐 — 조회는 [검색하기]로만(경매 auctions.html과 동일). 자동 search() 금지.
 }
-function removeLocation(i){ _locations.splice(i,1); renderLocChips(); if(typeof search==='function') search(); }
+function removeLocation(i){ _locations.splice(i,1); renderLocChips(); }
 function renderLocChips(){
   document.getElementById('locChips').innerHTML=_locations.map(function(l,i){
     return '<span class="loc-chip">'+escHtml(l.label)+'<b onclick="removeLocation('+i+')" title="삭제">×</b></span>';
@@ -452,10 +451,9 @@ function addUsage(){
   var label=sc?sc:(LCLS_LABEL[lc]||lc);
   if(_usages.some(function(u){return u.q===val;})) return;   // 중복 방지
   _usages.push({label:label, q:val});
-  renderUsgChips();
-  if(typeof search==='function') search();   // 칩 추가 즉시 필터 반영(검색 재클릭 불필요)
+  renderUsgChips();   // 칩은 '검색조건 편집'일 뿐 — 조회는 [검색하기]로만(경매 auctions.html과 동일). 자동 search() 금지.
 }
-function removeUsage(i){ _usages.splice(i,1); renderUsgChips(); if(typeof search==='function') search(); }
+function removeUsage(i){ _usages.splice(i,1); renderUsgChips(); }
 function renderUsgChips(){
   document.getElementById('usgChips').innerHTML=_usages.map(function(u,i){
     return '<span class="loc-chip">'+escHtml(u.label)+'<b onclick="removeUsage('+i+')" title="삭제">×</b></span>';
