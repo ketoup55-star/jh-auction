@@ -1271,14 +1271,20 @@ async function doSearch(){
     document.getElementById("grid").innerHTML=`<div class="scrollx"><table class="tbl"><thead><tr>
       <th style="width:44px">선택</th><th style="width:108px">법원명<br>사건번호</th><th>소재지</th><th style="width:132px">용도</th><th style="width:168px">감정가<br>최저가<br>[낙찰가]</th><th style="width:106px">매각기일<br>[입찰인원]</th><th style="width:92px">결과<br>유찰수 %</th><th style="width:54px">조회</th>
     </tr></thead><tbody>${rows}</tbody></table></div>`;
-    prefillFromResponse(d.items);  // 서버가 응답에 실어준 캐시값(준공/시세/유사거래/판정)을 첫 페인트에 즉시 채움
+    prefillFromResponse(d.items);  // 서버가 응답에 실어준 캐시값(준공/시세/유사거래/판정)을 첫 페인트에 즉시 채움 — 목록은 이걸로 완성됨
     applyBuyFilter();  // 필터 활성 상태면 재검색 결과에도 즉시 적용(등급 로딩 후 fillAptBriefs가 재적용)
-    fillAptBriefs();   // 주거용 행에 준공년도·세대수 비동기 채움(응답에 없던 미캐시만)
-    fillEncarAvgs();   // 차량외 행에 엔카 평균시세·차익 비동기 채움
-    fillEstimates();   // 주거용(아파트) 행에 추정시세 비동기 채움
-    fillVillaEstimates(); // 빌라/연립/도시형 행에 추정시세(공시가격×요율) 비동기 채움
-    fillGrades();      // 주거용 행에 매수판정(양호/검토/금지) 배지 비동기 채움
-    fillKbCounts();    // 아파트 행에 호가 매물(동일평형 KB) 수 비동기 채움
+    // ★목록(스피너)을 최우선으로: 미캐시 enrich(브리핑·시세·판정·호가)는 목록 페인트 '후'로 지연 발사.
+    //  이 8개를 검색과 동시에 쏘면 2vCPU 서버가 경합해 목록 fetch가 0.34초→3.2초로 밀린다(브라우저 실측).
+    //  연속 검색(용도 전환 등) 시 이전 enrich 타이머를 취소 → 목록 fetch끼리 CPU 경합 제거 → 로딩 급개선.
+    if(window._enrichT) clearTimeout(window._enrichT);
+    window._enrichT=setTimeout(function(){
+      fillAptBriefs();   // 주거용 행에 준공년도·세대수 비동기 채움(응답에 없던 미캐시만)
+      fillEncarAvgs();   // 차량외 행에 엔카 평균시세·차익
+      fillEstimates();   // 주거용(아파트) 추정시세
+      fillVillaEstimates(); // 빌라/연립/도시형 추정시세(공시가격×요율 — 무거움)
+      fillGrades();      // 주거용 매수판정(양호/검토/금지) 배지
+      fillKbCounts();    // 아파트 호가 매물(동일평형 KB) 수
+    }, 300);
   }
   const sa=document.getElementById("selectAll"); if(sa) sa.checked=false;
   const pn=Math.floor(offset/LIMIT)+1, pages=Math.max(1,Math.ceil(d.total/LIMIT));
