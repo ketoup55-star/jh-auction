@@ -559,11 +559,14 @@ def _sort_cols_backfill() -> None:
         import psycopg
         with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
             c.execute("SET lock_timeout='25s'")
+            # ★건축물대장(brief) 우선 — 스피드옥션 보존등기일(detail_text)이 실제 준공과 다른 경우(예: 근린 2003 vs 대장 1990)를
+            #   건축물대장 사용승인일로 '교정'. brief에 4자리 연도가 있으면 detail로 채운 값도 덮어써 정확도 확보(예열되는 대로 자동).
             r1 = c.execute("""UPDATE items i SET
-                build_year = NULLIF(regexp_replace(coalesce(ac.data->>'build_year',''),'[^0-9]','','g'),'')::smallint,
-                households = NULLIF(regexp_replace(coalesce(ac.data->>'households',''),'[^0-9]','','g'),'')::integer
+                build_year = NULLIF(regexp_replace(ac.data->>'build_year','[^0-9]','','g'),'')::smallint,
+                households = COALESCE(NULLIF(regexp_replace(coalesce(ac.data->>'households',''),'[^0-9]','','g'),'')::integer, i.households)
                 FROM api_cache ac WHERE ac.cache_key = 'brief:'||i.item_key AND (ac.data->>'available')='true'
-                  AND i.build_year IS NULL""")
+                  AND ac.data->>'build_year' ~ '[0-9]{4}'
+                  AND i.build_year IS DISTINCT FROM NULLIF(regexp_replace(ac.data->>'build_year','[^0-9]','','g'),'')::smallint""")
             n1 = r1.rowcount
             r2 = c.execute("""UPDATE items i SET mileage = vs.mileage_km FROM vehicle_specs vs
                 WHERE vs.item_key = i.item_key AND vs.mileage_km IS NOT NULL AND i.mileage IS NULL""")
