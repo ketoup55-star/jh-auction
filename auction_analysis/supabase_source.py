@@ -592,12 +592,13 @@ class SupabaseSource:
         if barea_max is not None:
             f.append(("area_excl", f"lte.{barea_max}"))
         # (제거) 예전 building_area(gte/lte) — building_area는 '120.68㎡ (36.51평)' 텍스트라 숫자비교 불가(0건 유발). area_excl로 대체.
-        # 매각기일 범위(sell_date는 'YYYY-MM-DD (…)' 텍스트 → 문자열 비교).
-        #   상한은 해당 날짜 종일 포함 위해 '~'(공백보다 큰 문자) 부가.
+        # 매각기일 범위 — sell_date_d(날짜 컬럼, 트리거 유지)로 필터. 정렬도 sell_date_d(매각기일순)라 컬럼 통일.
+        #   기존 sell_date(텍스트) 필터는 sell_date_d 정렬 인덱스가 과거부터 낭비 스캔(콜드 힙 969→매각기일 정렬만 3.45초·간헐 500)
+        #   → sell_date_d 범위로 통일하면 부분인덱스(idx_items_active_selldate_cs)가 범위만 스캔(힙 409·과거 스킵).
         if sell_from:
-            f.append(("sell_date", f"gte.{sell_from}"))
+            f.append(("sell_date_d", f"gte.{sell_from}"))
         if sell_to:
-            f.append(("sell_date", f"lte.{sell_to}~"))
+            f.append(("sell_date_d", f"lte.{sell_to}"))
         # ⚠️ PostgREST는 root-level or= 파라미터를 '하나만' 허용. or 그룹이 2개↑(예: 복수소재지 regions +
         #  진행물건 status, 또는 시/도 sido + status)면 or=X&or=Y가 되어 422로 실패한다.
         #  → and=(or(X),or(Y)) 로 묶어 각 or 그룹을 AND로 결합(= 지역들 중 하나 그리고 진행물건).
