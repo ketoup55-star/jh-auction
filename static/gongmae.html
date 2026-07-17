@@ -477,6 +477,12 @@ function gmParams(page){
   const pr=document.getElementById("prop").value; p.set("prop",pr);   // 빈값=전체(명시 전송)
   const g=document.getElementById("goods").value.trim(); if(g)p.set("goods",g);
   const dp=document.getElementById("dpsl").value; if(dp)p.set("dpsl_mtd",dp);
+  // 온비드 원본에 값이 있는 필터들(과거 폼만 있고 전송 누락돼 미작동이던 것 복구)
+  const bm=document.getElementById("bidmtd").value; if(bm)p.set("bid_method",bm);          // 입찰방식(일반경쟁/제한경쟁/수의계약/지명경쟁 = data.bid_method)
+  const mn=document.getElementById("manageNo").value.trim(); if(mn)p.set("manage_no",mn);   // 물건관리번호(manage_no ilike)
+  const bf=document.getElementById("bidFrom").value; if(bf)p.set("bid_from",bf);            // 입찰일자(마감 bid_close 기준 범위)
+  const bt=document.getElementById("bidTo").value; if(bt)p.set("bid_to",bt);
+  const rs=document.getElementById("result").value; if(rs&&rs!=="전체")p.set("result",rs); // 입찰결과: 진행물건(bid_close 미래)/종결물건(과거). 기본 진행물건→마감건 자동 제외
   // 소재지: +버튼 칩(복수)이 있으면 regions[](지역끼리 OR), 없으면 단일 드롭다운 폴백(sido/sgg)
   if(_locations.length){
     _locations.forEach(function(l){ p.append('regions', l.q); });

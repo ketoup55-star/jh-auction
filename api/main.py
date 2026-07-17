@@ -5639,6 +5639,9 @@ def _gm_region_usage_filters(*, regions=None, sido=None, sgg=None, usages=None,
 @app.get("/gongmae")
 def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
                  prop: Optional[str] = "압류재산", dpsl_mtd: Optional[str] = None,
+                 bid_method: Optional[str] = None, manage_no: Optional[str] = None,
+                 bid_from: Optional[str] = None, bid_to: Optional[str] = None,
+                 result: Optional[str] = None,   # 진행물건(bid_close 미래)/종결물건(과거)
                  usg_lcls: Optional[str] = None, goods: Optional[str] = None,
                  sido: Optional[str] = None, sgg: Optional[str] = None,
                  usage: Optional[str] = None,
@@ -5664,6 +5667,22 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
             conds.append(("name", "ilike", f"*{goods}*"))
         if dpsl_mtd:
             conds.append(("disposal", "ilike", f"*{dpsl_mtd}*"))
+        # 입찰방식(온비드 data.bid_method) — 일반경쟁/제한경쟁/수의계약/지명경쟁
+        if bid_method:
+            conds.append(("data->>bid_method", "eq", bid_method))
+        # 물건관리번호(부분일치)
+        if manage_no:
+            conds.append(("manage_no", "ilike", f"*{manage_no}*"))
+        # 입찰일자 = 입찰마감(bid_close) 기준 범위. bid_close는 text 'YYYY-MM-DD HH:MM'라 문자열 비교(고정폭이라 정확).
+        if bid_from:
+            conds.append(("bid_close", "gte", str(bid_from)[:10]))
+        if bid_to:
+            conds.append(("bid_close", "lte", str(bid_to)[:10] + " 23:59"))
+        # 입찰결과: 진행물건=마감 안 지난 것 / 종결물건=지난 것. (온비드 data엔 유찰 정보 없어 마감시각 기준)
+        if result in ("진행물건", "종결물건"):
+            from datetime import datetime as _dt
+            _now = _dt.now().strftime("%Y-%m-%d %H:%M")
+            conds.append(("bid_close", "gte" if result == "진행물건" else "lt", _now))
         if appr_min is not None:
             conds.append(("appraisal_price", "gte", str(int(appr_min))))
         if appr_max is not None:
