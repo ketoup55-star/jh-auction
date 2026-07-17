@@ -562,12 +562,19 @@ class SupabaseSource:
             else:
                 f.append(("court_code", f"eq.{court_code}"))
         if result_prefix:
-            grp = _STATUS_GROUPS.get(result_prefix)
-            if grp:                            # 그룹옵션(진행물건/종결물건 등) → 여러 상태 OR 매칭
-                ors = ",".join(f"result.like.{s}*" for s in grp)
-                f.append(("or", f"({ors})"))
+            if result_prefix == "진행물건":
+                # 진행물건(신건/유찰/재진행/재매각) = is_active 컬럼(set_case_sort 트리거가 자동유지).
+                #  기존 result LIKE 4개 OR는 idx_items_hh_result bitmap으로 22k 힙블록 스캔(콜드 2~5초) →
+                #  is_active 단순조건이 planner를 usage/매각기일 인덱스로 유도(디스크읽기 3087→251블록).
+                #  or 파라미터도 안 써서 sido+status 조합의 and=() 묶음도 단순화.
+                f.append(("is_active", "is.true"))
             else:
-                f.append(("result", f"like.{result_prefix}*"))
+                grp = _STATUS_GROUPS.get(result_prefix)
+                if grp:                        # 그룹옵션(종결물건 등) → 여러 상태 OR 매칭
+                    ors = ",".join(f"result.like.{s}*" for s in grp)
+                    f.append(("or", f"({ors})"))
+                else:
+                    f.append(("result", f"like.{result_prefix}*"))
         if appraisal_min is not None:
             f.append(("appraisal_price", f"gte.{appraisal_min}"))
         if appraisal_max is not None:
