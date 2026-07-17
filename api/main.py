@@ -568,8 +568,19 @@ def _sort_cols_backfill() -> None:
             r2 = c.execute("""UPDATE items i SET mileage = vs.mileage_km FROM vehicle_specs vs
                 WHERE vs.item_key = i.item_key AND vs.mileage_km IS NOT NULL AND i.mileage IS NULL""")
             n2 = r2.rowcount
-            if n1 or n2:
-                print(f"[col_sync] 정렬컬럼 백필: 준공/세대 {n1}행·주행 {n2}행(신규)", flush=True)
+            # 건축물대장(brief)에 준공년도 없으면 detail_text(스피드옥션 감정평가 요약)의 사용승인일/보존등기일에서 폴백.
+            #  스피드옥션 상세에 '(사용승인일 : YYYY..)' 또는 '소유권 보존등기일 YYYY'가 주거용 98%에 있어, 건축물대장
+            #  예열 전에도 준공년도가 채워짐. 현황·주거용·NULL만이라 신규 물건 소량 스캔(저비용).
+            r3 = c.execute(r"""UPDATE items SET build_year = COALESCE(
+                 substring(detail_text from '사용승인[일자]*[^0-9]{0,8}((19|20)[0-9]{2})'),
+                 substring(detail_text from '((19|20)[0-9]{2})[^0-9]{0,14}사용승인'),
+                 substring(detail_text from '소유권\s*보존등기일\s*((19|20)[0-9]{2})')
+               )::smallint
+               WHERE build_year IS NULL AND data_class='현황' AND search_group='주거용' AND detail_text IS NOT NULL
+                 AND (detail_text ~ '사용승인' OR detail_text ~ '소유권\s*보존등기일')""")
+            n3 = r3.rowcount
+            if n1 or n2 or n3:
+                print(f"[col_sync] 정렬컬럼 백필: 준공/세대 {n1}행·주행 {n2}행·준공(상세) {n3}행(신규)", flush=True)
     except Exception as e:
         print(f"[col_sync] 정렬컬럼 백필 실패: {str(e)[:80]}", flush=True)
 
