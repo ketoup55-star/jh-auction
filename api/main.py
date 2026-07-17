@@ -5650,6 +5650,7 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
                  appr_min: Optional[int] = None, appr_max: Optional[int] = None,
                  low_min: Optional[int] = None, low_max: Optional[int] = None,
                  grade: Optional[str] = None,
+                 zone: Optional[str] = None,   # 토지이용계획(용도지역) — zone 컬럼(좌표→V-World landuse 백필)
                  reg: Optional[str] = Query(None, description="규제 구분(regulated/metro/none) — reg 컬럼 백필 후 활성"),
                  sort: Optional[str] = None, sort2: Optional[str] = None) -> dict:
     """온비드 공매물건 목록 — 우리 DB(gongmae_items) 소재지/재산유형/명칭/감정가·최저가/정렬 필터.
@@ -5693,6 +5694,8 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
             conds.append(("min_price", "lte", str(int(low_max))))
         if grade:                                           # 매수판정 서버필터(매수양호/검토/금지) — 100건 채운 해당등급만(클라 필터는 현재페이지만 걸러 <10건 문제)
             conds.append(("buy_grade", "eq", grade))
+        if zone:                                            # 토지이용계획(용도지역) — zone 컬럼 WHERE(좌표→V-World landuse 백필값). 인덱스(prop_type,zone)
+            conds.append(("zone", "eq", zone))
         # ② 소재지(복수)·용도(복수) → or 그룹(들) (경매 검증 로직 이식). legacy sido/sgg/usage 도 흡수.
         ru = _gm_region_usage_filters(regions=regions, sido=sido, sgg=sgg,
                                       usages=usages, usage=usage)

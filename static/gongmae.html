@@ -206,10 +206,12 @@
           <th>재산종류</th><td><select id="prop"><option>압류재산</option><option>국유재산</option><option>수탁재산</option><option>유입자산</option><option>공유재산</option><option>기타일반재산</option><option value="">전체</option></select></td></tr>
       <tr><th>정렬방식</th><td colspan="3"><select id="sort"><option value="bid_close">입찰마감 빠른순</option><option value="appr">감정가 높은순</option><option value="low">최저가 낮은순</option></select></td></tr>
       <tr><th>토지이용계획</th><td colspan="3">
-          <select disabled title="온비드 목록 원본에 용도지역/지구 정보가 없어 준비 중입니다"><option>전체</option></select>
-          <span class="sep">(AND 조건)</span>
-          <input type="text" placeholder="예) 개발제한구역" style="max-width:200px" disabled title="온비드 목록 원본 미제공">
-          <span style="color:#94a3b8;font-size:12px;margin-left:6px;">※ 온비드 목록 미제공 — 규제지역은 상단 '규제' 필터를 이용하세요</span></td></tr>
+          <select id="zoneFilter" title="용도지역(국토계획)으로 거르기 — 필지 좌표→V-World 조회값">
+            <option value="">전체</option>
+            <option>주거지역</option><option>준주거지역</option><option>상업지역</option>
+            <option>준공업지역</option><option>공업지역</option><option>녹지지역</option><option>관리지역</option>
+          </select>
+          <span style="color:#94a3b8;font-size:12px;margin-left:6px;">※ 용도지역(국토계획) — 좌표 확보 물건부터 순차 반영</span></td></tr>
       <tr><th>특수물건</th><td colspan="3">
           <select disabled title="온비드 목록 원본에 지분·대지권 등 특수물건 구분이 없어 준비 중입니다"><option>전체</option></select>
           <span style="color:#94a3b8;font-size:12px;margin-left:6px;">※ 온비드 목록 미제공</span></td></tr>
@@ -306,7 +308,7 @@ function resetForm(){
 }
 
 // ── 즐겨쓰는검색(검색조건 저장) — 로그인 사용자 서버 저장(/gongmae/searches) ──
-const SAVE_IDS=["ctgr","ctgr2","bidmtd","manageNo","sido","gugun","goods","bidFrom","bidTo","result","apprMin","apprMax","lowMin","lowMax","dpsl","prop","sort","pgRows"];
+const SAVE_IDS=["ctgr","ctgr2","bidmtd","manageNo","sido","gugun","goods","bidFrom","bidTo","result","apprMin","apprMax","lowMin","lowMax","dpsl","prop","sort","pgRows","zoneFilter"];
 function collectForm(){ const c={}; SAVE_IDS.forEach(id=>{const e=document.getElementById(id); if(e) c[id]=e.value;}); return c; }
 function applyCond(cond){
   cond=cond||{};
@@ -513,6 +515,7 @@ function gmParams(page){
   else { const so=document.getElementById("sort").value; if(so)p.set("sort",so); }
   if(gradeFilter) p.set("grade", gradeFilter);   // 매수판정 서버필터 — 해당 등급으로 100건 채워 조회(클라 필터는 현재페이지만 걸러 <10건)
   if(regFilter) p.set("reg", regFilter);         // 규제 구분 서버필터(gongmae_items.reg 컬럼)
+  const zn=(document.getElementById("zoneFilter")||{}).value; if(zn)p.set("zone",zn);   // 토지이용계획(용도지역) 서버필터(zone 컬럼)
   return p;
 }
 async function search(){ GM_PAGE=1; return loadPage(); }

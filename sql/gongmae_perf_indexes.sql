@@ -15,4 +15,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gm_bidclose      ON gongmae_items (b
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gm_usage_trgm    ON gongmae_items USING gin (usage gin_trgm_ops);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gm_address_trgm  ON gongmae_items USING gin (address gin_trgm_ops);
+-- 토지이용계획(용도지역) 필터 — zone 컬럼(map_points 좌표→V-World landuse 백필값, 경매 _zone_categorize 7종)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gm_prop_zone     ON gongmae_items (prop_type, zone);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gm_zone          ON gongmae_items (zone);
 ANALYZE gongmae_items;
