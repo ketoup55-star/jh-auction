@@ -3239,39 +3239,44 @@ def _compute_brief(item_key: str) -> dict:
         if not out.get("available") and re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|숙박", usage):
             by = un = ul = ev = None
             used_api = used_doc = False
-            # ① 건축물대장 API 우선(표제부 — 정확. 트래픽 증가됨). 결과는 DB 저장돼 1회만.
-            try:
-                bi = building.info(addr)
-            except Exception:
-                bi = None
-            purpose = ""
-            if bi:
-                by = bi.get("build_year")
-                purpose = bi.get("purpose") or ""
-                # 집합건물(아파트·오피스텔·다세대·연립·도시형)인데 unit_label='호'면, 지번 조회로
-                #  잘못된 동(부속/전유)을 읽은 것 → 세대수·승강기 신뢰 안 함(준공년도만 사용).
-                _collective = bool(re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형", usage))
-                _is_ho = (bi.get("unit_label") == "호")
-                if bi.get("units") and not (_collective and _is_ho):
-                    un, ul = bi.get("units"), bi.get("unit_label")
-                if bi.get("elevator") is not None and not (_collective and _is_ho):
-                    ev = int(bi.get("elevator") or 0) > 0
-                used_api = bool(by or un or (ev is not None))
-            # ② 저장문서: 위반건축물(문서 스탬프에만 존재 — 표제부 API엔 없음)은 항상 확인 + API 미충족 항목 보완
-            _want = (not by) or (not un) or (ev is None)
-            doc = _doc_building_brief(item_key, want_fields=_want)
+            # 집합건물(아파트·오피스텔·다세대·연립·도시형)의 '호' 라벨은 전유부(그 호실=1호)라 건물 세대수로 쓰지 않음.
+            _collective = bool(re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형", usage))
+            # ① 저장문서(R2 건축물대장 PDF) 우선 — 무쿼터 + '그 물건의 실제 문서'라 지번조회 API보다 정확.
+            #    옛 API 우선은 지연·data.go.kr 일일쿼터로 예열(_prewarm_briefs)이 11%만 완주 → 신규 물건 준공이
+            #    스피드옥션 보존등기일 오류(R2 전수대조 결과 9.4%)로 남던 근본원인. 전수교정도 이 문서 경로로 수행.
+            doc = _doc_building_brief(item_key, want_fields=True)
             vio = bool(doc.get("violation"))
-            if _want:
-                if not by:
-                    by = doc.get("build_year")
-                if not un and doc.get("units"):
-                    # 집합건물(아파트·다세대·연립·도시형)의 '호' 라벨은 전유부(그 호실=1호)일 수 있어 건물 세대수로 쓰지 않음(표제부/API 세대수만)
-                    if not (doc.get("unit_label") == "호" and re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형", usage)):
-                        un, ul = doc.get("units"), doc.get("unit_label")
-                if ev is None and doc.get("elevator") is not None:
-                    ev = doc.get("elevator")
+            by = doc.get("build_year")
+            if doc.get("units") and not (doc.get("unit_label") == "호" and _collective):
+                un, ul = doc.get("units"), doc.get("unit_label")
+            if doc.get("elevator") is not None:
+                ev = doc.get("elevator")
             used_doc = bool(doc.get("build_year") or doc.get("units")
                             or doc.get("elevator") is not None or vio)
+            # ② 건축물대장 API 폴백 — **문서에 준공년도가 없을 때만** 호출(쿼터·지연 최소화).
+            #    세대수/승강기까지 조건에 넣으면 문서가 준공을 준 물건(대다수)도 API를 때려 예열이 완주 못 하고,
+            #    그 결과 brief가 11%만 채워져 신규 물건 준공이 스피드옥션 오류로 남는다(이번 근본원인).
+            #    세대수·승강기는 문서에 있는 만큼만 표시 — 예열이 안 돌아 '전부 빈칸'이던 현재보다 개선.
+            #    층수·주용도는 API에서만 오지만, 다가구 분석(_doc_dagagu)이 없을 때 자체 보강하므로 회귀 없음.
+            bi = None
+            purpose = ""
+            if not by:
+                try:
+                    bi = building.info(addr)
+                except Exception:
+                    bi = None
+            if bi:
+                purpose = bi.get("purpose") or ""
+                # 지번 조회로 잘못된 동(부속/전유)을 읽은 경우 → 세대수·승강기는 신뢰 안 함(준공년도만 사용).
+                _is_ho = (bi.get("unit_label") == "호")
+                if not by:
+                    by = bi.get("build_year")
+                if not un and bi.get("units") and not (_collective and _is_ho):
+                    un, ul = bi.get("units"), bi.get("unit_label")
+                if ev is None and bi.get("elevator") is not None and not (_collective and _is_ho):
+                    ev = int(bi.get("elevator") or 0) > 0
+                used_api = bool(bi.get("build_year") or bi.get("units")
+                                or (bi.get("elevator") is not None))
             # 숙박 세부용도(여관·생활숙박 등): 전유부 문서 우선(그 호실 용도) → 표제부 API 기타용도 폴백.
             _sub = doc.get("sukbak_sub") or (bi.get("sukbak_sub") if bi else None)
             # 단독주택(다가구 아닌 단독)인데 가구수 못 구하면 '단독'으로 표기(빈칸/오추출 방지)
