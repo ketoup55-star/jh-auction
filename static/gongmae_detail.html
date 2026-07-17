@@ -516,8 +516,10 @@ function renderGmCases(xb, cardEl){
 // 아파트/오피스텔: 아파트정보·실거래·예상낙찰가·차익·경쟁매물
 async function loadGmApt(box, d, gf){
   box.innerHTML='<div class="card"><div class="sub">🏢 아파트 정보·실거래·경쟁매물 불러오는 중…</div></div>';
-  var R=await Promise.all([gf("/apt_info"),gf("/expected_bid"),gf("/competing_listings")]);
-  var ai=R[0]||{}, xb=R[1]||{}, cl=R[2]||{};
+  // ⚡예상낙찰가(expected_bid)는 인근 경매사례 백데이터 조회가 무거워 3~4초 → Promise.all에서 빼고 별도 비동기
+  //   (빌라와 동일 패턴). 아파트정보·경쟁매물 먼저 렌더 → 예상낙찰가/차익은 placeholder로 두고 완료 시 채움.
+  var R=await Promise.all([gf("/apt_info"),gf("/competing_listings")]);
+  var ai=R[0]||{}, xb={}, cl=R[1]||{};
   GM_APT=ai; GM_XB=xb;
   var cd=ai.complex_detail, s=ai.summary;
   var yearVal=(cd&&cd.approved)?String(cd.approved).slice(0,4):(ai.build_year||"");
@@ -540,8 +542,8 @@ async function loadGmApt(box, d, gf){
   if(sise||bid){
     html+='<div class="qbox4">'
       +'<div class="qb"><div class="ql">추정 시세</div><div class="qv hot">'+(sise?won(sise):"-")+'</div></div>'
-      +'<div class="qb"><div class="ql">예상 낙찰가</div><div class="qv">'+(bid?won(bid):"인근 경매사례 없음")+'</div></div>'
-      +'<div class="qb"><div class="ql">예상 차익</div><div class="qv'+((apPf!=null&&apPf>0)?' hot':'')+'">'+((apPf!=null)?((apPf<0?'−':'+')+won(Math.abs(apPf))):"-")+'</div></div>'
+      +'<div class="qb"><div class="ql">예상 낙찰가</div><div class="qv" id="gm-exbid">계산 중…</div></div>'
+      +'<div class="qb"><div class="ql">예상 차익</div><div class="qv" id="gm-expf">계산 중…</div></div>'
       +'<div class="qb"><div class="ql">매수세(6개월)</div><div class="qv">'+((ai.demand&&ai.demand.count6!=null)?ai.demand.count6+'건':"-")+'</div></div>'
       +'</div>';
   }
@@ -582,7 +584,17 @@ async function loadGmApt(box, d, gf){
       +'</div></div>';
   }
   box.innerHTML=html;
-  renderGmCases(xb, box);   // 예상낙찰가 참조 경매 매각사례(관리자만)
+  // ⚡예상낙찰가(expected_bid) 별도 비동기 — 무거운 백데이터 조회(3~4초)라 페이지를 막지 않고 완료 시 칸만 채움.
+  gf("/expected_bid").then(function(x){
+    GM_XB=x||{}; renderGmCases(GM_XB, box);   // 참조 경매 매각사례(관리자만)
+    var eb=document.getElementById("gm-exbid"); if(!eb) return;
+    var pe=document.getElementById("gm-expf");
+    if(x&&x.available){
+      eb.textContent=won(x.expected_bid);
+      var sise2=(ai.est&&ai.est.price)?ai.est.price:(s&&s.recent?s.recent:null);
+      if(pe){ if(sise2){ var pf=sise2-x.expected_bid; pe.textContent=(pf<0?'−':'+')+won(Math.abs(pf)); if(pf>0)pe.classList.add('hot'); } else pe.textContent="-"; }
+    } else { eb.textContent="인근 경매사례 없음"; if(pe)pe.textContent="-"; }
+  });
 }
 // 유사거래 지도(카카오맵 + 빨강 물건핀 + 파랑 유사거래핀)
 var KAKAO_JS_KEY="d10bff18727c6f302ff09765b62b1b23", _kakaoLoad=null;
