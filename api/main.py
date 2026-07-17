@@ -3245,14 +3245,28 @@ def _compute_brief(item_key: str) -> dict:
                 b = kapt.brief(lawd, name)
                 if b and (b.get("build_year") or b.get("households")):
                     out = {"available": True, "unit_label": "세대", **b}
+                    # ★준공년도만은 R2 건축물대장(그 물건의 '실제 문서') 우선 — kapt는 단지명+법정동 매칭이라
+                    #   오매칭 위험이 있고, R2 전수대조에서 아파트 521건(12.1%)이 실제와 달랐다.
+                    #   R2에 준공이 있으면 교정(source=doc) → r1이 items를 R2값으로 유지.
+                    #   R2에 없으면 kapt 값을 그대로 쓴다(잃는 것 없음). 위반건축물 스탬프도 문서에만 있어 함께 반영.
+                    try:
+                        _d = _doc_building_brief(item_key, want_fields=True)
+                        if _d.get("build_year"):
+                            out["build_year"] = _d["build_year"]
+                            out["source"] = "doc"
+                        if _d.get("violation"):
+                            out["violation"] = True
+                    except Exception:
+                        pass
         if not out.get("available") and re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|숙박", usage):
             by = un = ul = ev = None
             used_api = used_doc = False
             # 집합건물(아파트·오피스텔·다세대·연립·도시형)의 '호' 라벨은 전유부(그 호실=1호)라 건물 세대수로 쓰지 않음.
             _collective = bool(re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형", usage))
             # ① 저장문서(R2 건축물대장 PDF) 우선 — 무쿼터 + '그 물건의 실제 문서'라 지번조회 API보다 정확.
-            #    옛 API 우선은 지연·data.go.kr 일일쿼터로 예열(_prewarm_briefs)이 11%만 완주 → 신규 물건 준공이
-            #    스피드옥션 보존등기일 오류(R2 전수대조 결과 9.4%)로 남던 근본원인. 전수교정도 이 문서 경로로 수행.
+            #    옛 API 우선은 API가 준공을 주면 R2 문서를 아예 보지 않아, 지번조회로 읽은 '같은 땅의 다른
+            #    신축 건물' 준공이 그대로 박혔다(실측: 실제 1955 → API 2020, 1962 → 2016, 1957 → 2018).
+            #    R2 전수대조 교정: 아파트제외 1,205건(9.4%) + 아파트 521건(12.1%).
             doc = _doc_building_brief(item_key, want_fields=True)
             vio = bool(doc.get("violation"))
             by = doc.get("build_year")
@@ -3262,14 +3276,20 @@ def _compute_brief(item_key: str) -> dict:
                 ev = doc.get("elevator")
             used_doc = bool(doc.get("build_year") or doc.get("units")
                             or doc.get("elevator") is not None or vio)
-            # ② 건축물대장 API 폴백 — **문서에 준공년도가 없을 때만** 호출(쿼터·지연 최소화).
-            #    세대수/승강기까지 조건에 넣으면 문서가 준공을 준 물건(대다수)도 API를 때려 예열이 완주 못 하고,
-            #    그 결과 brief가 11%만 채워져 신규 물건 준공이 스피드옥션 오류로 남는다(이번 근본원인).
-            #    세대수·승강기는 문서에 있는 만큼만 표시 — 예열이 안 돌아 '전부 빈칸'이던 현재보다 개선.
-            #    층수·주용도는 API에서만 오지만, 다가구 분석(_doc_dagagu)이 없을 때 자체 보강하므로 회귀 없음.
+            # ②' items.build_year 폴백 — items 컬럼은 R2 전수교정값(R2에 없으면 스피드옥션 상세)이라,
+            #     이 순서를 지켜야 화면(brief)과 정렬(items)의 우선순위가 같아져 표시/정렬 어긋남이 안 생긴다.
+            #     API 지번조회(같은 땅의 다른 신축 건물 → 최대 65년 오차)보다 앞에 둔다.
+            _from_items = False
+            if not by and d.get("build_year"):
+                by = str(d.get("build_year"))
+                _from_items = True
+            # ② 건축물대장 API 폴백 — 세대수·승강기·층수·주용도 보완용(이것들은 API에만 있음).
+            #    ★준공년도는 위(doc → items)에서 확보됐으면 API 값을 쓰지 않는다: API는 지번 조회라
+            #      같은 땅의 '다른 신축 건물'을 읽어 최대 65년 틀림(실제 1955 → API 2020). doc·items가
+            #      모두 없을 때만 최후 폴백으로 사용.
             bi = None
             purpose = ""
-            if not by:
+            if (not by) or (not un) or (ev is None):
                 try:
                     bi = building.info(addr)
                 except Exception:
@@ -3303,7 +3323,8 @@ def _compute_brief(item_key: str) -> dict:
                        "usage_detail": _sub,                             # 숙박 세부용도(여관·생활형숙박시설 등) → 목록/상세 표시
                        "violation": vio,                                  # 위반건축물(건축물대장 스탬프)
                        "source": ("api+doc" if (used_api and used_doc) else
-                                  "api" if used_api else "doc")}
+                                  "api" if used_api else
+                                  "items" if _from_items else "doc")}   # items=R2교정 컬럼 폴백(r1 가드 통과 → 자기 값이라 무해)
     return out
 
 

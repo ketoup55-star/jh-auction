@@ -1027,6 +1027,9 @@ class SupabaseSource:
             "area_text": row.get("area_text"),
             "appraisal_raw": row.get("appraisal_raw"),
             "min_price_raw": row.get("min_price_raw"),
+            # 준공년도(items 컬럼) — R2 건축물대장 전수교정값(없으면 스피드옥션 상세 폴백).
+            #  brief 계산이 R2 문서 실패 시 이 값을 폴백으로 써서 화면(brief)과 정렬(items) 우선순위를 일치시킨다.
+            "build_year": row.get("build_year"),
             "bid_count": row.get("bid_count"),
             "sale_2nd_price": row.get("sale_2nd_price"),
             "data_class": row.get("data_class"),
