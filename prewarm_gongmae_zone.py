@@ -58,4 +58,11 @@ with ThreadPoolExecutor(max_workers=_WORKERS) as ex:
             el = time.time() - t0
             print(f"[gm_zone] {idx+1}/{len(rows)} 용도지역{cat_ok}·NF{nf}·err{err}", flush=True)
 print(f"[gm_zone] 완료 {len(rows)} ({round(time.time()-t0)}초): 용도지역{cat_ok}·NF{nf}·err{err}", flush=True)
+# 특수물건(지분/공유매각) is_share 동기화 — name 파싱(불변·외부호출 없음). 신규 물건 자동 유지.
+try:
+    r = cur.execute("""UPDATE gongmae_items SET is_share = (name ILIKE '%지분%' OR name ILIKE '%공유%')
+        WHERE is_share IS DISTINCT FROM (name ILIKE '%지분%' OR name ILIKE '%공유%')""")
+    print(f"[gm_zone] is_share 동기화: {r.rowcount}행", flush=True)
+except Exception as e:
+    print(f"[gm_zone] is_share 동기화 실패: {str(e)[:60]}", flush=True)
 c.close()

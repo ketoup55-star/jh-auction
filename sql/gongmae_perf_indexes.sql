@@ -18,4 +18,8 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gm_address_trgm  ON gongmae_items US
 -- 토지이용계획(용도지역) 필터 — zone 컬럼(map_points 좌표→V-World landuse 백필값, 경매 _zone_categorize 7종)
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gm_prop_zone     ON gongmae_items (prop_type, zone);
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gm_zone          ON gongmae_items (zone);
+-- 특수물건(지분/공유매각) — name 파싱 결과 is_share 컬럼(name~'지분'/'공유'는 2글자라 trgm 비효율 → bool 컬럼)
+-- 백필: UPDATE gongmae_items SET is_share = (name ILIKE '%지분%' OR name ILIKE '%공유%');  (name 불변, 외부호출 없음)
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gm_prop_share    ON gongmae_items (prop_type, is_share);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_gm_name_trgm     ON gongmae_items USING gin (name gin_trgm_ops);
 ANALYZE gongmae_items;

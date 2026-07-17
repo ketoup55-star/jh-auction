@@ -5651,6 +5651,7 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
                  low_min: Optional[int] = None, low_max: Optional[int] = None,
                  grade: Optional[str] = None,
                  zone: Optional[str] = None,   # 토지이용계획(용도지역) — zone 컬럼(좌표→V-World landuse 백필)
+                 special: Optional[str] = None,   # 특수물건 — 지분/공유매각(name에 명확 표기, 정형안내문 오탐 회피)
                  reg: Optional[str] = Query(None, description="규제 구분(regulated/metro/none) — reg 컬럼 백필 후 활성"),
                  sort: Optional[str] = None, sort2: Optional[str] = None) -> dict:
     """온비드 공매물건 목록 — 우리 DB(gongmae_items) 소재지/재산유형/명칭/감정가·최저가/정렬 필터.
@@ -5715,6 +5716,12 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
         if reg in ("regulated", "metro", "none") and _gm_reg_col_exists():
             conds.append(("reg", "eq", reg))
         or_groups = [v for (k, v) in ru if k == "or"]
+        # 특수물건: 지분/공유매각 — 온비드가 물건명(name)에 '지분 2/7'·'공유지분 2분의1'처럼 명확히 표기.
+        #  notice 키워드(분묘·농지취득·대항력)는 정형 안내문("~확인 후 입찰")이라 거의 전건 오탐 → name만 사용.
+        #  name ilike '지분'/'공유'는 2글자라 trgm 인덱스 비효율(단독 2.7초) → name 파싱을 is_share 컬럼(bool)으로
+        #  선반영해 컬럼 WHERE(인덱스 prop_type,is_share). 백필+주기유지는 SQL(name 불변, 외부호출 없음).
+        if special == "share":
+            conds.append(("is_share", "is", "true"))
         scalar_and = list(conds)   # (col,op,val)
         # ru 중 or 아닌 것(단일 usage ilike 등)은 scalar_and 로 편입
         for (k, v) in ru:
@@ -5724,7 +5731,8 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
                 scalar_and.append((k, _op, _val))
 
         def _v(op, val):
-            return val if op in ("gte", "lte") else _gm_q(val)
+            # is.true/false/null·gte/lte는 리터럴이라 따옴표 금지(_gm_q는 값을 "..."로 감싸므로 is."true"→400)
+            return val if op in ("gte", "lte", "is") else _gm_q(val)
         and_parts = [f"{c}.{op}.{_v(op, val)}" for c, op, val in scalar_and]
         if len(or_groups) >= 2:
             # 여러 or 그룹 → and 안에 or(...) 들로 결합(+스칼라 조건도 같은 and 에)
@@ -5766,7 +5774,7 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
         #   필터가 하나라도 있으면 폴백 금지하고 재시도 안내(잘못된 결과를 진짜처럼 보여주지 않는다).
         _has_filter = any([regions, sido, sgg, usages, usage, bid_method, manage_no,
                            bid_from, bid_to, result, goods, dpsl_mtd,
-                           appr_min, appr_max, low_min, low_max, grade, reg,
+                           appr_min, appr_max, low_min, low_max, grade, reg, zone, special,
                            (prop is not None and prop != "압류재산")])
         if _has_filter:
             return {"items": [], "total": 0, "page": page,
