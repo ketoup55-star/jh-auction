@@ -205,8 +205,14 @@
       <tr><th>처분방식</th><td><select id="dpsl"><option value="">전체</option><option value="매각">매각</option><option value="임대">임대</option></select></td>
           <th>재산종류</th><td><select id="prop"><option>압류재산</option><option>국유재산</option><option>수탁재산</option><option>유입자산</option><option>공유재산</option><option>기타일반재산</option><option value="">전체</option></select></td></tr>
       <tr><th>정렬방식</th><td colspan="3"><select id="sort"><option value="bid_close">입찰마감 빠른순</option><option value="appr">감정가 높은순</option><option value="low">최저가 낮은순</option></select></td></tr>
-      <tr><th>토지이용계획</th><td colspan="3">국계법에 따른 지역/지구 <select><option>전체</option></select> <span class="sep">(AND 조건)</span> <input type="text" placeholder="예) 개발제한구역" style="max-width:200px"></td></tr>
-      <tr><th>특수물건</th><td colspan="3"><select><option>전체</option></select></td></tr>
+      <tr><th>토지이용계획</th><td colspan="3">
+          <select disabled title="온비드 목록 원본에 용도지역/지구 정보가 없어 준비 중입니다"><option>전체</option></select>
+          <span class="sep">(AND 조건)</span>
+          <input type="text" placeholder="예) 개발제한구역" style="max-width:200px" disabled title="온비드 목록 원본 미제공">
+          <span style="color:#94a3b8;font-size:12px;margin-left:6px;">※ 온비드 목록 미제공 — 규제지역은 상단 '규제' 필터를 이용하세요</span></td></tr>
+      <tr><th>특수물건</th><td colspan="3">
+          <select disabled title="온비드 목록 원본에 지분·대지권 등 특수물건 구분이 없어 준비 중입니다"><option>전체</option></select>
+          <span style="color:#94a3b8;font-size:12px;margin-left:6px;">※ 온비드 목록 미제공</span></td></tr>
     </table>
 
     <div class="btns">
@@ -517,8 +523,13 @@ async function loadPage(){
   await loadGmFav();
   let d; try{ d=await (await fetch("/gongmae?"+gmParams(GM_PAGE))).json(); }catch(e){ d={error:"요청 실패"}; }
   if(d.error){
-    box.innerHTML=`<div class="notice"><b>온비드 공매 데이터를 불러올 수 없습니다.</b><br>${d.error}<br><br>
-      ※ data.go.kr에서 <b>온비드 부동산 물건목록 OpenAPI 활용신청 승인</b> 및 키 활성화 후 자동으로 표시됩니다.</div>`;
+    // 일시적 지연(필터 검색이 순간부하로 폴백 금지된 경우) = 재시도 유도. 그 외(키 미승인 등) = 안내.
+    const transient=/지연|다시|실패/.test(d.error||"");
+    box.innerHTML=`<div class="notice"><b>${escHtml(d.error||'데이터를 불러올 수 없습니다.')}</b>`
+      + (transient
+          ? `<br><br><button class="btn b-primary" onclick="search()">다시 검색</button>`
+          : `<br><br>※ data.go.kr에서 <b>온비드 부동산 물건목록 OpenAPI 활용신청 승인</b> 및 키 활성화 후 자동으로 표시됩니다.`)
+      + `</div>`;
     cnt.textContent=""; updatePager(); return;
   }
   window.GM=d.items||[]; GM_TOTAL=d.total||0;

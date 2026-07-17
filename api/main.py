@@ -5758,7 +5758,18 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
             items.append(d)
         return {"items": items, "total": total, "page": page, "source": "db"}
     except Exception as e:
-        # DB 미가용 시 라이브 폴백(소재지 필터는 불가)
+        # 온비드 라이브 폴백은 소재지·용도·가격·판정·입찰방식 등 대부분 필터를 무시한다.
+        # → 사용자가 필터를 건 검색이 순간지연으로 폴백되면 '엉뚱한 전체(46,570)'가 뜨는 오표시가 됨.
+        #   필터가 하나라도 있으면 폴백 금지하고 재시도 안내(잘못된 결과를 진짜처럼 보여주지 않는다).
+        _has_filter = any([regions, sido, sgg, usages, usage, bid_method, manage_no,
+                           bid_from, bid_to, result, goods, dpsl_mtd,
+                           appr_min, appr_max, low_min, low_max, grade, reg,
+                           (prop is not None and prop != "압류재산")])
+        if _has_filter:
+            return {"items": [], "total": 0, "page": page,
+                    "error": "일시적인 지연으로 검색에 실패했습니다. 잠시 후 다시 검색해 주세요.",
+                    "source": f"err({type(e).__name__})"}
+        # 필터 없는 기본 목록만 라이브 폴백(압류재산 기본)
         out = onbid.list_items(page=page, rows=rows, prop=prop or "압류재산",
                                dpsl_mtd=dpsl_mtd, usg_lcls=usg_lcls, goods=goods)
         out["source"] = f"live({type(e).__name__})"
