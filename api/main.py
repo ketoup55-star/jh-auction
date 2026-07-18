@@ -6220,6 +6220,16 @@ def gongmae_competing_listings(mng: str, cdtn: Optional[str] = None) -> dict:
     if "아파트" not in (cur.get("usage") or "") and "오피스텔" not in (cur.get("usage") or ""):
         return {"matched": False, "count": 0, "listings": []}
     # KB 단지 매칭(지번주소 우선, 실패 시 도로명). 결과(complex_no·region_ok)만 캐시.
+    # 결과(매물+사진) 전체 캐시 — kb_listing·kb_complex·kb_listing_photo 여러 왕복(1초)을 재방문 시 제거.
+    #  매물은 변동되므로 6시간 TTL(신선도 유지). gm_kbmatch(단지매칭)만 캐시하던 것과 별개.
+    import time as _t
+    rck = "gm_competing:" + mng
+    try:
+        rh = auction_db.cache_get_many([rck]).get(rck)
+        if isinstance(rh, dict) and (_t.time() - rh.get("_ts", 0) < 21600):
+            return rh
+    except Exception:
+        pass
     ck = "gm_kbmatch:" + mng
     cno = None
     m = None
@@ -6255,7 +6265,13 @@ def gongmae_competing_listings(mng: str, cdtn: Optional[str] = None) -> dict:
                 pass
     cno = m.get("complex_no") if isinstance(m, dict) else None
     if not cno or (isinstance(m, dict) and m.get("region_ok") is False):
-        return {"matched": False, "count": 0, "listings": []}
+        # 미매칭도 캐시(6시간 TTL) — KB 단지 매칭(match_address)이 1초 걸리는데 매번 재조회하던 것 방지.
+        nomatch = {"matched": False, "count": 0, "listings": [], "_ts": _t.time()}
+        try:
+            auction_db.cache_save(rck, nomatch)
+        except Exception:
+            pass
+        return nomatch
     # kb_listing 동일평형(전용±3㎡) 매매 — auction_competing_listings 쿼리 복제
     area = _area_num(cur.get("building_area"))
     params = [("select", "listing_id,area_excl,price,floor,dong,ho,unit_price,"
@@ -6292,16 +6308,21 @@ def gongmae_competing_listings(mng: str, cdtn: Optional[str] = None) -> dict:
                     {"url": p.get("url"), "title": p.get("title")})
         except Exception:
             pass
-    return {"matched": True, "count": len(listings), "area": area,
-            "complex_no": cno, "complex_name": cname,
-            "listings": [{"area_excl": x.get("area_excl"), "price": x.get("price"),
-                          "floor": x.get("floor"), "dong": x.get("dong"),
-                          "ho": x.get("ho"), "unit_price": x.get("unit_price"),
-                          "direction": x.get("direction"), "room_cnt": x.get("room_cnt"),
-                          "bath_cnt": x.get("bath_cnt"), "feature": x.get("feature"),
-                          "agent_name": x.get("agent_name"), "confirm_date": x.get("confirm_date"),
-                          "photos": photo_map.get(x.get("listing_id"), [])}
-                         for x in listings]}
+    result = {"matched": True, "count": len(listings), "area": area,
+              "complex_no": cno, "complex_name": cname,
+              "listings": [{"area_excl": x.get("area_excl"), "price": x.get("price"),
+                            "floor": x.get("floor"), "dong": x.get("dong"),
+                            "ho": x.get("ho"), "unit_price": x.get("unit_price"),
+                            "direction": x.get("direction"), "room_cnt": x.get("room_cnt"),
+                            "bath_cnt": x.get("bath_cnt"), "feature": x.get("feature"),
+                            "agent_name": x.get("agent_name"), "confirm_date": x.get("confirm_date"),
+                            "photos": photo_map.get(x.get("listing_id"), [])}
+                           for x in listings], "_ts": _t.time()}
+    try:
+        auction_db.cache_save(rck, result)   # 결과 전체 캐시(6시간 TTL) → 재방문 시 kb_listing·photo 재조회 없음
+    except Exception:
+        pass
+    return result
 
 
 @app.get("/gongmae/bid_schedule")
