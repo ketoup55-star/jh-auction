@@ -93,6 +93,16 @@ class KakaoTalkConfig:
     chat_tab_x_offset: int = 28
     chat_tab_y_offset: int = 105
 
+    # ── 채팅 탭 이동 안정화(창 크기 바뀌어도 친구추가 등 오클릭 방지) ──
+    use_chat_tab_hotkey: bool = False  # Ctrl+2는 이 카카오톡 버전에서 채팅탭 이동이 아니라 제거(원래 좌표 방식 유지)
+    chat_tab_use_coord: bool = True    # 원래 방식: 좌표(28,105) 클릭. 아래 정규화로 창 크기를 표준 고정해 좌표를 항상 맞춤
+    normalize_width: bool = True        # B: 발송 순간 창을 표준 폭으로 고정(좌표 클릭 신뢰성) 후 복원
+    standard_width: int = 360           # 표준 폭(offset 28,105가 맞는 카카오톡 기본 폭 근처)
+    width_tolerance: int = 24           # 표준±24 안이면 정규화 생략(주인님이 살짝 바꾼 건 존중)
+    restore_size_after: bool = True     # 발송 후 원래 크기로 복원(주인님이 바꿔둔 크기 유지)
+    close_popups_before_send: bool = True   # 발송 전 방해 팝업(친구추가 등) 자동 닫기
+    blocking_popup_titles: tuple = ("친구 추가", "친구추가", "새로운 채팅", "대화상대 초대")
+
 
 def send_kakao_message(
     chat_name: str | Iterable[str],
@@ -174,23 +184,29 @@ class KakaoTalkService:
         message_ = self._require_text(message_, "message_")
 
         main_window = self._ensure_kakaotalk_running()
-        time.sleep(self.config.action_delay_seconds)
-        self._focus_window(main_window)
-        time.sleep(self.config.action_delay_seconds)
-        self._go_to_chat_tab(main_window)
-        time.sleep(self.config.action_delay_seconds)
-        self._open_room(chat_name)
-        time.sleep(self.config.action_delay_seconds)
+        if self.config.close_popups_before_send:
+            self._close_blocking_popups()   # 발송 방해 팝업(친구추가 등) 먼저 닫기
+        _orig = self._normalize_window(main_window)   # B: 발송 순간 표준 폭으로 고정(좌표 클릭 신뢰성)
+        try:
+            time.sleep(self.config.action_delay_seconds)
+            self._focus_window(main_window)
+            time.sleep(self.config.action_delay_seconds)
+            self._go_to_chat_tab(main_window)
+            time.sleep(self.config.action_delay_seconds)
+            self._open_room(chat_name)
+            time.sleep(self.config.action_delay_seconds)
 
-        chat_window = self._find_chat_window(chat_name)
-        time.sleep(self.config.action_delay_seconds)
-        message_input = self._find_message_input(chat_window)
-        time.sleep(self.config.action_delay_seconds)
-        self._clear_message_input(message_input)
-        self._paste_text(message_)
-        time.sleep(self.config.action_delay_seconds)
+            chat_window = self._find_chat_window(chat_name)
+            time.sleep(self.config.action_delay_seconds)
+            message_input = self._find_message_input(chat_window)
+            time.sleep(self.config.action_delay_seconds)
+            self._clear_message_input(message_input)
+            self._paste_text(message_)
+            time.sleep(self.config.action_delay_seconds)
 
-        return chat_window
+            return chat_window
+        finally:
+            self._restore_window(main_window, _orig)   # 발송 흐름 끝 → 원래 크기 복원(주인님 크기 유지)
 
     def send_message(self, chat_name: str, message_: str) -> None:
         chat_window = self.open_chat_and_input_message(chat_name, message_)
@@ -209,6 +225,9 @@ class KakaoTalkService:
         """한 방에 여러 항목(text/image)을 순차 전송 — 사진 말풍선, 텍스트 말풍선 번갈아."""
         chat_name = self._require_text(chat_name, "chat_name")
         main_window = self._ensure_kakaotalk_running()
+        if self.config.close_popups_before_send:
+            self._close_blocking_popups()   # 발송 방해 팝업(친구추가 등) 먼저 닫기
+        _seq_orig = self._normalize_window(main_window)   # B: 발송 순간 표준 폭으로 고정(좌표 신뢰성)
         time.sleep(self.config.action_delay_seconds)
         self._focus_window(main_window)
         time.sleep(self.config.action_delay_seconds)
@@ -243,6 +262,7 @@ class KakaoTalkService:
             time.sleep(self.config.action_delay_seconds)
             self.win32gui.PostMessage(chat_window, self.win32con.WM_CLOSE, 0, 0)
             self._wait_for_window_closed(chat_window)
+        self._restore_window(main_window, _seq_orig)   # 발송 끝 → 원래 크기 복원(주인님 크기 유지)
 
     def _paste_image(self, image_path: str) -> None:
         """이미지 파일을 클립보드(CF_DIB)에 넣고 붙여넣기 → 입력창에 사진 첨부."""
@@ -294,11 +314,60 @@ class KakaoTalkService:
         time.sleep(self.config.action_delay_seconds)
 
     def _go_to_chat_tab(self, main_window: int) -> None:
-        left, top, _, _ = self.win32gui.GetWindowRect(main_window)
-        self._click(
-            left + self.config.chat_tab_x_offset,
-            top + self.config.chat_tab_y_offset,
-        )
+        # A(근본): Ctrl+2 = 채팅 탭 단축키 → 창 크기·위치와 완전 무관. 좌표 오클릭(친구추가 등) 원천 차단.
+        if self.config.use_chat_tab_hotkey:
+            self._hotkey(self.win32con.VK_CONTROL, ord("2"))
+            time.sleep(self.config.action_delay_seconds)
+        # B(보조): 좌표 클릭 — Ctrl+2가 이미 채팅 탭으로 갔으면 좌표는 오히려 탭을 망칠 수 있어 기본 off.
+        #  단축키 미작동 카카오톡 버전에서만 chat_tab_use_coord=True로 켠다(정규화된 표준 폭에서만 신뢰).
+        if self.config.chat_tab_use_coord:
+            left, top, _, _ = self.win32gui.GetWindowRect(main_window)
+            self._click(
+                left + self.config.chat_tab_x_offset,
+                top + self.config.chat_tab_y_offset,
+            )
+
+    def _normalize_window(self, main_window: int):
+        """발송 순간 창을 표준 폭으로 고정(좌표 클릭 신뢰성 확보). 원래 크기 반환(복원용).
+        이미 표준 폭 근처면 건드리지 않는다(주인님이 살짝 조절한 크기는 존중)."""
+        if not self.config.normalize_width:
+            return None
+        try:
+            l, t, r, b = self.win32gui.GetWindowRect(main_window)
+        except Exception:
+            return None
+        w, h = r - l, b - t
+        if abs(w - self.config.standard_width) <= self.config.width_tolerance:
+            return None
+        try:
+            self.win32gui.MoveWindow(main_window, l, t, self.config.standard_width, h, True)
+            time.sleep(self.config.action_delay_seconds)
+        except Exception:
+            return None
+        return (l, t, w, h)
+
+    def _restore_window(self, main_window: int, orig) -> None:
+        if not orig or not self.config.restore_size_after:
+            return
+        try:
+            self.win32gui.MoveWindow(main_window, orig[0], orig[1], orig[2], orig[3], True)
+        except Exception:
+            pass
+
+    def _close_blocking_popups(self) -> None:
+        """발송을 방해하는 카카오톡 팝업(친구 추가 등)이 떠 있으면 닫는다.
+        사용자가 창을 안 닫아둔 경우, 이전 발송이 좌표 어긋나 띄운 친구추가 창이 남은 경우 대비.
+        메인 창('카카오톡')과 실제 채팅방 창은 건드리지 않고, 알려진 방해 팝업만 닫는다."""
+        for title in self.config.blocking_popup_titles:
+            for _ in range(3):   # 같은 제목 팝업이 여러 개 떠 있을 수 있어 반복
+                h = self.win32gui.FindWindow(None, title)
+                if not h:
+                    break
+                try:
+                    self.win32gui.PostMessage(h, self.win32con.WM_CLOSE, 0, 0)
+                    time.sleep(self.config.action_delay_seconds)
+                except Exception:
+                    break
 
     def _open_room(self, chat_name: str) -> None:
         search_input = self._find_room_search_input()
