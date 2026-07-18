@@ -1278,12 +1278,16 @@ async function doSearch(){
     //  연속 검색(용도 전환 등) 시 이전 enrich 타이머를 취소 → 목록 fetch끼리 CPU 경합 제거 → 로딩 급개선.
     if(window._enrichT) clearTimeout(window._enrichT);
     window._enrichT=setTimeout(function(){
-      fillAptBriefs();   // 주거용 행에 준공년도·세대수 비동기 채움(응답에 없던 미캐시만)
-      fillEncarAvgs();   // 차량외 행에 엔카 평균시세·차익
-      fillEstimates();   // 주거용(아파트) 추정시세
-      fillVillaEstimates(); // 빌라/연립/도시형 추정시세(공시가격×요율 — 무거움)
-      fillGrades();      // 주거용 매수판정(양호/검토/금지) 배지
-      fillKbCounts();    // 아파트 호가 매물(동일평형 KB) 수
+      // ★각 enrich를 독립 실행 — 하나가 동기 예외를 던져도 나머지(특히 차량 시세)는 반드시 실행.
+      //  3045a9d에서 순차 호출로 바꾼 뒤, 앞 함수(주거 준공/시세) 예외가 뒤의 fillEncarAvgs(차량 시세)를
+      //  통째로 죽이던 경로를 차단한다. 앞으로 어떤 enrich가 깨져도 다른 칸은 안 죽음.
+      [fillAptBriefs,      // 주거용 준공년도·세대수(응답에 없던 미캐시만)
+       fillEncarAvgs,      // 차량외 엔카 평균시세·차익
+       fillEstimates,      // 주거용(아파트) 추정시세
+       fillVillaEstimates, // 빌라/연립/도시형 추정시세(무거움)
+       fillGrades,         // 주거용 매수판정(양호/검토/금지) 배지
+       fillKbCounts        // 아파트 호가 매물(동일평형 KB) 수
+      ].forEach(function(fn){ try{ fn(); }catch(e){ console.warn('[enrich]', fn.name, e); } });
     }, 300);
   }
   const sa=document.getElementById("selectAll"); if(sa) sa.checked=false;
