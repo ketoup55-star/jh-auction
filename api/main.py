@@ -1798,7 +1798,19 @@ def _grade_buckets(force: bool = False) -> dict:
         print("[buy_grade] waiver 0건(조회 실패 추정) — 재계산 중단, 기존 버킷 유지", flush=True)
         _grade_cache["building"] = False
         return _grade_cache.get("buckets") or {}
+    # ★목록 매수판정을 상세 위험도(analysis)와 일치시킴(㉯): analysis 캐시(analysis:)에 risk_level이
+    #  있으면 그 값을 그대로 매핑(상세와 100% 동일). 캐시 없는 물건만 아래 danger 폴백으로 계산.
+    #  기존 danger 로직은 말소기준 미반영이라 상세와 13.5% 어긋났음(위험→목록양호 등) → 캐시 우선으로 해소.
+    try:
+        _an_cache = db.cache_get_many(["analysis:" + k for k in res]) or {}
+    except Exception:
+        _an_cache = {}
+    _RMAP = {"안전": "매수양호", "주의": "매수검토", "위험": "매수금지"}
     for k in res:
+        _ac = _an_cache.get("analysis:" + k)
+        if isinstance(_ac, dict) and _ac.get("risk_level") in _RMAP:
+            out[_RMAP[_ac["risk_level"]]].add(k)   # 상세 analysis와 동일 판정
+            continue
         assume, has_opp, danger = 0, False, False
         waived = k in waiver
         for t in tmap.get(k, []):
@@ -3966,6 +3978,13 @@ def _col_enrich_sync() -> None:
                   AND (it.area IS NULL OR (l.area_excl IS NOT NULL AND abs(l.area_excl-it.area)<=3))
              GROUP BY it.item_key
            ) sub WHERE i.item_key=sub.item_key AND i.kb_count IS DISTINCT FROM sub.cnt""",
+        # 매각기일 30일 지난 물건의 무거운 analysis 캐시(물건당 ~3.5KB) 삭제 — 용량 관리(주인님 요청).
+        #  risk_level은 buy_grade 컬럼에 이미 반영됐고, 과거물건 상세는 재조회 시 analyzed_at(크롤러 데이터)로
+        #  재계산되므로 안전(실측: 2016년 매각물건도 source=crawler·available=True). item_key엔 ':' 없어 split_part [2]=item_key.
+        """DELETE FROM api_cache WHERE cache_key LIKE 'analysis:%'
+           AND split_part(cache_key, ':', 2) IN (
+             SELECT item_key FROM items WHERE sell_date_d IS NOT NULL
+               AND sell_date_d < CURRENT_DATE - INTERVAL '30 days')""",
     ]
     try:
         with psycopg.connect(dsn, autocommit=True, connect_timeout=15) as conn:
