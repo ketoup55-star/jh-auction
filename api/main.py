@@ -2574,17 +2574,21 @@ def _cached_doc(prefix: str, item_key: str, compute) -> dict:
 
 @app.get("/auction/case_objects")
 def case_objects(item_key: str) -> dict:
-    """같은 사건(법원|연도|사건일련)의 물번 목록 + 결과 — 상세 물번 선택기용."""
+    """같은 사건(법원|연도|사건일련)의 물번 목록 + 결과 — 상세 물번 선택기용.
+    item_key like 쿼리(값에 파이프 '|' 포함)가 0 반환하던 버그 → case_no(=연도-사건번호) eq로 조회
+    후 item_key prefix로 같은 법원만 파이썬 필터(사건번호 검색이 쓰는 검증된 경로 재사용)."""
     parts = item_key.split("|")
     if len(parts) < 4:
         return {"objects": []}
     prefix = "|".join(parts[:3]) + "|"
+    case_no = f"{parts[1]}-{parts[2]}"          # "2025-504074"
     try:
         r = auction_db._get("items", {"select": "item_key,obj_no,result,status_reason",
-                                       "item_key": f"like.{prefix}*", "order": "obj_no.asc"})
+                                       "case_no": f"eq.{case_no}", "order": "obj_no.asc", "limit": "500"})
         rows = r.json() if r.status_code in (200, 206) else []
     except Exception:
         rows = []
+    rows = [x for x in rows if str(x.get("item_key", "")).startswith(prefix)]  # 같은 법원만(타 법원 동일 사건번호 제외)
     objs = [{"item_key": x["item_key"], "obj_no": x.get("obj_no"),
              "result": (x.get("result") or x.get("status_reason") or "")} for x in rows]
     return {"objects": objs}
