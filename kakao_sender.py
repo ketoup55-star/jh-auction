@@ -179,7 +179,7 @@ class KakaoTalkService:
         self.win32con = win32con
         self.win32gui = win32gui
 
-    def open_chat_and_input_message(self, chat_name: str, message_: str) -> int:
+    def open_chat_and_input_message(self, chat_name: str, message_: str, *, defer_restore: bool = False) -> int:
         chat_name = self._require_text(chat_name, "chat_name")
         message_ = self._require_text(message_, "message_")
 
@@ -187,6 +187,7 @@ class KakaoTalkService:
         if self.config.close_popups_before_send:
             self._close_blocking_popups()   # 발송 방해 팝업(친구추가 등) 먼저 닫기
         _orig = self._normalize_window(main_window)   # B: 발송 순간 표준 폭으로 고정(좌표 클릭 신뢰성)
+        self._pending_restore = (main_window, _orig)   # 전송 후 복원용(send_message가 전송 끝나고 복원)
         try:
             time.sleep(self.config.action_delay_seconds)
             self._focus_window(main_window)
@@ -206,20 +207,32 @@ class KakaoTalkService:
 
             return chat_window
         finally:
-            self._restore_window(main_window, _orig)   # 발송 흐름 끝 → 원래 크기 복원(주인님 크기 유지)
+            # 입력만 하는 경로(send_now=False)는 즉시 복원. 전송까지 가는 send_message는 defer_restore=True라
+            # 여기서 복원하지 않고 '전송 완료 후' 복원한다(입력↔전송 사이 창 이동으로 전송이 깨지던 버그 수정).
+            if not defer_restore:
+                self._restore_window(main_window, _orig)
+                self._pending_restore = None
 
     def send_message(self, chat_name: str, message_: str) -> None:
-        chat_window = self.open_chat_and_input_message(chat_name, message_)
-        message_input = self._find_message_input(chat_window)
-        time.sleep(self.config.action_delay_seconds)
-        self._ensure_input_filled(message_input, message_)   # 빈 입력창이면 재붙여넣기(유실→빈 Enter 방지)
-        self._click_window(message_input)
-        self._press_key(self.win32con.VK_RETURN)
-
-        if self.config.close_after_send:
+        # 정규화한 창을 '전송까지' 유지하려고 defer_restore=True로 입력 → 전송 → 그다음 복원.
+        #  (복원을 전송 전에 하면 창이 움직여 입력창 포커스를 잃고 Enter가 먹지 않던 버그를 막는다.)
+        chat_window = self.open_chat_and_input_message(chat_name, message_, defer_restore=True)
+        _pr = getattr(self, "_pending_restore", None)
+        try:
+            message_input = self._find_message_input(chat_window)
             time.sleep(self.config.action_delay_seconds)
-            self.win32gui.PostMessage(chat_window, self.win32con.WM_CLOSE, 0, 0)
-            self._wait_for_window_closed(chat_window)
+            self._ensure_input_filled(message_input, message_)   # 빈 입력창이면 재붙여넣기(유실→빈 Enter 방지)
+            self._click_window(message_input)
+            self._press_key(self.win32con.VK_RETURN)
+
+            if self.config.close_after_send:
+                time.sleep(self.config.action_delay_seconds)
+                self.win32gui.PostMessage(chat_window, self.win32con.WM_CLOSE, 0, 0)
+                self._wait_for_window_closed(chat_window)
+        finally:
+            if _pr:
+                self._restore_window(*_pr)   # 전송 완료(성공/실패 무관) 후 원래 크기 복원
+                self._pending_restore = None
 
     def send_sequence(self, chat_name: str, items: list) -> None:
         """한 방에 여러 항목(text/image)을 순차 전송 — 사진 말풍선, 텍스트 말풍선 번갈아."""
