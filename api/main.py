@@ -2235,6 +2235,32 @@ def _enrich_list(items: list) -> None:
         cp = _cp.get(k)                          # 경쟁분산(전 유형, 같은 부류·매각기일·법원 동시진행 건수)
         if cp:
             it["compete"] = cp
+    # 차량(차량외): brief 캐시에 없어도 vehicle_specs(연식/주행/연료)+매수판정을 목록 응답에 실어
+    #  prefill이 kapt(연식·주행·연료·판정)를 즉시 렌더 → 온디맨드 fillAptBriefs fetch 제거(아파트와 동일 구조).
+    #  grade는 buy_grade 컬럼("매수양호"/"매수금지")을 buyBadge용 {ok} 형태로 변환.
+    _car = [it for it in items if str(it.get("group")) == "차량외"
+            and not (isinstance(it.get("brief"), dict) and it["brief"].get("available"))]
+    if _car:
+        _ck = [it.get("item_key") for it in _car if it.get("item_key")]
+        _specs: dict = {}
+        try:
+            _r = auction_db._get("vehicle_specs", {"select": "item_key,model_year,mileage_km,fuel",
+                                                   "item_key": "in.(" + ",".join(_ck) + ")", "limit": "1000"})
+            for _x in (_r.json() if _r.status_code in (200, 206) else []):
+                _specs[_x.get("item_key")] = _x
+        except Exception:
+            _specs = {}
+        for it in _car:
+            sp = _specs.get(it.get("item_key"))
+            if not sp:
+                continue
+            _mk = sp.get("mileage_km")
+            _bg = it.get("grade") or it.get("buy_grade")
+            it["brief"] = {"available": True, "kind": "vehicle",
+                           "year": sp.get("model_year"),
+                           "mileage": (f"{int(_mk):,}km" if _mk else None),
+                           "fuel": sp.get("fuel"),
+                           "grade": ({"ok": _bg == "매수양호", "allowed": 0, "reasons": []} if _bg else None)}
     # 용도지역: 단독·다가구·근린주택·주택(아파트/다세대/도시형 제외)만 표기
     zkeys = [it.get("item_key") for it in items
              if it.get("item_key")
