@@ -3911,6 +3911,15 @@ def _col_enrich_sync() -> None:
         f"""UPDATE items i SET expected_bid=(c.data->>'expected_bid')::numeric::bigint, expbid_count=(c.data->>'count')::int
             FROM api_cache c WHERE c.cache_key='vexpbid:'||i.item_key AND (c.data->>'available')::bool AND (c.data->>'v')::int={_VEXPBID_V}
               AND (c.data->>'expected_bid') ~ '^[0-9.]+$' AND i.expected_bid IS DISTINCT FROM (c.data->>'expected_bid')::numeric::bigint""",
+        # 차량 시세(엔카 avg_price 만원 → est_price 원) — encar2 캐시 → 컬럼. 아파트/빌라와 동일 구조로 목록 1쿼리 완결.
+        """UPDATE items i SET est_price=(c.data->>'avg_price')::numeric::bigint*10000
+            FROM api_cache c WHERE c.cache_key='encar2:'||i.item_key AND (c.data->>'count')::int>0
+              AND (c.data->>'avg_price') ~ '^[0-9.]+$'
+              AND i.est_price IS DISTINCT FROM (c.data->>'avg_price')::numeric::bigint*10000""",
+        # 차량 예상낙찰가 — carexpbid 캐시 → expected_bid 컬럼
+        f"""UPDATE items i SET expected_bid=(c.data->>'expected_bid')::numeric::bigint, expbid_count=(c.data->>'count')::int
+            FROM api_cache c WHERE c.cache_key='carexpbid:'||i.item_key AND (c.data->>'available')::bool AND (c.data->>'v')::int={_CAREXPBID_V}
+              AND (c.data->>'expected_bid') ~ '^[0-9.]+$' AND i.expected_bid IS DISTINCT FROM (c.data->>'expected_bid')::numeric::bigint""",
         "UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
         # 유사거래 건수 — similar_index 블롭(jsonb) 전개 후 조인(변경분만). 舊 startup 블롭 방식 대체
         """UPDATE items i SET similar_count = kv.value::int

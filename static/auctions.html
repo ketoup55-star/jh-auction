@@ -1189,6 +1189,16 @@ function prefillFromResponse(list){
       const tr=el.closest('tr'); if(tr) tr.dataset.diff=pf;
     }
   });
+  // 차량 .ecarv: est_price(엔카 시세, 원) 컬럼이 응답에 있으면 즉시 렌더 → fillEncarAvgs 온디맨드 fetch 생략(prefill 즉시).
+  //  아파트가 빠른 것과 동일 구조. 차익 = 시세 − base(최저가/낙찰가). 예상낙찰가는 아래 fillExpBids가 컬럼으로 채움.
+  document.querySelectorAll('.ecarv[data-key]').forEach(el=>{
+    const L=m[el.dataset.key]; if(!L||L.est_price==null||el.dataset.done) return;
+    const avgMan=Math.round(L.est_price/10000);
+    let html=`<div class="ecsi"><span class="lbl">시세 :</span><span class="amt">${avgMan.toLocaleString()}만원</span></div>`;
+    const base=+el.dataset.base;
+    if(base){ const diff=L.est_price-base; html+=`<div class="${diff>=0?'eprofit':'eloss'}"><span class="lbl">차익 :</span><span class="amt">${diff>=0?'+':'−'}${won(Math.abs(diff))}</span></div>`; const tr=el.closest('tr'); if(tr) tr.dataset.diff=diff; }
+    el.innerHTML=html; el.dataset.sise=L.est_price; el.dataset.done="1";
+  });
   fillExpBids();                            // 예상낙찰가(임베드 경로에서도 떠야 함 — 독립 패스; 컬럼 없는 행만 fetch)
   // ③ 매수판정 배지 → .gradechip
   const gcls={'매수양호':'g-ok','매수검토':'g-mid','매수금지':'g-no'};
