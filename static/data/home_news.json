@@ -1,132 +1,105 @@
 {
  "items": [
   {
-   "keyword": "대출규제",
-   "title": "기준금리 인상에 무주택 실수요자 잔금 대출 이중고",
-   "link": "https://www.2news.co.kr/news/articleView.html?idxno=16496",
-   "image": "https://cdn.2news.co.kr/news/photo/202607/mn_16496_20260718091425_1.jpg",
-   "source": "에너지뉴스",
-   "published": "2026-07-18T09:14:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "오세훈 시장 “부동산, 수요 억제서 공급 중심으로”",
-   "link": "https://www.dongbangilbo.co.kr/news/articleView.html?idxno=97903",
-   "image": "https://cdn.dongbangilbo.co.kr/news/thumbnail/202607/97903_115565_4637_v150.jpg",
-   "source": "동방일보",
-   "published": "2026-07-18T08:47:08+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "국무회의서부터 정면충돌…주거정책 두고 이재명 vs 오세훈 본격화?",
-   "link": "https://www.sedaily.com/article/20068952",
-   "image": "https://wimg.sedaily.com/news/cms/2026/07/18/news-p.v1.20260714.a848688e38bf4bc1b67419b10f264bb2_R.jpg",
-   "source": "서울경제",
-   "published": "2026-07-18T08:15:38+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "집값 높아도 결국은 ‘일자리’...혼인 후 이사간 청년의 62%가 수도권행",
-   "link": "https://www.munhwa.com/article/11603325",
-   "image": "https://wimg.munhwa.com/news/cms/2026/07/18/news-p.v1.20260718.a9fbc116b63a46adb792e00c8c0e954b_R.jpg",
-   "source": "문화일보",
-   "published": "2026-07-18T08:15:14+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "감정가 150%에도 산다···빌라 경매로 번진 ‘입주권 베팅’",
-   "link": "https://www.sisajournal-e.com/news/articleView.html?idxno=422498",
-   "image": "https://cdn.sisajournal-e.com/news/thumbnail/202607/422498_237280_3850_v150.jpg",
-   "source": "시사저널e",
-   "published": "2026-07-18T08:10:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "비규제 풍선효과에 경기 외곽 집값 ‘껑충’… 실수요자 ‘발동동’",
-   "link": "https://www.dt.co.kr/article/12073109?ref=naver",
-   "image": "https://wimg.dt.co.kr/news/cms/2026/07/18/news-p.v1.20260715.e50e94d0a895429dbde4165e222409b5_R.png",
-   "source": "디지털타임스",
-   "published": "2026-07-18T08:03:02+09:00",
-   "has_time": true
-  },
-  {
    "keyword": "부동산 세금",
-   "title": "부동산 빚투 이후의 냉혹한 현실…“집 가진 거지 또는 다시 무주택자”",
-   "link": "https://www.ledesk.co.kr/view.php?uid=16227",
-   "image": "https://img.ledesk.co.kr/titleimg/2026/16227_file_1.webp",
-   "source": "르데스크",
-   "published": "2026-07-18T07:53:51+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "부동산 놓고 백가쟁명 3일…시선은 ‘이재명 대토론회’로[부동산 취재로그]",
-   "link": "https://www.edaily.co.kr/News/Read?newsId=01640006645515832&mediaCodeNo=257",
-   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/07/PS26071800167.jpg",
+   "title": "국민의힘 “李, 25억 차익 앞두고 ‘집 없다’…국민엔 세금폭탄”",
+   "link": "https://www.edaily.co.kr/News/Read?newsId=01154566645516160&mediaCodeNo=257",
+   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/07/PS26071900044.jpg",
    "source": "이데일리",
-   "published": "2026-07-18T07:00:03+09:00",
+   "published": "2026-07-19T09:39:18+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "[송윤주의 부동산생태계] 비아파트 살리려면 공급보다 ‘신뢰’…체감형 수요대책 필요②",
+   "link": "https://www.ekn.kr/web/view.php?key=20260718026053497",
+   "image": "https://www.ekn.kr/mnt/file/202607/news-p.v1.20260717.344244523f10465f80918808c86df99f_R.jpg",
+   "source": "에너지경제신문",
+   "published": "2026-07-19T09:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "다가오는 부동산 세제 개편…과세 기준, ‘주택 수→가액’ 전환 무게",
+   "link": "https://www.segye.com/newsView/20260717509182",
+   "image": "https://www.segye.com/content/image/2026/07/17/20260717509271.jpg",
+   "source": "세계일보",
+   "published": "2026-07-19T06:36:25+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "집값 치솟고 대출 어려워지고...2030 주거불안↑",
+   "link": "https://www.ytn.co.kr/_ln/0102_202607190635396518",
+   "image": "https://image.ytn.co.kr/general/jpg/2026/0719/202607190635396518_t.jpg",
+   "source": "YTN",
+   "published": "2026-07-19T06:35:00+09:00",
    "has_time": true
   },
   {
    "keyword": "대출규제",
-   "title": "\"잔금 어쩌나\"…실수요자 대출 막히고 이자도 오른다[금리인상 후폭풍]②",
-   "link": "https://www.news1.kr/finance/bank/6230930",
-   "image": "https://i3n.news1.kr/system/photos/2026/7/16/8011768/high.jpg",
+   "title": "\"마통이 벌써?\" 애꿎은 주담대만 막았다…총량규제에 실수요 '날벼락' - 머니투데이",
+   "link": "https://www.mt.co.kr/finance/2026/07/19/2026071615443451523",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026071615443451523_3.jpg",
+   "source": "머니투데이",
+   "published": "2026-07-19T06:30:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "정부 부동산 세제 개편, 시장에 어떤 변화 줄까?",
+   "link": "https://www.2news.co.kr/news/articleView.html?idxno=16576",
+   "image": "https://cdn.2news.co.kr/news/photo/202607/16576_11052_5615.jpeg",
+   "source": "에너지뉴스",
+   "published": "2026-07-19T05:53:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "'부동산 정책 제안' 1500건 육박…李대통령, 국민토론회로 '집값' 승부수",
+   "link": "https://www.news1.kr/politics/president/6231684",
+   "image": "https://i3n.news1.kr/system/photos/2026/7/14/8007027/high.jpg",
    "source": "뉴스1",
-   "published": "2026-07-18T07:00:00+09:00",
+   "published": "2026-07-19T05:05:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "대출규제",
-   "title": "성과급 반영되어 대출 한도 늘어나는 일 막는다, 주담대 규제 강화 예고",
-   "link": "https://www.1waynews.com/news/articleView.html?idxno=2604",
-   "image": "https://cdn.1waynews.com/news/photo/202607/2604_2757_396.png",
-   "source": "전한길뉴스",
-   "published": "2026-07-18T05:39:44+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "75주째 쭉 오른 서울 매매·전세가…그 때 무슨 일이?",
-   "link": "https://v.daum.net/v/20260718080128489",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/18/BUSINESSWATCH/20260718080130472cryq.jpg",
-   "source": "Daum",
-   "published": "2026-07-18T00:00:00+09:00",
-   "has_time": false
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "재경부, 부동산 세제 ‘선진국 표준’ 보유세 중심 전환할까",
-   "link": "https://www.viva100.com/article/20260717500161",
-   "image": "https://stqnq5ux4599.edge.naverncp.com/data2//content/image/2026/07/17/.cache/512/20260717500160.jpg?v=20260718093017",
-   "source": "브릿지경제",
-   "published": "2026-07-18T00:00:00+09:00",
+   "keyword": "아파트 경매",
+   "title": "감정가 넘겨도 줄선다… 집값 뛰자 경매 낙찰가도 강세",
+   "link": "https://www.msn.com/ko-kr/money/%EB%B6%80%EB%8F%99%EC%82%B0/%EA%B0%90%EC%A0%95%EA%B0%80-%EB%84%98%EA%B2%A8%EB%8F%84-%EC%A4%84%EC%84%A0%EB%8B%A4-%EC%A7%91%EA%B0%92-%EB%9B%B0%EC%9E%90-%EA%B2%BD%EB%A7%A4-%EB%82%99%EC%B0%B0%EA%B0%80%EB%8F%84-%EA%B0%95%EC%84%B8/ar-AA27xHXa",
+   "image": null,
+   "source": "msn.com",
+   "published": "2026-07-19T00:00:00+09:00",
    "has_time": false
   },
   {
    "keyword": "아파트 경매",
-   "title": "[영상] “GTA 수혜 한 몸에” 용인 기흥 구성역 래미안, 14억이 7억됐다[부동산360]",
-   "link": "https://v.daum.net/v/20260718070223841",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/18/ned/20260718070223714gxww.jpg",
-   "source": "Daum",
-   "published": "2026-07-18T00:00:00+09:00",
+   "title": "‘0’ 하나 잘못 붙여…18억 아파트 172억에 낙찰",
+   "link": "https://www.msn.com/ko-kr/money/%EB%B6%80%EB%8F%99%EC%82%B0/0-%ED%95%98%EB%82%98-%EC%9E%98%EB%AA%BB-%EB%B6%99%EC%97%AC-18%EC%96%B5-%EC%95%84%ED%8C%8C%ED%8A%B8-172%EC%96%B5%EC%97%90-%EB%82%99%EC%B0%B0/ar-AA25G67z",
+   "image": null,
+   "source": "msn.com",
+   "published": "2026-07-19T00:00:00+09:00",
    "has_time": false
   },
   {
    "keyword": "집값",
-   "title": "집값 잡겠다더니 ‘금수저 잔치’ 판 깔았나…터져버린 부동산 민심[주형연의 에구MONEY]",
-   "link": "https://v.daum.net/v/20260718053707036",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/18/dt/20260718053710521lrtn.jpg",
+   "title": "동탄 집값 주춤하니 수원 영통이 '훌쩍'…올해 최대 상승폭",
+   "link": "https://news.nate.com/view/20260719n00629",
+   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/mt/2026/07/19/2026071615315278511_1.jpg",
+   "source": "네이트 뉴스",
+   "published": "2026-07-19T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "'부동산 일타시장' 오세훈?",
+   "link": "https://v.daum.net/v/20260719090127974",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/19/BUSINESSWATCH/20260719090130281iufs.jpg",
    "source": "Daum",
-   "published": "2026-07-18T00:00:00+09:00",
+   "published": "2026-07-19T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 14,
- "date": "2026-07-18"
+ "count": 11,
+ "date": "2026-07-19"
 }
