@@ -2,104 +2,122 @@
  "items": [
   {
    "keyword": "부동산 세금",
-   "title": "국민의힘 “李, 25억 차익 앞두고 ‘집 없다’…국민엔 세금폭탄”",
-   "link": "https://www.edaily.co.kr/News/Read?newsId=01154566645516160&mediaCodeNo=257",
-   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/07/PS26071900044.jpg",
-   "source": "이데일리",
-   "published": "2026-07-19T09:39:18+09:00",
+   "title": "[안영운 칼럼] 미국 부동산 통한 절세, 영주권 통한 거주자 신분 이용하기",
+   "link": "http://www.financialreview.co.kr/news/articleView.html?idxno=43635",
+   "image": "http://www.financialreview.co.kr/news/thumbnail/202607/43635_63980_192_v150.jpg",
+   "source": "파이낸셜리뷰",
+   "published": "2026-07-20T09:19:06+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "[송윤주의 부동산생태계] 비아파트 살리려면 공급보다 ‘신뢰’…체감형 수요대책 필요②",
-   "link": "https://www.ekn.kr/web/view.php?key=20260718026053497",
-   "image": "https://www.ekn.kr/mnt/file/202607/news-p.v1.20260717.344244523f10465f80918808c86df99f_R.jpg",
-   "source": "에너지경제신문",
-   "published": "2026-07-19T09:00:00+09:00",
+   "title": "“李, 부동산 토론회에 ‘28번 정책’ 다 실패한 文 초청하길” 안철수의 말",
+   "link": "https://www.munhwa.com/article/11603542",
+   "image": "https://wimg.munhwa.com/news/cms/2026/07/20/news-p.v1.20260720.85dcf7e7528449ba879412d35e752eb3_R.jpg",
+   "source": "문화일보",
+   "published": "2026-07-20T09:18:52+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "경매시장 양극화 …아파트 21명, 상가 2명 응찰",
+   "link": "https://www.wonjutoday.co.kr/news/articleView.html?idxno=211486",
+   "image": "https://cdn.wonjutoday.co.kr/news/photo/202607/211486_111007_256.jpg",
+   "source": "원주투데이",
+   "published": "2026-07-20T08:34:08+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "안철수, 이 대통령 향해 “부동산대토론회에 문재인, 김현미, 김수현을 패널로 초청하라”",
+   "link": "https://www.khan.co.kr/article/202607200755001",
+   "image": "https://img.khan.co.kr/news/2026/07/20/rcv.YNA.20260712.PYH2026071202640001300_P1.jpg",
+   "source": "경향신문",
+   "published": "2026-07-20T07:55:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "다가오는 부동산 세제 개편…과세 기준, ‘주택 수→가액’ 전환 무게",
-   "link": "https://www.segye.com/newsView/20260717509182",
-   "image": "https://www.segye.com/content/image/2026/07/17/20260717509271.jpg",
-   "source": "세계일보",
-   "published": "2026-07-19T06:36:25+09:00",
+   "title": "[세미콜론] ‘감사 지적도, 법령도’ 흘려버린 세무서…세금은 누가 책임지나",
+   "link": "https://www.sejungilbo.com/news/articleView.html?idxno=59277",
+   "image": "https://cdn.sejungilbo.com/news/thumbnail/202607/59277_94040_2959_v150.jpg",
+   "source": "세정일보",
+   "published": "2026-07-20T07:34:51+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "집값 치솟고 대출 어려워지고...2030 주거불안↑",
-   "link": "https://www.ytn.co.kr/_ln/0102_202607190635396518",
-   "image": "https://image.ytn.co.kr/general/jpg/2026/0719/202607190635396518_t.jpg",
-   "source": "YTN",
-   "published": "2026-07-19T06:35:00+09:00",
+   "title": "\"집값 급등에 지쳐\"…서울 떠난 실수요자, 가장 많이 찾은 곳은 고양",
+   "link": "https://www.hankookilbo.com/news/article/amp/A2026071216350003985",
+   "image": "https://newsimg.hankookilbo.com/2026/07/15/14daf7d7-b830-4bc2-b53f-0adf6efeccfc.png",
+   "source": "hankookilbo.com",
+   "published": "2026-07-20T07:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "집은 더 짓고 투기 돈줄은 죈다 [부동산 정책 윤곽 ①]",
+   "link": "https://www.etoday.co.kr/news/view/2604798",
+   "image": "https://www.etoday.co.kr/images/etoday_og.jpg",
+   "source": "이투데이",
+   "published": "2026-07-20T07:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "대출규제",
-   "title": "\"마통이 벌써?\" 애꿎은 주담대만 막았다…총량규제에 실수요 '날벼락' - 머니투데이",
-   "link": "https://www.mt.co.kr/finance/2026/07/19/2026071615443451523",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026071615443451523_3.jpg",
+   "title": "\"빚투 못 막고 주담대 옥죄냐\"...한여름 덮친 '대출 한파', 실수요자 불똥 - 머니투데이",
+   "link": "https://www.mt.co.kr/finance/2026/07/20/2026071914574065034",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=689,fit=cover,bg=whilte,f=auto,quality=high,sharpen=2,g=face/21/2026/07/2026071914574065034_1.jpg",
    "source": "머니투데이",
-   "published": "2026-07-19T06:30:00+09:00",
+   "published": "2026-07-20T05:30:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 세금",
-   "title": "정부 부동산 세제 개편, 시장에 어떤 변화 줄까?",
-   "link": "https://www.2news.co.kr/news/articleView.html?idxno=16576",
-   "image": "https://cdn.2news.co.kr/news/photo/202607/16576_11052_5615.jpeg",
-   "source": "에너지뉴스",
-   "published": "2026-07-19T05:53:00+09:00",
+   "keyword": "대출규제",
+   "title": "[라정주의 딴지경제] \"경기 3곳 부동산 추가 규제…과감히 정책 수정\"",
+   "link": "https://www.shinailbo.co.kr/news/articleView.html?idxno=5041475",
+   "image": "https://cdn.shinailbo.co.kr/news/photo/202607/5041475_2039969_1652.jpg",
+   "source": "신아일보",
+   "published": "2026-07-20T05:20:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "집값",
-   "title": "'부동산 정책 제안' 1500건 육박…李대통령, 국민토론회로 '집값' 승부수",
-   "link": "https://www.news1.kr/politics/president/6231684",
-   "image": "https://i3n.news1.kr/system/photos/2026/7/14/8007027/high.jpg",
+   "keyword": "대출규제",
+   "title": "23일 李정부 부동산 대토론회…공급·금융·세제 '패키지' 윤곽 나온다",
+   "link": "https://www.news1.kr/amp/realestate/general/6230879",
+   "image": "https://i3n.news1.kr/system/photos/2026/7/16/8012104/high.jpg",
    "source": "뉴스1",
-   "published": "2026-07-19T05:05:00+09:00",
+   "published": "2026-07-20T05:05:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "아파트 경매",
-   "title": "감정가 넘겨도 줄선다… 집값 뛰자 경매 낙찰가도 강세",
-   "link": "https://www.msn.com/ko-kr/money/%EB%B6%80%EB%8F%99%EC%82%B0/%EA%B0%90%EC%A0%95%EA%B0%80-%EB%84%98%EA%B2%A8%EB%8F%84-%EC%A4%84%EC%84%A0%EB%8B%A4-%EC%A7%91%EA%B0%92-%EB%9B%B0%EC%9E%90-%EA%B2%BD%EB%A7%A4-%EB%82%99%EC%B0%B0%EA%B0%80%EB%8F%84-%EA%B0%95%EC%84%B8/ar-AA27xHXa",
-   "image": null,
-   "source": "msn.com",
-   "published": "2026-07-19T00:00:00+09:00",
-   "has_time": false
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "‘0’ 하나 잘못 붙여…18억 아파트 172억에 낙찰",
-   "link": "https://www.msn.com/ko-kr/money/%EB%B6%80%EB%8F%99%EC%82%B0/0-%ED%95%98%EB%82%98-%EC%9E%98%EB%AA%BB-%EB%B6%99%EC%97%AC-18%EC%96%B5-%EC%95%84%ED%8C%8C%ED%8A%B8-172%EC%96%B5%EC%97%90-%EB%82%99%EC%B0%B0/ar-AA25G67z",
-   "image": null,
-   "source": "msn.com",
-   "published": "2026-07-19T00:00:00+09:00",
-   "has_time": false
+   "keyword": "빌라 경매",
+   "title": "\"재개발 땐 대박, 빌라라도 사자\" 우르르...가격 쑥, 서민들 한숨 푹 - 머니투데이",
+   "link": "https://www.mt.co.kr/estate/2026/07/20/2026071919393589021",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026071919393589021_1.jpg",
+   "source": "머니투데이",
+   "published": "2026-07-20T04:10:00+09:00",
+   "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "동탄 집값 주춤하니 수원 영통이 '훌쩍'…올해 최대 상승폭",
-   "link": "https://news.nate.com/view/20260719n00629",
-   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/mt/2026/07/19/2026071615315278511_1.jpg",
-   "source": "네이트 뉴스",
-   "published": "2026-07-19T00:00:00+09:00",
-   "has_time": false
+   "title": "동탄·구리 꺾였지만...\"옆동네 집값 들썩\" 토허제 절반만 성공? - 머니투데이",
+   "link": "https://www.mt.co.kr/estate/2026/07/20/2026071919414230473",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026071919414230473_1.jpg",
+   "source": "머니투데이",
+   "published": "2026-07-20T04:10:00+09:00",
+   "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "'부동산 일타시장' 오세훈?",
-   "link": "https://v.daum.net/v/20260719090127974",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/19/BUSINESSWATCH/20260719090130281iufs.jpg",
-   "source": "Daum",
-   "published": "2026-07-19T00:00:00+09:00",
-   "has_time": false
+   "keyword": "집값",
+   "title": "[단독] 치솟는 서울 집값에 떠밀린 30대가 구리로 몰려왔다",
+   "link": "https://www.kmib.co.kr/article/view_amp.asp?arcid=1784444564",
+   "image": "https://image.kmib.co.kr/online_image/2026/0720/2026071923390614827_1784472152_1784444564.jpg",
+   "source": "국민일보",
+   "published": "2026-07-20T02:38:00+09:00",
+   "has_time": true
   }
  ],
- "count": 11,
- "date": "2026-07-19"
+ "count": 13,
+ "date": "2026-07-20"
 }
