@@ -96,7 +96,8 @@ class KakaoTalkConfig:
     # ── 채팅 탭 이동 안정화(창 크기 바뀌어도 친구추가 등 오클릭 방지) ──
     use_chat_tab_hotkey: bool = False  # Ctrl+2는 이 카카오톡 버전에서 채팅탭 이동이 아니라 제거(원래 좌표 방식 유지)
     chat_tab_use_coord: bool = True    # 원래 방식: 좌표(28,105) 클릭. 아래 정규화로 창 크기를 표준 고정해 좌표를 항상 맞춤
-    normalize_width: bool = True        # B: 발송 순간 창을 표준 폭으로 고정(좌표 클릭 신뢰성) 후 복원
+    normalize_width: bool = False       # ★좌표 클릭을 정상경로에서 제거(핸들 방식)해 창 폭 강제변경이 불필요해짐.
+                                        #  주인님이 맞춰둔 창 크기를 건드리지 않는다. (좌표 최후폴백을 쓸 때만 의미)
     standard_width: int = 360           # 표준 폭(offset 28,105가 맞는 카카오톡 기본 폭 근처)
     width_tolerance: int = 24           # 표준±24 안이면 정규화 생략(주인님이 살짝 바꾼 건 존중)
     restore_size_after: bool = True     # 발송 후 원래 크기로 복원(주인님이 바꿔둔 크기 유지)
@@ -356,18 +357,36 @@ class KakaoTalkService:
         time.sleep(self.config.action_delay_seconds)
 
     def _go_to_chat_tab(self, main_window: int) -> None:
-        # A(근본): Ctrl+2 = 채팅 탭 단축키 → 창 크기·위치와 완전 무관. 좌표 오클릭(친구추가 등) 원천 차단.
+        """채팅 탭 이동 — ★좌표 클릭을 정상경로에서 제거(근본).
+        방 검색창은 창 계층(EVA_ChildWindow→EVA_Window) '핸들'로 직접 찾히므로(실측 확인)
+        탭 클릭 자체가 불필요하다. 좌표(28,105) 클릭은 창 크기·위치가 조금만 달라져도
+        친구추가 등 엉뚱한 버튼을 눌러 뉴스/매각예정 발송이 그 팝업에 입력되는 사고를 냈다.
+        → ①검색창이 잡히면 아무것도 안 함 ②단축키(설정 시) ③그래도 안 되면 최후 폴백으로만
+          좌표 클릭하되, 클릭 직후 방해 팝업을 즉시 닫는다."""
+        # ① 좌표 없이 검색창이 잡히면 탭 이동 불필요 (정상 경로 — 좌표 클릭 안 함)
+        try:
+            if self._find_room_search_input():
+                return
+        except Exception:
+            pass
+        # ② 단축키(이 카카오톡 버전에서 동작하는 경우만)
         if self.config.use_chat_tab_hotkey:
             self._hotkey(self.win32con.VK_CONTROL, ord("2"))
             time.sleep(self.config.action_delay_seconds)
-        # B(보조): 좌표 클릭 — Ctrl+2가 이미 채팅 탭으로 갔으면 좌표는 오히려 탭을 망칠 수 있어 기본 off.
-        #  단축키 미작동 카카오톡 버전에서만 chat_tab_use_coord=True로 켠다(정규화된 표준 폭에서만 신뢰).
+            try:
+                if self._find_room_search_input():
+                    return
+            except Exception:
+                pass
+        # ③ 최후 폴백: 좌표 클릭(오클릭 위험) → 클릭 후 방해 팝업 즉시 닫기
         if self.config.chat_tab_use_coord:
             left, top, _, _ = self.win32gui.GetWindowRect(main_window)
             self._click(
                 left + self.config.chat_tab_x_offset,
                 top + self.config.chat_tab_y_offset,
             )
+            time.sleep(self.config.action_delay_seconds)
+            self._close_blocking_popups()   # 좌표가 어긋나 친구추가 등이 열렸으면 즉시 닫음
 
     def _normalize_window(self, main_window: int):
         """발송 순간 창을 표준 폭으로 고정(좌표 클릭 신뢰성 확보). 원래 크기 반환(복원용).
