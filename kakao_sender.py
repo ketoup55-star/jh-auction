@@ -269,6 +269,20 @@ class KakaoTalkService:
         time.sleep(self.config.action_delay_seconds)
 
         for item in items or []:
+            # ★붙여넣기(Ctrl+V)는 '현재 포커스'로 들어간다 → 항목마다 채팅방 입력창 포커스를 강제하고
+            #  전경이 채팅방인지 검증한다(팝업이 포커스를 뺏으면 그 팝업에 입력되는 사고 방지).
+            #  검증 실패 시 붙여넣지 않고 중단 — 엉뚱한 창 오입력 원천 차단.
+            self._focus_window(chat_window)
+            self._click_window(message_input)
+            time.sleep(self.config.action_delay_seconds)
+            if not self._foreground_is(chat_window):
+                self._close_blocking_popups()
+                self._focus_window(chat_window)
+                self._click_window(message_input)
+                time.sleep(self.config.action_delay_seconds)
+                if not self._foreground_is(chat_window):
+                    raise KakaoTalkControlError(
+                        f"입력 대상이 채팅방이 아님(전경 창 불일치) — 오입력 방지로 중단: {chat_name}")
             if item.get("type") == "image" and item.get("path"):
                 self._clear_message_input(message_input)
                 self._paste_image(item["path"])
