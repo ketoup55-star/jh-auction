@@ -202,6 +202,21 @@ class KakaoTalkService:
             message_input = self._find_message_input(chat_window)
             time.sleep(self.config.action_delay_seconds)
             self._clear_message_input(message_input)
+            # ★★붙여넣기(Ctrl+V)는 창 핸들이 아니라 '현재 포커스'로 들어간다. 친구추가 등 팝업이
+            #  포커스를 갖고 있으면 메시지가 그 팝업에 입력되는 사고가 난다(실제 발생).
+            #  → 붙여넣기 직전에 채팅방 입력창을 전경·포커스로 강제하고, 그래도 전경이 채팅방이
+            #    아니면 붙여넣지 않고 중단한다(엉뚱한 창 오입력 원천 차단).
+            self._focus_window(chat_window)
+            self._click_window(message_input)
+            time.sleep(self.config.action_delay_seconds)
+            if not self._foreground_is(chat_window):
+                self._close_blocking_popups()          # 팝업이 뺏었으면 닫고 재시도
+                self._focus_window(chat_window)
+                self._click_window(message_input)
+                time.sleep(self.config.action_delay_seconds)
+                if not self._foreground_is(chat_window):
+                    raise KakaoTalkControlError(
+                        f"입력 대상이 채팅방이 아님(전경 창 불일치) — 오입력 방지로 중단: {chat_name}")
             self._paste_text(message_)
             time.sleep(self.config.action_delay_seconds)
 
@@ -445,6 +460,26 @@ class KakaoTalkService:
             raise KakaoTalkControlError("KakaoTalk message input was not found.")
 
         return message_input
+
+    def _foreground_is(self, window: int) -> bool:
+        """전경(키보드 포커스) 창이 대상 창(또는 그 자식/루트)인지 — Ctrl+V 오입력 방지용 검증.
+        친구추가 등 팝업이 포커스를 갖고 있으면 False → 호출부가 붙여넣기를 중단한다."""
+        try:
+            fg = self.win32gui.GetForegroundWindow()
+        except Exception:
+            return False
+        if not fg or not window:
+            return False
+        if fg == window:
+            return True
+        try:
+            if self.win32gui.GetParent(fg) == window:
+                return True
+            if self.win32gui.GetAncestor(fg, 2) == window:      # GA_ROOT
+                return True
+        except Exception:
+            pass
+        return False
 
     def _find_chat_window(self, chat_name: str) -> int:
         chat_window = self.win32gui.FindWindow(None, chat_name)
