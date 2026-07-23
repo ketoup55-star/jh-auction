@@ -1,159 +1,132 @@
 {
  "items": [
   {
-   "keyword": "대출규제",
-   "title": "실수요자 \"대출 규제 완화 필요\" 목소리 확산…부동산 정책 토론회 앞두고 의견 집중",
-   "link": "https://www.mstoday.co.kr/news/articleView.html?idxno=102145",
-   "image": "https://www.mstoday.co.kr/news/thumbnail/202607/102145_100758_859_v150.jpg",
-   "source": "MS TODAY",
-   "published": "2026-07-22T23:10:33+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "집값도 주가도 뛰어…1인 평균 순자산 ‘2억7475만원’",
-   "link": "https://www.khan.co.kr/article/202607222132005",
-   "image": "https://img.khan.co.kr/news/2026/07/22/l_2026072301000693100068131.jpg",
-   "source": "경향신문",
-   "published": "2026-07-22T21:32:00+09:00",
+   "keyword": "부동산 세금",
+   "title": "李대통령, 오늘 '부동산 대토론회' 개최…공급부터 세금까지 해법 논의",
+   "link": "https://www.m-i.kr/news/articleView.html?idxno=1394355",
+   "image": "https://cdn.m-i.kr/news/thumbnail/202607/1394355_1182051_3613_v150.jpg",
+   "source": "매일일보",
+   "published": "2026-07-23T08:39:01+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "이재명 정부 부동산 대책, “세입자·청년·주거취약계층 목소리 빠졌다”",
-   "link": "https://www.beminor.com/news/articleView.html?idxno=30173",
-   "image": "https://cdn.beminor.com/news/thumbnail/202607/30173_56748_10_v150.jpg",
-   "source": "비마이너",
-   "published": "2026-07-22T19:08:09+09:00",
+   "title": "李대통령, 오늘 '부동산정책 국민 대토론회'…보유세 개편 등 세제 방향 논의",
+   "link": "https://www.newsian.co.kr/news/articleView.html?idxno=92638",
+   "image": "https://cdn.newsian.co.kr/news/thumbnail/202607/92638_85970_1534_v150.jpg",
+   "source": "뉴시안",
+   "published": "2026-07-23T08:15:47+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "李대통령, 오늘 부동산 '끝장토론'…보유세·대출규제 최대 쟁점",
+   "link": "https://news.einfomax.co.kr/news/articleView.html?idxno=4426306",
+   "image": "https://cdn.news.einfomax.co.kr/news/thumbnail/202607/4426306_331335_282_v150.jpg",
+   "source": "연합인포맥스",
+   "published": "2026-07-23T07:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "이 대통령, 내일 부동산 백분 토론...성난 민심 달랠까",
-   "link": "https://www.ytn.co.kr/_ln/0102_202607221851372933",
-   "image": "https://image.ytn.co.kr/general/jpg/2026/0722/202607221851372933_t.jpg",
-   "source": "YTN",
-   "published": "2026-07-22T18:51:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "“대출 안 나올까 고생하는데…” 대통령은 규제 우회 비판 확산",
-   "link": "https://www.kmib.co.kr/article/view_amp.asp?arcid=1784711908",
-   "image": "https://image.kmib.co.kr/online_image/2026/0722/2026072218421028206_1784713330_1784711908.jpg",
-   "source": "국민일보",
-   "published": "2026-07-22T18:44:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "집값 오르니 ‘현금 부자’만 집산다…무주택자 “대출 규제 풀어야”",
-   "link": "https://www.sedaily.com/article/20070673",
-   "image": "https://wimg.sedaily.com/news/cms/2026/07/22/rcv.YNA.20260716.PYH2026071616620001300_R.jpg",
-   "source": "서울경제",
-   "published": "2026-07-22T18:31:50+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "삼중고·집값 상승에 1인가구…월세 연체 경험 증가",
-   "link": "https://www.joongboo.com/news/articleView.html?idxno=363732087",
-   "image": "https://cdn.joongboo.com/news/photo/202607/363732087_2507861_2904.png",
-   "source": "중부일보",
-   "published": "2026-07-22T18:27:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "증시 활황·집값 상승에…지난해 1인당 가계순자산 2억7475만원",
-   "link": "https://www.newstomato.com/ReadNews.aspx?no=1307900",
-   "image": "https://image.newstomato.com/newsimg/2026/7/22/1307900/attach.jpg?v=202607221718",
-   "source": "NewsTomato",
-   "published": "2026-07-22T17:07:41+09:00",
+   "title": "오늘 부동산 정책 국민 대토론회…민심 톺아보니 [시장톡]",
+   "link": "https://www.hankyung.com/article/2026072292406",
+   "image": "https://img.hankyung.com/photo/202607/ZA.45109827.1.jpg",
+   "source": "한국경제",
+   "published": "2026-07-23T06:30:04+09:00",
    "has_time": true
   },
   {
    "keyword": "아파트 경매",
-   "title": "2030세대, '내 집 마련 전쟁터' 경매법정으로 몰린다",
-   "link": "https://www.dailypop.kr/news/articleView.html?idxno=100760",
-   "image": "http://www.dailypop.kr/news/thumbnail/202607/100760_167676_3329_v150.jpg",
-   "source": "데일리팝",
-   "published": "2026-07-22T14:31:00+09:00",
+   "title": "[시론] 새 아파트 경매, ‘대지권 미등기’ 확인을",
+   "link": "https://www.etoday.co.kr/news/view/2606374",
+   "image": "https://img.etoday.co.kr/pto_db/2026/07/20260722191503_2362833_210_201.jpg",
+   "source": "이투데이",
+   "published": "2026-07-23T06:00:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 세금",
-   "title": "“세금 낼 돈도 없어요”…종부세 급등에 은행 찾는 집주인들",
-   "link": "https://www.mk.co.kr/news/realestate/12104304",
-   "image": "https://pimg.mk.co.kr/news/cms/202607/22/rcv.YNA.20260709.PYH2026070911020001300_R.jpg",
+   "keyword": "집값",
+   "title": "'정을영♥' 박정수, 230억 건물주라더니..서초 집값 안올라 울상 \"살 때랑 똑같아\"",
+   "link": "https://www.sportschosun.com/entertainment/2026-07-23/202607230100139420008877",
+   "image": "https://www.sportschosun.com/article/html/2026/07/23/2026072301001394200088773_w.jpg",
+   "source": "스포츠조선",
+   "published": "2026-07-23T05:41:36+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "3040이 집값 움직인다…'초품아' 몸값도 뛴다",
+   "link": "https://www.newsis.com/view/NISX20260722_0003718715",
+   "image": "https://img1.newsis.com/2026/05/26/NISI20260526_0002145381_web.jpg",
+   "source": "뉴시스",
+   "published": "2026-07-23T05:30:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "李대통령, 오늘 부동산 정책 대국민 토론회 주재…부동산 돌파구 나올지 관심 집중",
+   "link": "https://www.newspim.com/news/view/20260722001288",
+   "image": "https://img.newspim.com/news/2026/07/21/2607211646443572_713_tc.jpg",
+   "source": "뉴스핌",
+   "published": "2026-07-23T05:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "65㎡ 아파트 경매에 33명 몰렸다 … 그래도 지금은 때가 아니라는데",
+   "link": "https://www.mk.co.kr/news/realestate/12104331",
+   "image": "https://pimg.mk.co.kr/news/cms/202607/22/news-p.v1.20260612.10266020d2114002b12f7f9fa2b02ccf_R.jpeg",
    "source": "매일경제",
-   "published": "2026-07-22T14:04:28+09:00",
+   "published": "2026-07-23T04:30:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "[사설] 총량에 매몰된 가계대출 규제, 실수요자 대책 내놔야",
+   "link": "https://m.dnews.co.kr/m_home/view.jsp?idxno=202607221640097020146",
+   "image": "https://image.dnews.co.kr/uhtml/images/common/dnews.png?version=202211",
+   "source": "대한경제",
+   "published": "2026-07-23T04:00:23+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "세금으로 집값 잡으려면 또 실패한다[포럼]",
-   "link": "https://www.munhwa.com/article/11604227",
-   "image": "https://wimg.munhwa.com/news/cms/2026/07/22/news-p.v1.20260722.004986e235b9403bb5fffc7a0fadd536_R.jpg",
-   "source": "문화일보",
-   "published": "2026-07-22T11:49:59+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "\"시세보다 2억 싸다\" 개발 호재 몰린 서울·수도권 경매 6곳 노려라",
-   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026072201583",
-   "image": "https://image.chosun.com/sitedata/thumbnail/202607/22/2026072201579_0_thumb.jpg",
-   "source": "realty.chosun.com",
-   "published": "2026-07-22T11:46:55+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "대통령 주재 부동산 대토론회…대출·보유세 해답 찾을까",
-   "link": "https://www.yonhapnewstv.co.kr/news/MYH20260722164511NT7",
-   "image": "https://media.yonhapnewstv.co.kr/article/MYH/20260722/MYH20260722164511NT7.jpg",
-   "source": "연합뉴스TV",
-   "published": "2026-07-22T07:45:11+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "빌라 경매",
-   "title": "\"반값 경매? 착시 주의\" 실거래가 기준 진짜 헐값 인천 빌라 나왔다",
-   "link": "https://realty.chosun.com/site/data/html_dir/2026/07/21/2026072102718.html",
-   "image": "https://image.chosun.com/sitedata/image/202607/21/2026072102712_0.jpg",
-   "source": "realty.chosun.com",
-   "published": "2026-07-22T06:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "[광화문]이재명 정부의 부동산 클라이맥스 - 머니투데이",
-   "link": "https://www.mt.co.kr/estate/2026/07/22/2026072019191575692",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026072019191575692_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-07-22T04:15:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "요이땅, 7월 2주 차 수도권 아파트 경매 동향 발표",
-   "link": "https://news.nate.com/view/20260722n27348",
-   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/at/2026/07/22/20260722001640127_1784706201_1.png",
-   "source": "네이트 뉴스",
-   "published": "2026-07-22T00:00:00+09:00",
+   "title": "李, 부동산 국민 대토론회 연다…보유세 손질보 다 중요한 건 ‘시장 신뢰’",
+   "link": "https://www.newsfreezone.co.kr/news/articleViewAmp.html?idxno=700613",
+   "image": "https://cdn.newsfreezone.co.kr/news/photo/202607/700613_746461_3740.jpg",
+   "source": "newsfreezone.co.kr",
+   "published": "2026-07-23T00:00:00+09:00",
    "has_time": false
   },
   {
-   "keyword": "빌라 경매",
-   "title": "[천살의 부동산 칼럼] 6억 대출 묶인 부동산 시장, ‘빚 권하던 국가’의 예고된 비극",
-   "link": "https://www.sisamagazine.co.kr/news/articleViewAmp.html?idxno=528156",
-   "image": "https://www.sisamagazine.co.kr/news/photo/202607/528156_545753_374.jpg",
-   "source": "sisamagazine.co.kr",
-   "published": "2026-07-22T00:00:00+09:00",
+   "keyword": "부동산 세금",
+   "title": "[세제 이건 바꿔야]\"전방위 증세, 거래 과도하게 위축…거래 정상화에 적합한 조합 아냐\"",
+   "link": "https://news.nate.com/view/20260723n04280",
+   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/ae/2026/07/23/ae_1784761264636_44950_0.jpg",
+   "source": "네이트 뉴스",
+   "published": "2026-07-23T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "집값",
+   "title": "[기자수첩] '집값' 선도지구가 되지 않으려면",
+   "link": "https://www.daejonilbo.com/news/articleViewAmp.html?idxno=2289715",
+   "image": "https://www.daejonilbo.com/news/photo/202607/2289715_724611_1651.jpg",
+   "source": "daejonilbo.com",
+   "published": "2026-07-23T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "대출규제",
+   "title": "\"대출 막혀 계약금 날릴 판\"…부동산토론회 앞두고 규제 완화 요구 쇄도",
+   "link": "https://v.daum.net/v/20260723051927860?f=p",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/23/NEWS1/20260723051927987tdmh.jpg",
+   "source": "Daum",
+   "published": "2026-07-23T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 17,
- "date": "2026-07-22"
+ "count": 14,
+ "date": "2026-07-23"
 }
