@@ -1,39 +1,84 @@
 {
  "items": [
   {
+   "keyword": "집값",
+   "title": "집값을 잡아야지, 왜 국민을 잡습니까?",
+   "link": "https://www.ngonews.kr/news/articleView.html?idxno=233670",
+   "image": "https://cdn.ngonews.kr/news/photo/202607/233670_237183_2938.png",
+   "source": "한국NGO신문",
+   "published": "2026-07-23T22:31:39+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "\"민주적 부동산 정책 결정\"...\"답정너 여론몰이 쇼\"",
+   "link": "https://www.ytn.co.kr/_cs/_ln_0101_202607232144151515_005.html",
+   "image": "https://image.ytn.co.kr/general/jpg/2026/0723/202607232144151515_t.jpg",
+   "source": "YTN",
+   "published": "2026-07-23T21:44:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "서울 집값 상승폭 소폭 줄어…동탄 꺾이고 분당 올랐다",
+   "link": "https://www.khan.co.kr/article/202607231756001",
+   "image": "https://img.khan.co.kr/news/2026/07/23/news-p.v1.20260723.00787efeb4874f5a9f9ac179c6cecd24_P1.png",
+   "source": "경향신문",
+   "published": "2026-07-23T17:56:00+09:00",
+   "has_time": true
+  },
+  {
    "keyword": "부동산 세금",
-   "title": "李대통령, 오늘 '부동산 대토론회' 개최…공급부터 세금까지 해법 논의",
-   "link": "https://www.m-i.kr/news/articleView.html?idxno=1394355",
-   "image": "https://cdn.m-i.kr/news/thumbnail/202607/1394355_1182051_3613_v150.jpg",
-   "source": "매일일보",
-   "published": "2026-07-23T08:39:01+09:00",
+   "title": "3시간 넘게 대통령 앞에서 “민간임대 확대” “잔금 대출 예외” 발언…“부동산 세금에만 치중” 지적도",
+   "link": "https://www.khan.co.kr/article/202607231748001",
+   "image": "https://img.khan.co.kr/news/2026/07/23/news-p.v1.20260723.b714cc9eabc243ab956420a0f7e6ed41_P1.jpeg",
+   "source": "경향신문",
+   "published": "2026-07-23T17:48:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "[AJU+MONEY] 반지하 버티면 신축이 온다…치솟는 집값에 몸테크 뛰어든 청년들",
+   "link": "https://www.ajunews.com/view/20260722145603386",
+   "image": "https://image.ajunews.com/content/image/2026/07/22/20260722104644880778.png",
+   "source": "아주경제",
+   "published": "2026-07-23T17:33:36+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "'거주용 1주택'이 기준…부동산 세금 '대수술 예고'",
+   "link": "https://news.bizwatch.co.kr/article/real_estate/2026/07/23/0031",
+   "image": "https://cdn.bizwatch.co.kr/news/photo/2026/07/23/7c3a9f19caad631c351bf467bd61ca85.jpg",
+   "source": "비즈니스워치",
+   "published": "2026-07-23T16:50:03+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "李대통령, 오늘 '부동산정책 국민 대토론회'…보유세 개편 등 세제 방향 논의",
-   "link": "https://www.newsian.co.kr/news/articleView.html?idxno=92638",
-   "image": "https://cdn.newsian.co.kr/news/thumbnail/202607/92638_85970_1534_v150.jpg",
-   "source": "뉴시안",
-   "published": "2026-07-23T08:15:47+09:00",
+   "title": "이 대통령 \"부동산 정책, 최대한 많은 의견 모으고 조정할 필요\" - 정책뉴스 | 뉴스",
+   "link": "https://www.korea.kr/news/policyNewsView.do?newsId=148968675&pWise=main&pWiseMain=R1",
+   "image": "https://www.korea.kr/newsWeb/resources/attaches/2026.07/23/0c9df57257a28aa6e338ceab719efb1e.jpg",
+   "source": "korea.kr",
+   "published": "2026-07-23T16:06:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "대출규제",
-   "title": "李대통령, 오늘 부동산 '끝장토론'…보유세·대출규제 최대 쟁점",
-   "link": "https://news.einfomax.co.kr/news/articleView.html?idxno=4426306",
-   "image": "https://cdn.news.einfomax.co.kr/news/thumbnail/202607/4426306_331335_282_v150.jpg",
-   "source": "연합인포맥스",
-   "published": "2026-07-23T07:00:00+09:00",
+   "keyword": "빌라 경매",
+   "title": "서울에 자리를 잡으려 했을 뿐인데 — 어느 청년이 잃은 4년",
+   "link": "https://www.epnews.net/news/articleView.html?idxno=41126",
+   "image": "https://cdn.epnews.net/news/photo/202607/41126_42198_2626.jpg",
+   "source": "은평시민신문",
+   "published": "2026-07-23T14:42:44+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "오늘 부동산 정책 국민 대토론회…민심 톺아보니 [시장톡]",
-   "link": "https://www.hankyung.com/article/2026072292406",
-   "image": "https://img.hankyung.com/photo/202607/ZA.45109827.1.jpg",
-   "source": "한국경제",
-   "published": "2026-07-23T06:30:04+09:00",
+   "title": "이 대통령 “부동산 정책, 갈등·저항 감수해야…다수결로 정하진 않아”",
+   "link": "https://www.hani.co.kr/arti/politics/bluehouse/1269560.html",
+   "image": "https://flexible.img.hani.co.kr/flexible/normal/640/442/imgdb/original/2026/0723/20260723501101.webp",
+   "source": "한겨레",
+   "published": "2026-07-23T10:38:00+09:00",
    "has_time": true
   },
   {
@@ -46,33 +91,6 @@
    "has_time": true
   },
   {
-   "keyword": "집값",
-   "title": "'정을영♥' 박정수, 230억 건물주라더니..서초 집값 안올라 울상 \"살 때랑 똑같아\"",
-   "link": "https://www.sportschosun.com/entertainment/2026-07-23/202607230100139420008877",
-   "image": "https://www.sportschosun.com/article/html/2026/07/23/2026072301001394200088773_w.jpg",
-   "source": "스포츠조선",
-   "published": "2026-07-23T05:41:36+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "3040이 집값 움직인다…'초품아' 몸값도 뛴다",
-   "link": "https://www.newsis.com/view/NISX20260722_0003718715",
-   "image": "https://img1.newsis.com/2026/05/26/NISI20260526_0002145381_web.jpg",
-   "source": "뉴시스",
-   "published": "2026-07-23T05:30:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "李대통령, 오늘 부동산 정책 대국민 토론회 주재…부동산 돌파구 나올지 관심 집중",
-   "link": "https://www.newspim.com/news/view/20260722001288",
-   "image": "https://img.newspim.com/news/2026/07/21/2607211646443572_713_tc.jpg",
-   "source": "뉴스핌",
-   "published": "2026-07-23T05:00:00+09:00",
-   "has_time": true
-  },
-  {
    "keyword": "아파트 경매",
    "title": "65㎡ 아파트 경매에 33명 몰렸다 … 그래도 지금은 때가 아니라는데",
    "link": "https://www.mk.co.kr/news/realestate/12104331",
@@ -82,51 +100,24 @@
    "has_time": true
   },
   {
-   "keyword": "대출규제",
-   "title": "[사설] 총량에 매몰된 가계대출 규제, 실수요자 대책 내놔야",
-   "link": "https://m.dnews.co.kr/m_home/view.jsp?idxno=202607221640097020146",
-   "image": "https://image.dnews.co.kr/uhtml/images/common/dnews.png?version=202211",
-   "source": "대한경제",
-   "published": "2026-07-23T04:00:23+09:00",
-   "has_time": true
-  },
-  {
    "keyword": "부동산 세금",
-   "title": "李, 부동산 국민 대토론회 연다…보유세 손질보 다 중요한 건 ‘시장 신뢰’",
-   "link": "https://www.newsfreezone.co.kr/news/articleViewAmp.html?idxno=700613",
-   "image": "https://cdn.newsfreezone.co.kr/news/photo/202607/700613_746461_3740.jpg",
-   "source": "newsfreezone.co.kr",
-   "published": "2026-07-23T00:00:00+09:00",
-   "has_time": false
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "[세제 이건 바꿔야]\"전방위 증세, 거래 과도하게 위축…거래 정상화에 적합한 조합 아냐\"",
-   "link": "https://news.nate.com/view/20260723n04280",
-   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/ae/2026/07/23/ae_1784761264636_44950_0.jpg",
-   "source": "네이트 뉴스",
+   "title": "[사설]‘누더기’ 세금-대출-공급 새판 짜라… 부동산 대토론회 주문",
+   "link": "https://v.daum.net/v/20260723233151120",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/23/donga/20260723233152732bwnw.jpg",
+   "source": "Daum",
    "published": "2026-07-23T00:00:00+09:00",
    "has_time": false
   },
   {
    "keyword": "집값",
-   "title": "[기자수첩] '집값' 선도지구가 되지 않으려면",
-   "link": "https://www.daejonilbo.com/news/articleViewAmp.html?idxno=2289715",
-   "image": "https://www.daejonilbo.com/news/photo/202607/2289715_724611_1651.jpg",
-   "source": "daejonilbo.com",
-   "published": "2026-07-23T00:00:00+09:00",
-   "has_time": false
-  },
-  {
-   "keyword": "대출규제",
-   "title": "\"대출 막혀 계약금 날릴 판\"…부동산토론회 앞두고 규제 완화 요구 쇄도",
-   "link": "https://v.daum.net/v/20260723051927860?f=p",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/23/NEWS1/20260723051927987tdmh.jpg",
-   "source": "Daum",
+   "title": "李 “전세대출도 집값 폭등 요인…왜 유주택자에 빌려주나”",
+   "link": "https://www.kookje.co.kr/news2011/asp/newsbody.asp?code=0100&key=20260724.22003007233",
+   "image": "https://db.kookje.co.kr/news2000/photo/2026/0724/L20260724.22003007233i1.jpg?25",
+   "source": "�����Ź�",
    "published": "2026-07-23T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 14,
+ "count": 13,
  "date": "2026-07-23"
 }
