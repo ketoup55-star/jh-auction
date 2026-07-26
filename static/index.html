@@ -142,6 +142,8 @@
     /* 상단 메뉴: 두세 줄로 접히던 것 → 한 줄 가로 스와이프 */
     .navin{flex-wrap:nowrap;overflow-x:auto;gap:0;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
     .navin::-webkit-scrollbar{display:none;}
+    .nav{position:relative;}
+    .nav::after{content:"";position:absolute;top:0;right:0;bottom:2px;width:26px;background:linear-gradient(to right,rgba(255,255,255,0),var(--card));pointer-events:none;}
     .nav a{padding:12px 13px;font-size:14px;white-space:nowrap;flex:0 0 auto;}
     /* 추천물건 카드: 3개씩→1개씩 크게(작아서 차익배지·글자가 겹치던 것 해결) */
     .hc-card{flex:0 0 calc(100% - 42px);}
@@ -226,7 +228,7 @@
     </div>
     <div class="brand">JH<span>옥션스쿨</span></div>
     <div class="util" id="util">
-      <a href="/static/login.html">로그인</a><a href="/static/login.html?tab=signup">회원가입</a><a href="#">원격지원</a><a href="/static/payment.html" class="pay">요금결제</a><a href="#">삭제요청</a>
+      <a href="/static/login.html">로그인</a><a href="/static/login.html?tab=signup">회원가입</a><a href="/static/payment.html" class="pay">요금결제</a>
     </div>
   </div>
 </div>
@@ -374,25 +376,27 @@ function goSearch(){
 }
 // 히어로 추천 물건 캐러셀(차익 상위 12, 3개씩 슬라이드)
 (function(){
-  var slide=0, total=0, track, dots, tries=0;
+  var slide=0, total=0, track, dots, tries=0, perView=3;
+  function _pv(){ return (window.matchMedia && window.matchMedia("(max-width:600px)").matches) ? 1 : 3; }  // 폰=1개씩, PC/태블릿=3개씩
   function fmt(n){ n=Math.round(+n||0); if(n>=1e8){ return "+"+(n/1e8).toFixed(1).replace(/\.0$/,"")+"억"; } return "+"+Math.round(n/1e4).toLocaleString()+"만"; }
   function won2(n){ n=Math.round(+n||0); if(!n)return"-"; if(n>=1e8){ return (n/1e8).toFixed(1).replace(/\.0$/,"")+"억"; } return Math.round(n/1e4).toLocaleString()+"만"; }
   function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];}); }
-  function go(i){ if(!track||!track.children.length)return; slide=Math.max(0,Math.min(i,total-1)); var idx=Math.min(slide*3,track.children.length-1); var x=track.children[idx].offsetLeft-track.children[0].offsetLeft; if(x<0)x=0; track.style.transform="translateX(-"+x+"px)"; if(dots){ for(var j=0;j<dots.children.length;j++) dots.children[j].className="hc-dot"+(j===slide?" on":""); } }
+  var _HCPH="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%2316305f'/%3E%3Cpath d='M50 22 L80 48 L72 48 L72 78 L56 78 L56 60 L44 60 L44 78 L28 78 L28 48 L20 48 Z' fill='%23ffffff' fill-opacity='0.45'/%3E%3C/svg%3E"; window._HCPH=_HCPH;
+  function go(i){ if(!track||!track.children.length)return; perView=_pv(); total=Math.ceil(track.children.length/perView); slide=Math.max(0,Math.min(i,total-1)); var idx=Math.min(slide*perView,track.children.length-1); var x=track.children[idx].offsetLeft-track.children[0].offsetLeft; if(x<0)x=0; track.style.transform="translateX(-"+x+"px)"; if(dots){ for(var j=0;j<dots.children.length;j++) dots.children[j].className="hc-dot"+(j===slide?" on":""); } }
   function render(items){
     var box=document.getElementById("heroCarousel"); if(!box)return;
     track=document.getElementById("hcTrack"); dots=document.getElementById("hcDots");
     for(var s=items.length-1;s>0;s--){ var r=Math.floor(Math.random()*(s+1)),tm=items[s]; items[s]=items[r]; items[r]=tm; }  // 랜덤 순서(Fisher-Yates)
     track.innerHTML=items.map(function(p){
       return '<a class="hc-card" href="/static/auction.html?item_key='+encodeURIComponent(p.item_key)+'">'
-        +'<div class="hc-ph"><img src="'+esc(p.thumb||"")+'" loading="lazy" onerror="this.style.display=\'none\'">'
+        +'<div class="hc-ph"><img src="'+esc(p.thumb||_HCPH)+'" loading="lazy" onerror="this.onerror=null;this.src=window._HCPH">'
         +'<span class="hc-badge">'+fmt(p.profit)+' 차익</span>'
         +'<div class="hc-cap"><div class="hc-reg">'+esc(p.region)+'</div><div class="hc-typ">'+esc(p.usage)+'</div>'
         +'<div class="hc-meta">시세 '+won2(p.sise)+' · 예상낙찰 '+won2(p.bid)+'</div></div></div></a>';
     }).join("");
-    total=Math.ceil(items.length/3);
+    perView=_pv(); total=Math.ceil(items.length/perView);
     var seq=0, paused=false;                                    // seq=시퀀스 토큰(취소용), paused=hover 정지
-    function cardsOf(s){ var a=[]; for(var k=0;k<3;k++){ var c=track.children[s*3+k]; if(c)a.push(c); } return a; }
+    function cardsOf(s){ var a=[]; for(var k=0;k<perView;k++){ var c=track.children[s*perView+k]; if(c)a.push(c); } return a; }
     function pulse(card){                                       // 천천히 확대(강조) → 빠르게 원복
       card.style.zIndex="5";
       var a=card.animate(
@@ -440,7 +444,8 @@ function goSearch(){
 })();
 // 홈 부동산 뉴스 캐러셀(18건, 6개씩 슬라이드)
 (function(){
-  var slide=0, total=0, track, dots;
+  var slide=0, total=0, track, dots, per=6;
+  function _npv(){ return (window.matchMedia && window.matchMedia("(max-width:620px)").matches) ? 1 : 6; }
   function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
   function cleanTitle(t){ return String(t||"").replace(/\s*[-|]\s*[^-|]{1,22}$/,"").trim(); }
   function timeAgo(iso,hasTime){
@@ -457,11 +462,11 @@ function goSearch(){
   function go(i){ if(!track)return; slide=Math.max(0,Math.min(i,total-1)); track.style.transform="translateX(-"+(slide*100)+"%)"; if(dots){ for(var j=0;j<dots.children.length;j++) dots.children[j].className="news-dot"+(j===slide?" on":""); } }
   function render(items){
     track=document.getElementById("newsTrack"); dots=document.getElementById("newsDots"); if(!track)return;
-    total=Math.ceil(items.length/6)||1;
+    per=_npv(); total=Math.ceil(items.length/per)||1;
     var html="";
     for(var s=0;s<total;s++){
       html+='<div class="news-slide">';
-      for(var k=s*6;k<s*6+6 && k<items.length;k++){
+      for(var k=s*per;k<s*per+per && k<items.length;k++){
         var p=items[k];
         var tstr=timeAgo(p.published,p.has_time);
         var img=p.image?('<img class="news-thumb" src="'+esc(p.image)+'" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility=\'hidden\'">'):'<div class="news-thumb"></div>';
