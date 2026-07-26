@@ -208,6 +208,9 @@
     /* 현황용도·특수물건: 5열이 폰에서 잘리던 것 → 2열로 다 보이게 */
     .ugrid{grid-template-columns:repeat(2,1fr);gap:9px 10px;}
     .spgrid{grid-template-columns:repeat(2,1fr);}
+    /* 검색결과 툴바 드롭다운: 폰에서 2열 균등(용도지역 등 잘림 방지) */
+    #pageSize,#gradeSel,#zoneSel,#regSel{flex:1 1 44%;min-width:0;}
+    .premwrap{flex:1 1 44%;}.premwrap select{width:100%;}
   }
 </style>
 <style id="navbadges">
@@ -376,7 +379,7 @@
   <div class="statbox" id="statbox"></div>
   <div class="cnt" id="cnt"></div>
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 2px 8px;flex-wrap:wrap;">
-    <div style="display:flex;gap:8px;align-items:center;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <label class="ck"><input type="checkbox" id="selectAll" onchange="toggleAll(this)"> 전체선택</label>
       <select id="pageSize" onchange="changePageSize()" style="height:32px;">
         <option value="15">15개씩 보기</option>
@@ -408,7 +411,7 @@
         <option value="none">비규제(지방)</option>
       </select>
     </div>
-    <div style="display:flex;gap:8px;align-items:center;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       <span class="premwrap" style="position:relative;display:inline-flex;align-items:center">
       <span class="prem-badge" style="position:absolute;top:-9px;right:-8px;margin-left:0;box-shadow:0 1px 4px rgba(120,90,10,.45);z-index:2;white-space:nowrap">PREMIUM</span>
       <select id="aptSort1" onmousedown="return gatePremium(event)" onchange="onAptSort()" style="height:32px;" title="1차 정렬(준공년도·세대수·유사거래)">
