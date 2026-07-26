@@ -140,8 +140,11 @@
     .minicase input{width:auto;flex:1;min-width:0;}
     .util{flex:1 1 100%;order:2;justify-content:center;flex-wrap:wrap;gap:10px 14px;}
     /* 상단 메뉴: 두세 줄로 접히던 것 → 한 줄 가로 스와이프 */
-    .navin{flex-wrap:wrap;gap:2px 6px;padding:6px 10px;}
-    .nav a{padding:9px 11px;font-size:14px;white-space:nowrap;}
+    .navin{flex-wrap:nowrap;overflow-x:auto;gap:2px;padding:0 8px;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x;}
+    .navin::-webkit-scrollbar{display:none;}
+    .nav{position:relative;}
+    .nav::after{content:"";position:absolute;top:0;right:0;bottom:2px;width:30px;background:linear-gradient(to right,rgba(255,255,255,0),var(--card));pointer-events:none;}
+    .nav a{padding:12px 13px;font-size:14px;white-space:nowrap;flex:0 0 auto;}
     /* 추천물건 카드: 3개씩→1개씩 크게(작아서 차익배지·글자가 겹치던 것 해결) */
     .hc-card{flex:0 0 calc(100% - 42px);}
     .hc-badge{font-size:11px;padding:2px 7px;top:6px;right:6px;}
