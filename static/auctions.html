@@ -198,6 +198,16 @@
     .nav{position:relative;}
     .nav::after{content:"";position:absolute;top:0;right:0;bottom:2px;width:30px;background:linear-gradient(to right,rgba(255,255,255,0),var(--card,#fff));pointer-events:none;}
     .nav a{padding:12px 13px;font-size:14px;white-space:nowrap;flex:0 0 auto;}
+    /* 검색필터: 폰에서 [라벨|값] 가로 4칸이 잘리던 것 → 세로 1줄씩 */
+    .fwrap{padding:0 12px;}
+    .row{flex-direction:column;}
+    .lab{flex:0 0 auto;border-right:none;border-bottom:1px solid var(--line);padding:7px 10px;}
+    .lab.tall{flex-direction:row;justify-content:space-between;align-items:center;}
+    .val{width:100%;box-sizing:border-box;}
+    .val select,.val input[type=text],.val input[type=date]{flex:1 1 auto;min-width:0;max-width:100%;}
+    /* 현황용도·특수물건: 5열이 폰에서 잘리던 것 → 2열로 다 보이게 */
+    .ugrid{grid-template-columns:repeat(2,1fr);gap:9px 10px;}
+    .spgrid{grid-template-columns:repeat(2,1fr);}
   }
 </style>
 <style id="navbadges">
