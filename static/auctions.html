@@ -53,7 +53,7 @@
   .ug{border-bottom:1px dashed var(--line);padding:7px 0;}.ug:last-child{border-bottom:none;}
   .ugrid{display:grid;grid-template-columns:repeat(5,max-content);gap:10px 22px;margin-top:5px;}
   .note{font-size:11px;color:var(--muted);}
-  .special{margin-bottom:6px;}
+  .special{margin-bottom:6px;display:flex;justify-content:center;}
   .spbtn{background:var(--primary);color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;}
   .prem-badge{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#7a5c00;
     background:linear-gradient(180deg,#ffe38a,#ffcf45);border:1px solid #e8b830;border-radius:4px;
@@ -211,6 +211,15 @@
     /* 검색결과 툴바 드롭다운: 폰에서 2열 균등(용도지역 등 잘림 방지) */
     #pageSize,#gradeSel,#zoneSel,#regSel{flex:1 1 44%;min-width:0;}
     .premwrap{flex:1 1 44%;}.premwrap select{width:100%;}
+    /* 목록: 폰에서 8컬럼 테이블이 가로스크롤로 숨던 것 → 카드형으로 전 정보(감정가·매각기일·시세·결과) 표시 */
+    .scrollx{overflow-x:visible;border:none;background:transparent;border-radius:0;}
+    .tbl{min-width:0;width:100%;display:block;table-layout:auto;}
+    .tbl thead{display:none;}
+    .tbl tbody{display:block;}
+    .tbl tr{display:block;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;padding:10px 12px;background:var(--card);}
+    .tbl td{display:block;border:none!important;width:auto!important;text-align:left!important;padding:2px 0;}
+    .tbl td[data-label]{border-top:1px dashed var(--line)!important;padding-top:6px;margin-top:5px;}
+    .tbl td[data-label]::before{content:attr(data-label);display:block;font-weight:700;color:var(--primary2);font-size:11px;margin-bottom:1px;}
   }
 </style>
 <style id="navbadges">
@@ -1299,11 +1308,11 @@ async function doSearch(){
           ${L.zone?`<div class="zonerow"><span class="zonechip">${L.zone}</span></div>`:""}
           <div class="kaptrow">${(L.group==="주거용"||L.group==="차량외"||/아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택/.test(L.usage||""))?`<div class="kapt" data-key="${L.item_key}"></div>`:""}${(L.reg&&L.group==="주거용")?`<span class="regchip reg-${L.reg}" data-tip="${({regulated:'규제지역(조정대상·투기과열) = 토지거래허가구역',metro:'수도권(서울·경기·인천)이지만 규제·토허 아님',none:'비규제 지역'})[L.reg]}">${({regulated:'규제·토허',metro:'수도권 비규제',none:'비규제'})[L.reg]}</span>`:""}${/아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|근린/.test(L.usage||"")?`<div class="gradechip" data-key="${L.item_key}"></div>`:""}<span class="t3mchip" data-key="${L.item_key}">${(L.trades_3m!=null)?('실거래 '+L.trades_3m+'건'):''}</span>${/아파트/.test(L.usage||"")?`<span class="kbchip" data-key="${L.item_key}"></span>`:""}${L.violation?`<span class="viochip" data-tip="건축물대장상 위반건축물 — 대출 난항·이행강제금·1주택 비과세가 깨질 수 있음(원상복구 가능 여부·이행강제금 확인 필요)">위반건축물</span>`:""}${L.baedang!=null?(L.baedang<0?`<span class="bdchip bd0" data-tip="매각물건명세서에 조사된 임차인현황이 없음(임차내역 미기재)">임차내역 없음</span>`:`<span class="bdchip ${L.baedang>0?'':'bd0'}" data-tip="매각물건명세서 기준 배당요구한 가구(호실) 수 — 같은 호실 1·2차 계약은 1건">배당요구 ${L.baedang}건</span>`):""}${L.elev_caution?`<span class="elevchip" data-tip="승강기 없음/미상 + 4층 이상 — 고층 비선호로 매수세(환금성) 조사 필요">${L.elev_caution}</span>`:""}${L.dagagu&&L.dagagu.woolyang?`<span class="woolchip" data-tip="임차보증금+근저당이 감정가에 육박/초과 — 임대수요 많다는 반증(강의 우량 판별)">우량</span>`:""}${L.compete>1?`<span class="dgchip" data-tip="같은 매각기일·법원에 같은 유형 ${L.compete}건 동시진행 — 입찰자 분산(저가 낙찰 기회)">경쟁분산 ${L.compete}건</span>`:""}</div>
           ${L.tags?`<div class="tags">${L.tags}</div>`:""}</div></div></td>
-        <td class="cmid" style="white-space:normal;word-break:break-all;">${uCell}</td>
-        <td class="cnum"><div class="price">${won(L.appraisal_price)}</div><div class="low">${won(L.min_price)}</div>${hasWin?`<div class="won">낙찰 : ${won(L.sale_price)}</div>`:(isSold?`<div class="noinfo">낙찰가 정보 없음</div>`:((!isSold&&L.sale_price)?`<div class="prevwon">이전 낙찰 : ${won(L.sale_price)}</div>`:""))}${(hasWin&&L.sale_2nd_price)?`<div class="kv">2등 ${won(L.sale_2nd_price)}</div>`:""}${L.group==="차량외"?`<div class="ecarv" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:(/아파트|오피스텔/.test(L.usage||"")?`<div class="aptest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:(/다세대|연립|빌라|도시형/.test(L.usage||"")?`<div class="villaest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:""))}</td>
-        <td class="cmid"><div>${dd.date}</div>${dd.label?`<div class="kv" style="color:${dd.color};font-weight:600">${dd.label}</div>`:""}${(isSold&&L.bid_count)?`<div class="hbid">입찰 ${L.bid_count}명</div>`:""}${isSold?(L.winner_name?`<div class="hwin">낙찰 ${L.winner_name}</div>`:`<div class="noinfo">낙찰자 정보 없음</div>`):""}</td>
-        <td class="cmid"><div style="color:${rc};font-weight:600">${rr.status}</div>${rr.count?`<div class="kv" style="color:${rc}">${rr.count}</div>`:""}${rr.pct?`<div class="kv" style="color:${rc}">${rr.pct}</div>`:""}${(hasWin&&salePct!=null)?`<div class="hwin">낙찰 ${salePct}%</div>`:""}</td>
-        <td class="cmid">${(L.hit_count||0).toLocaleString()}</td></tr>`;
+        <td class="cmid" data-label="용도" style="white-space:normal;word-break:break-all;">${uCell}</td>
+        <td class="cnum" data-label="감정가·최저가·시세"><div class="price">${won(L.appraisal_price)}</div><div class="low">${won(L.min_price)}</div>${hasWin?`<div class="won">낙찰 : ${won(L.sale_price)}</div>`:(isSold?`<div class="noinfo">낙찰가 정보 없음</div>`:((!isSold&&L.sale_price)?`<div class="prevwon">이전 낙찰 : ${won(L.sale_price)}</div>`:""))}${(hasWin&&L.sale_2nd_price)?`<div class="kv">2등 ${won(L.sale_2nd_price)}</div>`:""}${L.group==="차량외"?`<div class="ecarv" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:(/아파트|오피스텔/.test(L.usage||"")?`<div class="aptest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:(/다세대|연립|빌라|도시형/.test(L.usage||"")?`<div class="villaest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:""))}</td>
+        <td class="cmid" data-label="매각기일"><div>${dd.date}</div>${dd.label?`<div class="kv" style="color:${dd.color};font-weight:600">${dd.label}</div>`:""}${(isSold&&L.bid_count)?`<div class="hbid">입찰 ${L.bid_count}명</div>`:""}${isSold?(L.winner_name?`<div class="hwin">낙찰 ${L.winner_name}</div>`:`<div class="noinfo">낙찰자 정보 없음</div>`):""}</td>
+        <td class="cmid" data-label="결과"><div style="color:${rc};font-weight:600">${rr.status}</div>${rr.count?`<div class="kv" style="color:${rc}">${rr.count}</div>`:""}${rr.pct?`<div class="kv" style="color:${rc}">${rr.pct}</div>`:""}${(hasWin&&salePct!=null)?`<div class="hwin">낙찰 ${salePct}%</div>`:""}</td>
+        <td class="cmid" data-label="조회수">${(L.hit_count||0).toLocaleString()}</td></tr>`;
     }).join("");
     document.getElementById("grid").innerHTML=`<div class="scrollx"><table class="tbl"><thead><tr>
       <th style="width:44px">선택</th><th style="width:108px">법원명<br>사건번호</th><th>소재지</th><th style="width:132px">용도</th><th style="width:168px">감정가<br>최저가<br>[낙찰가]</th><th style="width:106px">매각기일<br>[입찰인원]</th><th style="width:92px">결과<br>유찰수 %</th><th style="width:54px">조회</th>
