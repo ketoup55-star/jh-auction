@@ -32,7 +32,7 @@
 <div class="top">
   <span class="court" id="court">-</span>
   <span class="ttl" id="ttl">불러오는 중…</span>
-  <button class="x" onclick="window.close()" title="닫기">✕</button>
+  <button class="x" onclick="closeDoc()" title="닫기">✕</button>
 </div>
 <div class="tabs" id="tabs"></div>
 <div class="content" id="content"><div class="empty">불러오는 중…</div></div>
@@ -88,6 +88,12 @@ const _lb=()=>document.getElementById('lbox');
 function lbOpen(i){ if(!PHOTOS.length) return; LBI=(i+PHOTOS.length)%PHOTOS.length; document.getElementById('lbimg').src=PHOTOS[LBI]; document.getElementById('lbcount').textContent=(LBI+1)+' / '+PHOTOS.length; _lb().classList.add('on'); }
 function lbGo(d){ lbOpen(LBI+d); }
 function lbClose(){ _lb().classList.remove('on'); }
+// 닫기: window.close()는 링크(target=_blank)로 열린 앱 WebView 페이지엔 안 먹음 → 뒤로가기 우선, 안되면 목록 폴백
+function closeDoc(){
+  try{ if(history.length>1){ history.back(); return; } }catch(e){}
+  try{ window.close(); }catch(e){}
+  location.href='/static/auctions.html';
+}
 document.addEventListener('keydown',e=>{ if(!_lb().classList.contains('on')) return; if(e.key==='ArrowLeft')lbGo(-1); else if(e.key==='ArrowRight')lbGo(1); else if(e.key==='Escape')lbClose(); });
 _lb().addEventListener('click',e=>{ if(e.target.id==='lbox')lbClose(); });   // 배경(이미지 바깥) 클릭 시 닫기
 load();
