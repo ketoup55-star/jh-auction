@@ -421,7 +421,8 @@
     .nb-tbl td.bd{white-space:normal;}
     .nb-tbl td.bd .adr{white-space:normal;}
     /* 물건 정보: 폰에선 표(kgrid) 숨기고 그룹형(kglist)로 — 권리자/금액/면적/기타 묶음 */
-    .kgrid{display:none;}
+    /* ⚠️.card table(위 405줄, specificity 0-0-1-1)이 .kgrid보다 우선하므로 반드시 .card table.kgrid로 이겨야 표가 숨겨짐 */
+    .card table.kgrid{display:none!important;}
     .kglist{display:block;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
     .kglist .kg-sec{background:#eef2fb;color:var(--primary);font-weight:700;font-size:12px;padding:7px 12px;border-top:1px solid var(--line);letter-spacing:.2px;}
     .kglist .kg-r{display:grid;grid-template-columns:88px 1fr;border-top:1px solid var(--line);}
@@ -783,7 +784,7 @@ async function load(){
       </div>
 
       <aside class="side">
-        <div class="card"><h2>사건 관련 자료</h2>
+        <div class="card" id="docsCard"><h2>사건 관련 자료</h2>
           ${(function(){
             // 레퍼런스(스피드옥션) 순서·라벨. [DB kind, 표시라벨]. 목록에 없는 종류(문서N 등)는 제외.
             const ORD=[["등기(집합)","등기(집합)"],["등기(건물)","등기(건물)"],["등기(토지)","등기(토지)"],["등기","등기"],
