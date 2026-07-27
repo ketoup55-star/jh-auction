@@ -400,7 +400,7 @@
     .card>h2{cursor:pointer;position:relative;padding-right:26px;user-select:none;}
     .card>h2::after{content:"▼";position:absolute;right:0;top:1px;font-size:12px;color:#9aa6b8;font-weight:400;}
     .card.acc-open>h2::after{content:"▲";}
-    .card:not(.acc-open)>:not(h2){display:none!important;}
+    .card:has(>h2):not(.acc-open)>:not(h2){display:none!important;}   /* h2 있는 아코디언 카드만 접힘 대상 — h2 없는 물건카드(cthead)는 항상 표시(acc-open 타이밍과 무관) */
     .card{overflow-wrap:anywhere;word-break:break-word;}
     .card table{display:block;width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;}
     /* AI 권리분석: 폰에서 항목을 세로로 한 줄씩(값·라벨은 글자 안 쪼갬, 부가설명만 어절 줄바꿈) */
