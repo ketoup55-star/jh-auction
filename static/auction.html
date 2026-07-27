@@ -433,6 +433,11 @@
     .kglist .kg-v b{font-weight:700;}
     /* 데이터 표(기일현황·빌라·아파트실거래·취득세구간): 칸이 좁아 세로 쪼개지던 것 → 셀 한 줄 유지+표 가로스크롤 */
     .gridtbl th,.gridtbl td,.apt-tbl th,.apt-tbl td,.ss-reftbl th,.ss-reftbl td{white-space:nowrap;}
+    /* 관리자 참조 매각사례 표(9칸): 세로쪼갬 → 셀 nowrap+min-width 가로스크롤(.ebtbl이 overflow-x) */
+    .ebcase-tbl{min-width:680px;}
+    .ebcase-tbl th,.ebcase-tbl td{white-space:nowrap;padding:5px 7px;}
+    /* 4컬럼(물건현황·면적·임차인·등기): 폰 411px에서 auto-fit minmax(205px)가 2열→우측 잘림 → 강제 1열 */
+    .cols4{grid-template-columns:1fr!important;}
     .gridtbl tr.saleSub td{white-space:normal;}
     .apt-scroll{overflow-x:auto;}
     /* 차량현황(vtbl): 4칸 라벨-값 → kgrid처럼 라벨:값 한 줄씩(가로스크롤 시 오른쪽 값이 잘리던 것 해결) */
@@ -1246,7 +1251,7 @@ function renderExpBid(){
     const cs=EXP_BID.cases_used;
     const d=document.createElement('div'); d.className='expbid-cases'; d.style.cssText="margin-top:8px;font-size:12px";
     let h=`<div class="ebtoggle" style="font-weight:700;color:#666;cursor:pointer">🔒 관리자: 참조 매각사례 ${cs.length}건 ▼</div>`
-      +`<div class="ebtbl" style="display:none;margin-top:5px;overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:11.5px">`
+      +`<div class="ebtbl" style="display:none;margin-top:5px;overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ebcase-tbl" style="border-collapse:collapse;font-size:11.5px">`
       +`<tr style="color:#999;text-align:left"><th>사건번호</th><th>매각기일</th><th>층</th><th>전용</th><th>감정가</th><th>낙찰가</th><th>낙찰가율</th><th>입찰인원</th><th>2등입찰가</th></tr>`;
     cs.forEach(x=>{ const p=(x.item_key||'').split('|'); const cn=p.length>=3?(p[1]+'타경'+p[2]+(p[3]&&p[3]!=='1'?' 물번'+p[3]:'')):'-'; h+=`<tr style="border-top:1px solid #eee"><td>${cn}</td><td>${x.sell_date}</td><td>${x.floor}층</td><td>${x.area}㎡</td><td>${won(x.appraisal)}</td><td style="color:#c0392b">${won(x.sale_price)}</td><td>${Math.round(x.sale_rate)}%</td><td>${(x.bid_count!=null&&x.bid_count!=='')?x.bid_count+'명':'-'}</td><td>${x.sale_2nd?won(x.sale_2nd):'-'}</td></tr>`; });
     h+=`</table></div>`; d.innerHTML=h;
@@ -2726,7 +2731,9 @@ setTimeout(function(){ if(window.innerWidth<=600){ var f=document.querySelector(
 <script src="/static/personal_loan.js"></script>
 <style>
 /* 사건 관련 자료 — 우측 고정 세로탭(스크롤해도 따라옴), 탭하면 사건자료로 이동+펼침 */
-#docs-fab{position:fixed;right:0;top:44%;transform:translateY(-50%);z-index:9997;writing-mode:vertical-rl;background:#15347e;color:#fff;border:none;padding:16px 9px;border-radius:11px 0 0 11px;font-size:13.5px;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:-3px 3px 14px rgba(0,20,60,.3);transition:padding .15s,background .15s;}
+#docs-fab{position:fixed;right:0;top:44%;transform:translateY(-50%);z-index:9997;writing-mode:vertical-rl;background:#15347e;color:#fff;border:none;padding:16px 9px;border-radius:11px 0 0 11px;font-size:13.5px;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:-3px 3px 14px rgba(0,20,60,.3);transition:padding .15s,background .15s;display:none;}
+/* 사건자료 세로탭/드로어는 앱(폰)에서만 — PC 웹은 원래대로(우측 사이드바 사건자료 링크 유지) */
+@media(max-width:600px){ #docs-fab{display:block;} }
 #docs-fab:hover,#docs-fab:active{background:#1e46a8;padding-left:13px;}
 #docs-fab.open{background:#1e46a8;}
 /* 사건 관련 자료 — 우측에서 슬라이드로 확장되는 드로어 패널 */
@@ -2739,7 +2746,7 @@ setTimeout(function(){ if(window.innerWidth<=600){ var f=document.querySelector(
 #docs-drawer .dd-body .sidelink .ar{float:right;color:var(--muted);}
 #docs-drawer .dd-body .sub{color:var(--muted);font-size:13px;}
 /* 기존 본문 '사건 관련 자료' 아코디언은 우측 드로어로 대체 → 본문에선 숨김(goDocs가 이 카드 내용을 복제 소스로 사용하므로 DOM은 유지) */
-#docsCard{display:none!important;}
+@media(max-width:600px){ #docsCard{display:none!important;} }  /* 본문 사건자료 숨김은 폰(앱)만 — PC 웹은 본문에 그대로 표시 */
 #aibot-btn{position:fixed;right:22px;bottom:22px;width:78px;height:78px;border-radius:50%;background:#1a73e8;color:#fff;border:none;font-size:19px;font-weight:800;letter-spacing:-.5px;cursor:pointer;box-shadow:0 6px 20px -4px rgba(26,115,232,.6);z-index:9998;display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:aibotTilt 4.5s ease-in-out infinite,aibotGlow 2.2s ease-in-out infinite;transform-origin:center bottom;}
 @keyframes aibotTilt{0%,84%,100%{transform:rotate(0)}88%{transform:rotate(-13deg)}92%{transform:rotate(13deg)}96%{transform:rotate(-6deg)}}
 @keyframes aibotJump{0%,100%{transform:translateY(0)}45%{transform:translateY(-16px)}}
