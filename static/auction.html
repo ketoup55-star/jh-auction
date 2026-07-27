@@ -2728,6 +2728,16 @@ setTimeout(function(){ if(window.innerWidth<=600){ var f=document.querySelector(
 /* 사건 관련 자료 — 우측 고정 세로탭(스크롤해도 따라옴), 탭하면 사건자료로 이동+펼침 */
 #docs-fab{position:fixed;right:0;top:44%;transform:translateY(-50%);z-index:9997;writing-mode:vertical-rl;background:#15347e;color:#fff;border:none;padding:16px 9px;border-radius:11px 0 0 11px;font-size:13.5px;font-weight:700;letter-spacing:2px;cursor:pointer;box-shadow:-3px 3px 14px rgba(0,20,60,.3);transition:padding .15s,background .15s;}
 #docs-fab:hover,#docs-fab:active{background:#1e46a8;padding-left:13px;}
+#docs-fab.open{background:#1e46a8;}
+/* 사건 관련 자료 — 우측에서 슬라이드로 확장되는 드로어 패널 */
+#docs-drawer{position:fixed;top:0;right:0;width:312px;max-width:86vw;height:100vh;background:#fff;box-shadow:-8px 0 28px rgba(0,0,0,.28);z-index:9999;transform:translateX(100%);transition:transform .28s cubic-bezier(.4,0,.2,1);overflow-y:auto;display:flex;flex-direction:column;}
+#docs-drawer.on{transform:translateX(0);}
+#docs-drawer .dd-hd{background:#15347e;color:#fff;font-weight:700;font-size:15.5px;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:1;}
+#docs-drawer .dd-x{cursor:pointer;font-size:19px;line-height:1;padding:2px 6px;}
+#docs-drawer .dd-body{padding:14px 16px;}
+#docs-drawer .dd-body .sidelink{display:block;padding:12px 13px;border:1px solid var(--line);border-radius:9px;margin-bottom:9px;color:var(--primary);text-decoration:none;font-size:14px;font-weight:600;}
+#docs-drawer .dd-body .sidelink .ar{float:right;color:var(--muted);}
+#docs-drawer .dd-body .sub{color:var(--muted);font-size:13px;}
 #aibot-btn{position:fixed;right:22px;bottom:22px;width:78px;height:78px;border-radius:50%;background:#1a73e8;color:#fff;border:none;font-size:19px;font-weight:800;letter-spacing:-.5px;cursor:pointer;box-shadow:0 6px 20px -4px rgba(26,115,232,.6);z-index:9998;display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:aibotTilt 4.5s ease-in-out infinite,aibotGlow 2.2s ease-in-out infinite;transform-origin:center bottom;}
 @keyframes aibotTilt{0%,84%,100%{transform:rotate(0)}88%{transform:rotate(-13deg)}92%{transform:rotate(13deg)}96%{transform:rotate(-6deg)}}
 @keyframes aibotJump{0%,100%{transform:translateY(0)}45%{transform:translateY(-16px)}}
@@ -2763,7 +2773,8 @@ setTimeout(function(){ if(window.innerWidth<=600){ var f=document.querySelector(
 .aibot-card-grade.g-ok{background:#e7f6ec;color:#1f7a3d;}.aibot-card-grade.g-mid{background:#fff4e0;color:#9a6b0b;}.aibot-card-grade.g-no{background:#fdeaea;color:#c0392b;}
 </style>
 <button id="aibot-btn" onclick="aibotToggle()" title="챗봇">챗봇</button>
-<button id="docs-fab" onclick="goDocs()" title="사건 관련 자료로 이동">📁 사건 관련 자료</button>
+<button id="docs-fab" onclick="goDocs()" title="사건 관련 자료">📁 사건 관련 자료</button>
+<div id="docs-drawer"><div class="dd-hd">📁 사건 관련 자료<span class="dd-x" onclick="goDocs()">✕</span></div><div class="dd-body" id="docsDrawerBody"></div></div>
 <div id="aibot-panel">
   <div class="aibot-head"><span>🤖 JH옥션스쿨 AI 도우미</span><button onclick="aibotToggle()">✕</button></div>
   <div id="aibot-msgs"></div>
@@ -2799,10 +2810,15 @@ function aibotCards(cards){
   box.appendChild(wrap); box.scrollTop=box.scrollHeight;
 }
 function goDocs(){
+  var dr=document.getElementById('docs-drawer');
+  if(!dr) return;
+  if(dr.classList.contains('on')){ dr.classList.remove('on'); document.getElementById('docs-fab').classList.remove('open'); return; }  // 열려있으면 닫기(토글)
   var c=document.getElementById('docsCard');
-  if(!c){ alert('이 물건은 사건 관련 자료가 아직 없습니다.'); return; }
-  try{ if(window.matchMedia('(max-width:600px)').matches) c.classList.add('acc-open'); }catch(e){}
-  c.scrollIntoView({behavior:'smooth',block:'start'});
+  var body=document.getElementById('docsDrawerBody');
+  if(c){ var cl=c.cloneNode(true); var h=cl.querySelector('h2'); if(h) h.remove(); body.innerHTML=cl.innerHTML; }
+  else { body.innerHTML='<div class="sub" style="padding:16px">이 물건은 사건 관련 자료가 아직 없습니다.</div>'; }
+  dr.classList.add('on');
+  document.getElementById('docs-fab').classList.add('open');
 }
 function aibotToggle(){
   var p=document.getElementById("aibot-panel");
