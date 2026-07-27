@@ -358,7 +358,7 @@
   .docrow{color:var(--hotred);line-height:1.75;font-size:12px;}
   .docrow .dt{font-weight:700;}
   .docrow .gb{display:inline-block;min-width:30px;color:var(--primary);font-weight:700;}
-  @media(max-width:640px){ .smry th{width:96px;} }
+  @media(max-width:640px){ .smry th{width:96px;word-break:keep-all;} }
   /* 라이트박스(슬라이드) */
   .lb{position:fixed;inset:0;background:rgba(0,0,0,.82);display:none;z-index:100;
     align-items:center;justify-content:center;cursor:zoom-out;}
@@ -419,6 +419,26 @@
     .nb-tbl td,.nb-tbl th{white-space:nowrap;}
     .nb-tbl td.bd{white-space:normal;}
     .nb-tbl td.bd .adr{white-space:normal;}
+    /* 물건 정보 표(6칸): 폰에서 칸이 좁아 글자가 세로로 쪼개지던 것 → 라벨:값 한 줄씩 세로 배치 */
+    .kgrid{display:block;width:100%;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+    .kgrid tbody{display:block;}
+    .kgrid tr{display:grid;grid-template-columns:76px 1fr;border-top:1px solid var(--line);}
+    .kgrid tr:first-child{border-top:none;}
+    .kgrid th{padding:9px 9px;font-size:12.5px;font-weight:600;background:#f5f8fd;color:var(--muted);text-align:left;border:none;display:flex;align-items:center;line-height:1.4;}
+    .kgrid td{min-width:0;padding:9px 11px;font-size:13.5px;border:none;white-space:normal;word-break:keep-all;overflow-wrap:anywhere;display:flex;align-items:center;line-height:1.45;}
+    .kgrid td:empty{display:none;}
+    /* 데이터 표(기일현황·빌라·아파트실거래·취득세구간): 칸이 좁아 세로 쪼개지던 것 → 셀 한 줄 유지+표 가로스크롤 */
+    .gridtbl th,.gridtbl td,.apt-tbl th,.apt-tbl td,.ss-reftbl th,.ss-reftbl td{white-space:nowrap;}
+    .gridtbl tr.saleSub td{white-space:normal;}
+    .apt-scroll{overflow-x:auto;}
+    /* 차량현황(vtbl): 4칸 라벨-값 → kgrid처럼 라벨:값 한 줄씩(가로스크롤 시 오른쪽 값이 잘리던 것 해결) */
+    .vtbl{display:block;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+    .vtbl tbody{display:block;}
+    .vtbl tr{display:grid;grid-template-columns:84px 1fr;border-top:1px solid var(--line);}
+    .vtbl tr:first-child{border-top:none;}
+    .vtbl th{border:none;padding:9px 10px;font-size:12.5px;display:flex;align-items:center;white-space:normal;word-break:keep-all;}
+    .vtbl td{border:none;padding:9px 11px;font-size:13px;white-space:normal;word-break:keep-all;overflow-wrap:anywhere;min-width:0;line-height:1.5;}
+    .vtbl td:empty{display:none;}
   }
   .side .card{padding:13px 14px;}
   .side h2{font-size:14px;margin-bottom:10px;}
