@@ -414,6 +414,11 @@
     .cthead-r{text-align:left;align-self:stretch;border-top:1px solid var(--line);padding-top:11px;margin-top:5px;}
     .cthead-r .selld{display:block;}
     .favbtn,.sharebtn{margin-top:10px;}
+    /* 실거래가 표(11칸): 폰에서 width:100%로 압축돼 칸 내용이 세로 쪼개지던 것 → 가로스크롤로 칸 폭 유지 */
+    .nb-tbl{min-width:840px;}
+    .nb-tbl td,.nb-tbl th{white-space:nowrap;}
+    .nb-tbl td.bd{white-space:normal;}
+    .nb-tbl td.bd .adr{white-space:normal;}
   }
   .side .card{padding:13px 14px;}
   .side h2{font-size:14px;margin-bottom:10px;}
