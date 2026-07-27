@@ -407,6 +407,13 @@
     .aiitem{width:100%;flex-wrap:wrap;}
     .aiitem .k,.aiitem .v{word-break:keep-all;white-space:nowrap;}
     .demand-sub{word-break:keep-all;overflow-wrap:break-word;margin-left:0;white-space:normal;}
+    /* 물건 카드(cthead): 3단→세로 정렬(가운데 경매계가 세로로 쪼개지던 것 해결) — 시안 A */
+    .cthead{flex-direction:column;gap:7px;align-items:stretch;}
+    .cthead-c{text-align:left;flex:none;padding-top:0;}
+    .cthead-c .gye{font-size:13.5px;font-weight:700;color:var(--primary);}
+    .cthead-r{text-align:left;align-self:stretch;border-top:1px solid var(--line);padding-top:11px;margin-top:5px;}
+    .cthead-r .selld{display:block;}
+    .favbtn,.sharebtn{margin-top:10px;}
   }
   .side .card{padding:13px 14px;}
   .side h2{font-size:14px;margin-bottom:10px;}
