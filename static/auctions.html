@@ -101,6 +101,29 @@
   .searching .sdots i:nth-child(3){animation-delay:.32s;}
   @keyframes searchBounce{0%,65%,100%{transform:translateY(0);opacity:.5;}30%{transform:translateY(-11px);opacity:1;}}
   .tbl{width:100%;border-collapse:collapse;min-width:900px;table-layout:fixed;}
+  /* ── 모바일 목록 카드(히어로 스타일): PC 숨김, 폰에서만 표시 ── */
+  .cardlist{display:none;}
+  .mcard{display:block;text-decoration:none;border-radius:14px;overflow:hidden;margin-bottom:14px;box-shadow:0 2px 10px rgba(20,40,80,.1);background:#1a2436;}
+  .mph{position:relative;overflow:hidden;}
+  .mimg{width:100%;aspect-ratio:1/1;object-fit:cover;display:block;background:#2b3a52;}
+  .mtop{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:7px;flex-wrap:wrap;z-index:2;}
+  .mbd{color:#fff;font-size:13px;font-weight:700;padding:5px 11px;border-radius:8px;box-shadow:0 2px 6px rgba(0,0,0,.35);white-space:nowrap;}
+  .mbd.blue{background:#2c6fd6;}.mbd.red{background:#e8202a;}.mbd.amber{background:#e08a1e;}
+  .mcap{position:absolute;left:0;right:0;bottom:0;padding:50px 16px 16px;background:linear-gradient(to top,rgba(0,0,0,.96),rgba(0,0,0,.82) 46%,rgba(0,0,0,.32) 82%,transparent);word-break:keep-all;overflow-wrap:break-word;}
+  .mcase{color:#c2cddc;font-size:13px;margin-bottom:4px;}
+  .mreg{color:#fff;font-size:22px;font-weight:800;line-height:1.25;text-shadow:0 1px 4px rgba(0,0,0,.5);}
+  .mtyp{color:#e0e8f3;font-size:14.5px;margin-top:7px;line-height:1.5;}
+  .mtyp .kapt{color:#cdd8e6;}
+  .mprices{display:flex;gap:6px 16px;flex-wrap:wrap;margin-top:11px;color:#eef2f8;font-size:14.5px;align-items:baseline;}
+  .mprices b{font-weight:700;font-size:15.5px;color:#fff;}
+  .mprices .hot b{color:#ffd45e;font-size:19px;}
+  .mprices .aptest b,.mprices .villaest b,.mprices .ecarv b{color:#8fe0a8;}
+  .mbot{display:flex;gap:7px 14px;flex-wrap:wrap;margin-top:11px;font-size:14px;align-items:center;}
+  .mbot .dday{color:#ff8080;font-weight:700;}
+  .mbot .mres{color:#8fbaff;font-weight:600;}
+  .mbot .mhit{color:#aeb8c6;}
+  .mtop .gradechip:empty{display:none;}
+  .mtop .gradechip{font-size:13px;font-weight:700;padding:5px 11px;border-radius:8px;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.35);white-space:nowrap;}
   .tbl th{background:var(--label);color:var(--labeltx);font-size:11px;font-weight:600;padding:9px 6px;border-bottom:1px solid var(--line);}
   .tbl td{padding:10px 8px;border-bottom:1px solid var(--line);font-size:12px;vertical-align:top;}
   .tbl tr:last-child td{border-bottom:none;}.tbl tbody tr:hover{background:#f7f9fc;cursor:pointer;}
@@ -211,16 +234,9 @@
     /* 검색결과 툴바 드롭다운: 폰에서 2열 균등(용도지역 등 잘림 방지) */
     #pageSize,#gradeSel,#zoneSel,#regSel{flex:1 1 44%;min-width:0;}
     .premwrap{flex:1 1 44%;}.premwrap select{width:100%;}
-    /* 목록: 폰에서 8컬럼 테이블이 가로스크롤로 숨던 것 → 카드형으로 전 정보(감정가·매각기일·시세·결과) 표시 */
-    .scrollx{overflow-x:visible;border:none;background:transparent;border-radius:0;}
-    .tbl{min-width:0;width:100%;display:block;table-layout:auto;}
-    .tbl thead{display:none;}
-    .tbl tbody{display:block;}
-    .tbl tr{display:block;border:1px solid var(--line);border-radius:10px;margin-bottom:10px;padding:10px 12px;background:var(--card);}
-    .tbl td{display:block;border:none!important;width:auto!important;text-align:left!important;padding:2px 0;white-space:normal!important;word-break:break-word;}
-    .tbl .addr{white-space:normal;word-break:break-word;}
-    .tbl td[data-label]{border-top:1px dashed var(--line)!important;padding-top:6px;margin-top:5px;}
-    .tbl td[data-label]::before{content:attr(data-label);display:block;font-weight:700;color:var(--primary2);font-size:11px;margin-bottom:1px;}
+    /* 목록: 폰에서 표 숨기고 히어로 스타일 카드로 전환 */
+    .scrollx{display:none;}
+    .cardlist{display:block;}
   }
 </style>
 <style id="navbadges">
@@ -1252,6 +1268,7 @@ function prefillFromResponse(list){
   });
   applyAptSort();
 }
+var _MCPH="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%232b3a52'/%3E%3Cpath d='M50 30 L72 50 L66 50 L66 72 L54 72 L54 58 L46 58 L46 72 L34 72 L34 50 L28 50 Z' fill='%23ffffff' fill-opacity='0.22'/%3E%3C/svg%3E"; window._MCPH=_MCPH;
 async function doSearch(){
   const _g=document.getElementById("grid"); if(_g) _g.innerHTML='<div class="searching">검색 중<span class="sdots"><i></i><i></i><i></i></span></div>';   // 클릭 즉시 피드백 + 통통 튀는 로딩 애니메이션
   const _c=document.getElementById("cnt"); if(_c) _c.textContent="검색 중…";
@@ -1283,6 +1300,7 @@ async function doSearch(){
   document.getElementById("cnt").innerHTML=`검색결과 <b>${d.total.toLocaleString()}</b>건`;
   if(!d.items.length){ document.getElementById("grid").innerHTML='<div class="kv" style="padding:20px;text-align:center">조건에 맞는 물건이 없습니다.</div>'; }
   else{
+    const cardsAcc=[];
     const rows=d.items.map((L,i)=>{
       const href="/static/auction.html?item_key="+encodeURIComponent(L.item_key);
       const t=L.thumb_url?`<img class="thumb" loading="lazy" decoding="async" src="${L.thumb_url}" onerror="this.outerHTML='<div class=ph>🏢</div>'">`:`<div class="ph">🏢</div>`;
@@ -1300,6 +1318,7 @@ async function doSearch(){
       if(L.group==="차량외"){ const s=splitVehicle(L.usage); if(s.brand) uCell=`<div>${s.model||"-"}</div><div class="kv">${s.brand}</div>`; }
       const dd=ddayOf(L.sell_date);
       const rr=splitResult(L.result||L.status||"-"); const rc=resColor(L.result);
+      cardsAcc.push(`<a class="mcard" href="${href}" target="_blank"><div class="mph"><img class="mimg" loading="lazy" src="${L.thumb_url||_MCPH}" onerror="this.onerror=null;this.src=_MCPH"><div class="mtop">${/아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|근린/.test(L.usage||"")?`<span class="gradechip" data-key="${L.item_key}"></span>`:""}${L.compete>1?`<span class="mbd blue">경쟁분산 ${L.compete}건</span>`:""}${L.violation?`<span class="mbd red">위반건축물</span>`:""}${L.baedang>0?`<span class="mbd amber">배당요구 ${L.baedang}건</span>`:""}</div><div class="mcap"><div class="mcase">${L.court||""}${L.case_no?" · "+L.case_no:""}${(L.obj_no&&String(L.obj_no)!=="1")?" 물번"+L.obj_no:""}</div><div class="mreg">${L.address||"-"}</div><div class="mtyp">${L.usage_disp||L.usage||""}${L.area_text?" · "+L.area_text:""}${L.zone?" · "+L.zone:""} <span class="kapt" data-key="${L.item_key}"></span></div><div class="mprices"><span>감정 <b>${won(L.appraisal_price)}</b></span><span class="hot">최저 <b>${won(L.min_price)}</b></span>${L.group==="차량외"?`<span class="ecarv" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:(/아파트|오피스텔/.test(L.usage||"")?`<span class="aptest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:(/다세대|연립|빌라|도시형/.test(L.usage||"")?`<span class="villaest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:""))}</div><div class="mbot"><span class="dday">${dd.date}${dd.label?" "+dd.label:""}</span><span class="mres">${rr.status}${rr.count?" "+rr.count:""}${rr.pct?" "+rr.pct:""}</span><span class="mhit">조회 ${(L.hit_count||0).toLocaleString()}</span></div></div></div></a>`);
       return `<tr data-idx="${i}"${L.baedang!=null?` data-baedang="${L.baedang}"`:""}${L.trades_3m!=null?` data-t3m="${L.trades_3m}"`:""} onclick="window.open('${href}','_blank')" style="cursor:pointer">
         <td class="cmid"><input type="checkbox" class="rowchk" value="${L.item_key}" onclick="event.stopPropagation()"></td>
         <td class="cmid"><div class="case">${L.court||"-"}</div><div class="casesub">${L.case_no||""}</div>${objno}</td>
@@ -1317,7 +1336,7 @@ async function doSearch(){
     }).join("");
     document.getElementById("grid").innerHTML=`<div class="scrollx"><table class="tbl"><thead><tr>
       <th style="width:44px">선택</th><th style="width:108px">법원명<br>사건번호</th><th>소재지</th><th style="width:132px">용도</th><th style="width:168px">감정가<br>최저가<br>[낙찰가]</th><th style="width:106px">매각기일<br>[입찰인원]</th><th style="width:92px">결과<br>유찰수 %</th><th style="width:54px">조회</th>
-    </tr></thead><tbody>${rows}</tbody></table></div>`;
+    </tr></thead><tbody>${rows}</tbody></table></div><div class="cardlist">${cardsAcc.join("")}</div>`;
     prefillFromResponse(d.items);  // 서버가 응답에 실어준 캐시값(준공/시세/유사거래/판정)을 첫 페인트에 즉시 채움 — 목록은 이걸로 완성됨
     applyBuyFilter();  // 필터 활성 상태면 재검색 결과에도 즉시 적용(등급 로딩 후 fillAptBriefs가 재적용)
     // ★목록(스피너)을 최우선으로: 미캐시 enrich(브리핑·시세·판정·호가)는 목록 페인트 '후'로 지연 발사.
