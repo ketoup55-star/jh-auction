@@ -1801,16 +1801,28 @@ def _grade_buckets(force: bool = False) -> dict:
     # ★목록 매수판정을 상세 위험도(analysis)와 일치시킴(㉯): analysis 캐시(analysis:)에 risk_level이
     #  있으면 그 값을 그대로 매핑(상세와 100% 동일). 캐시 없는 물건만 아래 danger 폴백으로 계산.
     #  기존 danger 로직은 말소기준 미반영이라 상세와 13.5% 어긋났음(위험→목록양호 등) → 캐시 우선으로 해소.
-    try:
-        _an_cache = db.cache_get_many(["analysis:" + k for k in res]) or {}
-    except Exception:
-        _an_cache = {}
+    # ⚠️수만 키를 한 번에 넘기면 대부분 누락된다(실측: 1,000키 요청 → 140개만 반환).
+    #  위 brief 조회와 동일하게 100개씩 청크로 나눠 받아야 ㉯가 캐시를 실제로 읽는다.
+    #  (이 청크를 빼먹어서 analysis를 12,500건 예열하고도 일치율이 안 올랐음 — 2026-07-20)
+    _an_cache: dict = {}
+    _ak = list(res)
+    for _i in range(0, len(_ak), 100):
+        try:
+            _an_cache.update(db.cache_get_many(["analysis:" + k for k in _ak[_i:_i + 100]]) or {})
+        except Exception:
+            pass
     _RMAP = {"안전": "매수양호", "주의": "매수검토", "위험": "매수금지"}
+    _an_hit = _an_miss = _an_norisk = 0
     for k in res:
         _ac = _an_cache.get("analysis:" + k)
         if isinstance(_ac, dict) and _ac.get("risk_level") in _RMAP:
             out[_RMAP[_ac["risk_level"]]].add(k)   # 상세 analysis와 동일 판정
+            _an_hit += 1
             continue
+        if not isinstance(_ac, dict):
+            _an_miss += 1        # 캐시 자체가 없음
+        else:
+            _an_norisk += 1      # 캐시는 있는데 risk_level이 없거나 매핑 밖
         assume, has_opp, danger = 0, False, False
         waived = k in waiver
         for t in tmap.get(k, []):
@@ -1831,6 +1843,9 @@ def _grade_buckets(force: bool = False) -> dict:
             out["매수검토"].add(k)
         else:
             out["매수양호"].add(k)
+
+    print(f"[buy_grade] ㉯analysis적용 {_an_hit}건 · 캐시없음 {_an_miss}건 · risk없음 {_an_norisk}건 "
+          f"(res {len(res)}건, 캐시조회 {len(_an_cache)}건)", flush=True)
 
     # ── 다세대·도시형 4층↑ 승강기 없음/미상 → 매수양호만 매수검토로 상향(금지·검토는 유지) ──
     from auction_analysis.crawler_analysis import elevator_caution
@@ -2374,6 +2389,9 @@ def auctions(
             items = f_items.result()
             total = f_total.result()
     _enrich_list(items)                          # 캐시된 부가정보(준공/시세/유사거래/판정)를 응답에 합침
+    for _it in items:   # 이미지 URL http→https (앱 WebView가 cleartext:false로 http 이미지 차단 → 사진 안 뜸)
+        if isinstance(_it, dict) and _it.get("thumb_url"):
+            _it["thumb_url"] = _it["thumb_url"].replace("http://", "https://")
     return {"total": total, "count": len(items), "offset": offset,
             "limit": limit, "items": items}
 
@@ -3978,13 +3996,12 @@ def _col_enrich_sync() -> None:
                   AND (it.area IS NULL OR (l.area_excl IS NOT NULL AND abs(l.area_excl-it.area)<=3))
              GROUP BY it.item_key
            ) sub WHERE i.item_key=sub.item_key AND i.kb_count IS DISTINCT FROM sub.cnt""",
-        # 매각기일 30일 지난 물건의 무거운 analysis 캐시(물건당 ~3.5KB) 삭제 — 용량 관리(주인님 요청).
-        #  risk_level은 buy_grade 컬럼에 이미 반영됐고, 과거물건 상세는 재조회 시 analyzed_at(크롤러 데이터)로
-        #  재계산되므로 안전(실측: 2016년 매각물건도 source=crawler·available=True). item_key엔 ':' 없어 split_part [2]=item_key.
-        """DELETE FROM api_cache WHERE cache_key LIKE 'analysis:%'
-           AND split_part(cache_key, ':', 2) IN (
-             SELECT item_key FROM items WHERE sell_date_d IS NOT NULL
-               AND sell_date_d < CURRENT_DATE - INTERVAL '30 days')""",
+        # ⛔[2026-07-21 제거] '매각 30일 경과 analysis 캐시 삭제'(용량관리)를 뺐다. 다시 넣지 말 것.
+        #  넣었던 근거는 "risk_level은 buy_grade 컬럼에 이미 반영되니 캐시는 지워도 안전"이었으나 **틀렸다**:
+        #  _grade_buckets(force=True)는 매 재계산마다 _sync_buy_grade로 컬럼을 전량 덮어쓰고(실측 117,198건),
+        #  캐시가 없으면 옛 danger 폴백으로 계산해 덮으므로 컬럼도 같이 되돌아간다.
+        #  또 이 DELETE는 2시간 주기라 과거물건(주거용 93,215건 중 89,690건=96.2%)을 예열해도
+        #  2시간 뒤 전량 삭제 → 매 예열이 헛돌았다. 보관비용은 실측 건당 2,380바이트(89,690건=204MB)로 작다.
     ]
     try:
         with psycopg.connect(dsn, autocommit=True, connect_timeout=15) as conn:
@@ -4330,9 +4347,25 @@ def _kakao_do_send(room, payload):
     is_seq = isinstance(payload, list)
     seq, tmp = (_kakao_materialize(payload) if is_seq else (None, []))
     sent, failed = [], []
+
+    def _reset_kakao_ui():
+        """방 하나가 실패해도 다음 방이 오염되지 않게 카톡 상태를 되돌린다.
+        2026-07-21 사고: 첫 방에서 친구추가 창이 열리자 그 창이 전경을 잡아 OnlineMainView를
+        못 찾게 됐고, 이후 모든 방이 '창 핸들 무효'로 연쇄 실패했다."""
+        try:
+            from kakao_sender import KakaoTalkService
+            _s = KakaoTalkService()
+            _s._close_blocking_popups()               # 친구추가/프로필 등 방해 팝업 제거
+            _mw = _s._find_main_window()
+            if _mw:
+                _s._ensure_chat_tab(_mw)              # 채팅 탭으로 복귀
+        except Exception as _e:
+            print(f"[kakao]   (정리 실패, 계속 진행) {type(_e).__name__}: {str(_e)[:60]}", flush=True)
+
     try:
         for rm in rooms:
             ok = False
+            _reset_kakao_ui()                         # ★각 방 시작 전 상태 초기화
             for attempt in range(3):        # 원문 1회 + 재시도 2회 — '전송 前' 실패에만
                 try:
                     if is_seq:
@@ -4344,6 +4377,8 @@ def _kakao_do_send(room, payload):
                 except KakaoTalkControlError as e:   # 방 검색/열기 실패 = 아직 미전송 → 안전 재시도(중복 없음)
                     print(f"[kakao]   ↻ '{rm}' 시도{attempt + 1} 전송前 실패: {e}", flush=True)
                     _t.sleep(1.0)
+                    if attempt < 2:
+                        _reset_kakao_ui()            # 재시도 전에도 팝업·탭 정리(같은 실패 반복 방지)
                     continue
                 except Exception as e:               # 전송 중/후일 수 있음 → 재시도 금지(중복 방지)
                     print(f"[kakao]   ✗ '{rm}' 오류(재시도 안 함): {type(e).__name__}: {e}", flush=True)
@@ -7685,7 +7720,7 @@ def _hero_picks_compute() -> list:
         picks.append({"item_key": k, "region": _region_short(row.get("address")),
                       "usage": _hero_usage_label(row.get("usage_name")),
                       "profit": profit, "sise": sise, "bid": bid, "bid_est": True,
-                      "thumb": row.get("thumb_url")})
+                      "thumb": (row.get("thumb_url") or "").replace("http://", "https://")})
     picks.sort(key=lambda p: p["profit"], reverse=True)
     return picks[:12]
 
@@ -9570,7 +9605,7 @@ def _chat_search_properties(args: dict, exclude_keys=None) -> dict:
             "예상차익": profit,
             "매각기일": (str(it.get("sell_date") or ""))[:10],
             "매수판정": grade,
-            "thumb": it.get("thumb_url"),
+            "thumb": (it.get("thumb_url") or "").replace("http://", "https://"),
             "item_key": it.get("item_key"),
             "링크": "/static/auction.html?item_key=" + str(it.get("item_key") or ""),
         })
