@@ -389,7 +389,7 @@ function goSearch(){
     for(var s=items.length-1;s>0;s--){ var r=Math.floor(Math.random()*(s+1)),tm=items[s]; items[s]=items[r]; items[r]=tm; }  // 랜덤 순서(Fisher-Yates)
     track.innerHTML=items.map(function(p){
       return '<a class="hc-card" href="/static/auction.html?item_key='+encodeURIComponent(p.item_key)+'">'
-        +'<div class="hc-ph"><img src="'+esc(p.thumb||_HCPH)+'" loading="lazy" onerror="this.onerror=null;this.src=window._HCPH">'
+        +'<div class="hc-ph"><img src="'+esc((p.thumb||'').replace(/^http:\/\//,'https://')||_HCPH)+'" loading="lazy" onerror="this.onerror=null;this.src=window._HCPH">'
         +'<span class="hc-badge">'+fmt(p.profit)+' 차익</span>'
         +'<div class="hc-cap"><div class="hc-reg">'+esc(p.region)+'</div><div class="hc-typ">'+esc(p.usage)+'</div>'
         +'<div class="hc-meta">시세 '+won2(p.sise)+' · 예상낙찰 '+won2(p.bid)+'</div></div></div></a>';

@@ -7754,20 +7754,26 @@ def _hero_picks_build() -> None:
 def hero_picks() -> dict:
     """홈 히어로 캐러셀 — 매수양호+아파트/다세대/도생+진행중 차익 상위 12(예열 캐시)."""
     import time as _t
+    def _hj(picks):   # 캐시에 http:// 썸네일이 섞여도 https로 강제 → 앱(HTTPS)에서 Mixed Content 차단 방지
+        for _p in (picks or []):
+            _u = _p.get("thumb") or ""
+            if _u.startswith("http://"):
+                _p["thumb"] = "https://" + _u[7:]
+        return picks
     c = _hero_picks_cache
     now = _t.time()
     if c["picks"] is not None and (now - c.get("ts", 0)) < 600:   # 10분 신선 → 즉시
-        return {"items": c["picks"]}
+        return {"items": _hj(c["picks"])}
     # 만료/미로드 → Supabase 블롭(로컬 워머가 갱신한 최신) 재읽기 → 클라우드도 재배포 없이 반영
     try:
         dc = auction_db.cache_get_many(["hero_picks:" + _HERO_V]).get("hero_picks:" + _HERO_V)
         if isinstance(dc, dict) and isinstance(dc.get("picks"), list):
             c["picks"] = dc["picks"]; c["ts"] = now
-            return {"items": c["picks"]}
+            return {"items": _hj(c["picks"])}
     except Exception:
         pass
     if c["picks"] is not None:
-        return {"items": c["picks"]}          # 재읽기 실패 → 옛값 유지(빈 화면 방지)
+        return {"items": _hj(c["picks"])}          # 재읽기 실패 → 옛값 유지(빈 화면 방지)
     threading.Thread(target=_hero_picks_build, daemon=True).start()
     return {"items": [], "pending": True}
 
