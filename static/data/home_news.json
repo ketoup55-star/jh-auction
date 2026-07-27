@@ -1,87 +1,132 @@
 {
  "items": [
   {
+   "keyword": "아파트 경매",
+   "title": "비규제지역 경매 열기 확산…안양·남양주·군포 낙찰가율 120% 돌파",
+   "link": "http://www.snakorea.com/news/articleView.html?idxno=1038924",
+   "image": "https://cdn.snakorea.com/news/thumbnail/202607/1038924_984478_576_v150.jpg",
+   "source": "서울뉴스통신",
+   "published": "2026-07-27T08:55:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "부동산 정책 토론회에서 쏟아진 번뜩이는 아이디어와 제안들…정책에 반영될까요?",
+   "link": "https://www.hani.co.kr/arti/economy/property/1270059.html",
+   "image": "https://flexible.img.hani.co.kr/flexible/normal/800/441/imgdb/original/2026/0726/20260726502116.webp",
+   "source": "한겨레",
+   "published": "2026-07-27T08:30:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "안철수 “부동산 정책=‘닥치고 대출’…李도 결국 17.7억 근저당”",
+   "link": "https://biz.heraldcorp.com/article/10820772",
+   "image": "https://wimg.heraldcorp.com/news/cms/2026/07/27/rcv.YNA.20260712.PYH2026071202660001300_T1.jpg",
+   "source": "헤럴드경제",
+   "published": "2026-07-27T08:18:18+09:00",
+   "has_time": true
+  },
+  {
    "keyword": "대출규제",
-   "title": "“신용대출까지 막혔다” 실수요자 덮친 가계대출 총량규제...정책과 현장 엇박자",
-   "link": "https://www.thepublic.kr/news/articleView.html?idxno=312637",
-   "image": "https://cdn.thepublic.kr/news/photo/202607/312637_315624_5733.jpg",
-   "source": "더퍼블릭",
-   "published": "2026-07-26T09:02:55+09:00",
+   "title": "아산시, 입주 예정 아파트 대출총량 규제 적극 대응",
+   "link": "https://www.kitvnews.co.kr/news/article.html?no=1646681",
+   "image": "https://www.kitvnews.co.kr/data/photos/portnews/202607/20260727062558-89391.jpg",
+   "source": "kitvnews.co.kr",
+   "published": "2026-07-27T08:10:14+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "대출 가능지역 집값 강세 여전한데…'실수요 대출 풀어달라' 빗발",
-   "link": "https://kbthink.com/news-list/view.html?newsId=20260726090006374",
-   "image": "https://kbthink.com/content/dam/tam-dcp-cms/kbthink/KB의 생각_한글.png",
-   "source": "KB의 생각",
-   "published": "2026-07-26T09:00:05+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "다시 꿈틀하는 오피스텔·빌라시장",
-   "link": "https://www.m-i.kr/news/articleView.html?idxno=1395034",
-   "image": "https://cdn.m-i.kr/news/thumbnail/202607/1395034_1182764_1316_v150.jpg",
-   "source": "매일일보",
-   "published": "2026-07-26T09:00:00+09:00",
+   "keyword": "집값",
+   "title": "동탄 집값 한 달 새 5.49% 급등…분당·수지·송파 선호지역 동반 상승",
+   "link": "https://www.newswhoplus.com/news/articleView.html?idxno=65391",
+   "image": "https://cdn.newswhoplus.com/news/thumbnail/202607/65391_101454_475_v150.jpg",
+   "source": "뉴스후플러스",
+   "published": "2026-07-27T07:30:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "부동산 세제 개편안, 보유 주택 수에서 자산가액 중심으로",
-   "link": "https://www.2news.co.kr/news/articleView.html?idxno=17763",
-   "image": "https://cdn.2news.co.kr/news/photo/202607/mn_17763_20260726082553_1.jpg",
-   "source": "에너지뉴스",
-   "published": "2026-07-26T08:25:00+09:00",
+   "title": "조영식 SD 회장, 두 자녀에 강남 노른자 빌딩 담보 제공…“장녀 267억·장남 100억 ‘납세담보’”",
+   "link": "https://www.ceoscoredaily.com/page/view/2026072312183634993",
+   "image": null,
+   "source": "CEOSCOREDAILY",
+   "published": "2026-07-27T07:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "대출 규제 여파 지속…서울 아파트값 '키 맞추기' 속도↑",
+   "link": "https://www.shinailbo.co.kr/news/articleView.html?idxno=5044637",
+   "image": "https://cdn.shinailbo.co.kr/news/photo/202607/5044637_2043097_4254.jpg",
+   "source": "신아일보",
+   "published": "2026-07-27T07:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "집값 못 잡고 민심 돌아서자…정부, 결국 ‘보유세 청구서’ 꺼냈다",
-   "link": "https://www.sisajournal.com/news/articleView.html?idxno=380882",
-   "image": "https://cdn.sisajournal.com/news/thumbnail/202607/380882_388686_3110_v150.jpg",
-   "source": "시사저널",
-   "published": "2026-07-26T08:00:00+09:00",
+   "title": "부동산 세제 실효적 개편 없인 서울 아파트 못잡아",
+   "link": "https://www.mindlenews.com/news/articleView.html?idxno=21560",
+   "image": "https://cdn.mindlenews.com/news/thumbnail/202607/21560_74121_1441_v150.jpg",
+   "source": "세상을 바꾸는 시민언론 민들레",
+   "published": "2026-07-27T06:45:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "세제·공급 놓고 청와대·여야·서울시 부동산 정책 '동상이몽'",
-   "link": "https://www.newsworks.co.kr/news/articleView.html?idxno=848253",
-   "image": "https://cdn.newsworks.co.kr/news/thumbnail/202607/848253_807704_4528_v150.jpg",
-   "source": "뉴스웍스",
-   "published": "2026-07-26T08:00:00+09:00",
+   "keyword": "부동산 세금",
+   "title": "[오늘 부동산] 2030세대 주택 보유율 20%대 추락",
+   "link": "https://www.dailian.co.kr/news/view/1671008/%EC%98%A4%EB%8A%98-%EB%B6%80%EB%8F%99%EC%82%B0-2030%EC%84%B8%EB%8C%80-%EC%A3%BC%ED%83%9D-%EB%B3%B4%EC%9C%A0%EC%9C%A8-2026",
+   "image": "https://cdnimage.dailian.co.kr/news/202607/news_1785068100_1671008_m_1.png",
+   "source": "데일리안",
+   "published": "2026-07-27T06:27:00+09:00",
    "has_time": true
   },
   {
    "keyword": "아파트 경매",
-   "title": "'리모델링 호재' 송파 문정시영 아파트 6억대…동남권 경매 투자 포인트",
-   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026072401009",
-   "image": "https://image.chosun.com/sitedata/thumbnail/202607/24/2026072401005_0_thumb.jpg",
+   "title": "분당 옆 동네부터 GTX 역세권까지…서울 출퇴근 가성비 아파트 5선",
+   "link": "https://realty.chosun.com/site/data/html_dir/2026/07/24/2026072401385.html",
+   "image": "https://image.chosun.com/sitedata/image/202607/24/2026072401380_0.jpg",
    "source": "realty.chosun.com",
-   "published": "2026-07-26T06:00:00+09:00",
+   "published": "2026-07-27T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "[논현광장-박덕배의 금융의 창] 시장은 집값보다 정책신뢰를 먼저 본다",
+   "link": "https://www.etoday.co.kr/news/view/2607528",
+   "image": "https://img.etoday.co.kr/pto_db/2026/07/20260726182256_2364213_210_241.jpg",
+   "source": "이투데이",
+   "published": "2026-07-27T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "'사금융' 전세 줄이고 역세권 공공임대 늘리고…李정부 임대시장 재편",
+   "link": "https://www.news1.kr/amp/realestate/general/6238792",
+   "image": "https://i3n.news1.kr/system/photos/2026/7/23/8021754/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-07-27T05:05:00+09:00",
    "has_time": true
   },
   {
    "keyword": "대출규제",
-   "title": "'1억 내고 5억 전세' 막히나…李 지목 '전세대출 규제' 방향은",
-   "link": "https://www.nocutnews.co.kr/news/6553165",
-   "image": "https://file2.nocutnews.co.kr/newsroom/image/2026/07/24/202607241833209559_0.jpg",
-   "source": "노컷뉴스",
-   "published": "2026-07-26T05:00:00+09:00",
-   "has_time": true
+   "title": "은행 대출 규제에 보험사 약관대출 급증...건전성 우려 확대",
+   "link": "https://www.topdaily.kr/articles/111138",
+   "image": "https://assets.repress.co.kr/photos/efae39fd4ca20afa58ee557a1739fc44/thumb.png",
+   "source": "톱데일리",
+   "published": "2026-07-27T00:00:00+09:00",
+   "has_time": false
   },
   {
-   "keyword": "대출규제",
-   "title": "\"전세 실종, 월세는 320만원\" 난리인데...전세대출 규제 논의에 '술렁'",
-   "link": "https://www.mt.co.kr/estate/2026/07/26/2026072414494834593",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026072414494834593_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-07-26T04:20:00+09:00",
-   "has_time": true
+   "keyword": "부동산 정책",
+   "title": "김용범 “부동산 정책 토론 유용, 의견 모아가…레버리지 ETF 필요하면 추가 보완”",
+   "link": "https://v.daum.net/v/20260727085456549",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/27/kbs/20260727085940625qlhr.jpg",
+   "source": "Daum",
+   "published": "2026-07-27T00:00:00+09:00",
+   "has_time": false
   }
  ],
- "count": 9,
- "date": "2026-07-26"
+ "count": 14,
+ "date": "2026-07-27"
 }
