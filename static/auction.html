@@ -61,6 +61,7 @@
   .kgrid td{color:var(--text);text-align:left;font-weight:500;}
   .kgrid td.amt{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;}
   .kgrid td.low{color:var(--hotred);}
+  .kglist{display:none;}   /* 물건정보 폰 그룹형 — PC에선 숨김(폰 @media에서 block) */
   /* 풀그리드 표(기일현황 등): 가로세로줄 전부 + 가운데 */
   .gridtbl{width:100%;border-collapse:collapse;font-size:13px;border:1px solid var(--line);}
   .gridtbl th,.gridtbl td{border:1px solid var(--line);padding:11px 8px;text-align:center;
@@ -419,14 +420,16 @@
     .nb-tbl td,.nb-tbl th{white-space:nowrap;}
     .nb-tbl td.bd{white-space:normal;}
     .nb-tbl td.bd .adr{white-space:normal;}
-    /* 물건 정보 표(6칸): 폰에서 칸이 좁아 글자가 세로로 쪼개지던 것 → 라벨:값 한 줄씩 세로 배치 */
-    .kgrid{display:block;width:100%;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
-    .kgrid tbody{display:block;}
-    .kgrid tr{display:grid;grid-template-columns:76px 1fr;border-top:1px solid var(--line);}
-    .kgrid tr:first-child{border-top:none;}
-    .kgrid th{padding:9px 9px;font-size:12.5px;font-weight:600;background:#f5f8fd;color:var(--muted);text-align:left;border:none;display:flex;align-items:center;line-height:1.4;}
-    .kgrid td{min-width:0;padding:9px 11px;font-size:13.5px;border:none;white-space:normal;word-break:keep-all;overflow-wrap:anywhere;display:flex;align-items:center;line-height:1.45;}
-    .kgrid td:empty{display:none;}
+    /* 물건 정보: 폰에선 표(kgrid) 숨기고 그룹형(kglist)로 — 권리자/금액/면적/기타 묶음 */
+    .kgrid{display:none;}
+    .kglist{display:block;border:1px solid var(--line);border-radius:8px;overflow:hidden;}
+    .kglist .kg-sec{background:#eef2fb;color:var(--primary);font-weight:700;font-size:12px;padding:7px 12px;border-top:1px solid var(--line);letter-spacing:.2px;}
+    .kglist .kg-r{display:grid;grid-template-columns:88px 1fr;border-top:1px solid var(--line);}
+    .kglist .kg-r:first-child{border-top:none;}
+    .kglist .kg-k{padding:9px 8px;background:#f7f9fc;color:var(--muted);font-size:12px;display:flex;align-items:center;line-height:1.4;word-break:keep-all;}
+    .kglist .kg-v{min-width:0;padding:9px 11px;font-size:13.5px;word-break:keep-all;overflow-wrap:anywhere;display:flex;align-items:center;line-height:1.45;}
+    .kglist .kg-v.low{color:var(--hotred);font-weight:700;}
+    .kglist .kg-v b{font-weight:700;}
     /* 데이터 표(기일현황·빌라·아파트실거래·취득세구간): 칸이 좁아 세로 쪼개지던 것 → 셀 한 줄 유지+표 가로스크롤 */
     .gridtbl th,.gridtbl td,.apt-tbl th,.apt-tbl td,.ss-reftbl th,.ss-reftbl td{white-space:nowrap;}
     .gridtbl tr.saleSub td{white-space:normal;}
@@ -723,6 +726,27 @@ async function load(){
             <tr><th>건물면적</th><td>${d.building_area||"-"}</td><th>매각대상</th><td>${d.sale_target||"-"}</td><th>청구금액</th><td class="amt">${d.claim_amount||"-"}</td></tr>
             <tr><th>사건접수</th><td>${d.case_received||"-"}</td><th>배당종기일</th><td>${d.dividend_deadline||"-"}</td><th>개시결정</th><td>${d.decision_date||"-"}</td></tr>
           </table>
+          <div class="kglist">
+            <div class="kg-r"><span class="kg-k">소재지</span><span class="kg-v">${(d.address||"-").toString().replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span></div>
+            <div class="kg-r"><span class="kg-k">용도</span><span class="kg-v">${d.usage_disp||d.usage||"-"}</span></div>
+            <div class="kg-sec">권리자</div>
+            <div class="kg-r"><span class="kg-k">채권자</span><span class="kg-v">${d.creditor||"-"}</span></div>
+            <div class="kg-r"><span class="kg-k">채무자</span><span class="kg-v">${d.debtor||"-"}</span></div>
+            <div class="kg-r"><span class="kg-k">소유자</span><span class="kg-v">${d.owner||"-"}</span></div>
+            <div class="kg-sec">금액</div>
+            <div class="kg-r"><span class="kg-k">감정가</span><span class="kg-v"><b>${d.appraisal_raw?d.appraisal_raw+"원":won(d.appraisal_price)}</b></span></div>
+            <div class="kg-r"><span class="kg-k">최저가</span><span class="kg-v low">${ratio!=null?`(${ratio}%) `:""}${d.min_price_raw?d.min_price_raw+"원":won(d.min_price)}</span></div>
+            <div class="kg-r"><span class="kg-k">보증금</span><span class="kg-v">${d.deposit||"-"}</span></div>
+            <div class="kg-r"><span class="kg-k">청구금액</span><span class="kg-v">${d.claim_amount||"-"}</span></div>
+            <div class="kg-sec">면적</div>
+            <div class="kg-r"><span class="kg-k">토지</span><span class="kg-v">${d.land_area||"-"}</span></div>
+            <div class="kg-r"><span class="kg-k">건물</span><span class="kg-v">${d.building_area||"-"}</span></div>
+            <div class="kg-sec">기타</div>
+            <div class="kg-r"><span class="kg-k">매각대상</span><span class="kg-v">${d.sale_target||"-"}</span></div>
+            <div class="kg-r"><span class="kg-k">사건접수</span><span class="kg-v">${d.case_received||"-"}</span></div>
+            <div class="kg-r"><span class="kg-k">배당종기일</span><span class="kg-v">${d.dividend_deadline||"-"}</span></div>
+            <div class="kg-r"><span class="kg-k">개시결정</span><span class="kg-v">${d.decision_date||"-"}</span></div>
+          </div>
         </div>
 
         <div id="mockBidBox"></div>
