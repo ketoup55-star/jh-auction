@@ -182,7 +182,7 @@ function render(){
       return `<tr>
         <td class="cc">${mn||"-"}</td>
         <td><div style="display:flex;gap:9px;align-items:center">
-          ${f.thumb?`<img src="${esc(f.thumb)}" referrerpolicy="no-referrer" loading="lazy" style="width:62px;height:48px;object-fit:cover;border-radius:5px;flex:none;border:1px solid var(--line)" onerror="this.style.display='none'">`:""}
+          ${f.thumb?`<img src="${esc((f.thumb||"").replace(/^http:\/\//,"https://"))}" referrerpolicy="no-referrer" loading="lazy" style="width:62px;height:48px;object-fit:cover;border-radius:5px;flex:none;border:1px solid var(--line)" onerror="this.style.display='none'">`:""}
           <div style="min-width:0"><b style="cursor:pointer;color:var(--primary)" onclick="openGm('${mn}')">${esc(f.name||"-")}</b><div style="color:var(--muted);margin-top:2px">${esc(f.address||"")}</div></div></div></td>
         <td class="cc">${esc((f.usage||"").split(" ").pop()||"-")}</td>
         <td class="num">${won(f.appraisal_price)}<br><span class="low">${won(f.min_price)}${ratio!=null?` (${ratio}%)`:""}</span></td>
@@ -263,7 +263,7 @@ function aibotCards(cards){
     var pf=c["예상차익"]; var badge=(pf&&pf>0)?('<span class="aibot-card-badge">+'+aibotWon(pf)+' 차익</span>'):"";
     var gr=c["매수판정"]; var gcls=gr==="매수양호"?"g-ok":(gr==="매수금지"?"g-no":"g-mid");
     var grade=gr?('<span class="aibot-card-grade '+gcls+'">'+gr+'</span>'):"";
-    var th=c["thumb"]; var img=th?('<img src="'+th+'" onerror="this.parentNode.innerHTML=&#39;<div class=aibot-card-noimg>&#127968;</div>&#39;">'):'<div class="aibot-card-noimg">&#127968;</div>';
+    var th=(c["thumb"]||"").replace(/^http:\/\//,"https://"); var img=th?('<img src="'+th+'" onerror="this.parentNode.innerHTML=&#39;<div class=aibot-card-noimg>&#127968;</div>&#39;">'):'<div class="aibot-card-noimg">&#127968;</div>';
     var tag=c["유형"]?('<span class="aibot-card-tag">'+c["유형"]+'</span>'):"";
     var appr=c["감정가"]?('<span class="k">감정</span>'+aibotWon(c["감정가"])):"";
     var low=c["최저가"]?('<span class="k">최저</span>'+aibotWon(c["최저가"])):"";

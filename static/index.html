@@ -545,7 +545,7 @@ function aibotCards(cards){
     var pf=c["예상차익"]; var badge=(pf&&pf>0)?('<span class="aibot-card-badge">+'+aibotWon(pf)+' 차익</span>'):"";
     var gr=c["매수판정"]; var gcls=gr==="매수양호"?"g-ok":(gr==="매수금지"?"g-no":"g-mid");
     var grade=gr?('<span class="aibot-card-grade '+gcls+'">'+gr+'</span>'):"";
-    var th=c["thumb"]; var img=th?('<img src="'+th+'" onerror="this.parentNode.innerHTML=&#39;<div class=aibot-card-noimg>&#127968;</div>&#39;">'):'<div class="aibot-card-noimg">&#127968;</div>';
+    var th=(c["thumb"]||"").replace(/^http:\/\//,"https://"); var img=th?('<img src="'+th+'" onerror="this.parentNode.innerHTML=&#39;<div class=aibot-card-noimg>&#127968;</div>&#39;">'):'<div class="aibot-card-noimg">&#127968;</div>';
     var tag=c["유형"]?('<span class="aibot-card-tag">'+c["유형"]+'</span>'):"";
     var appr=c["감정가"]?('<span class="k">감정</span>'+aibotWon(c["감정가"])):"";
     var low=c["최저가"]?('<span class="k">최저</span>'+aibotWon(c["최저가"])):"";
