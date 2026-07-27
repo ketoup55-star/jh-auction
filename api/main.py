@@ -2580,6 +2580,11 @@ def auction_detail(item_key: str, user: dict = Depends(require_national_user)) -
     except Exception:
         pass
     d["reg"] = _reg_by_addr(d.get("address"))             # 규제 구분(규제·토허/수도권 비규제/비규제)
+    if d.get("thumb_url"):                                 # 상세 썸네일·사진 url http→https (앱 cleartext 차단 회피)
+        d["thumb_url"] = d["thumb_url"].replace("http://", "https://")
+    for _m in (d.get("media") or []):                     # 상세 사진 갤러리(d.media)
+        if isinstance(_m, dict) and _m.get("url"):
+            _m["url"] = _m["url"].replace("http://", "https://")
     return d
 
 
