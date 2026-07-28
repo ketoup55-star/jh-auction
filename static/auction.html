@@ -391,7 +391,7 @@
   .sharebtn{margin-top:9px;margin-left:6px;height:32px;padding:0 14px;font-size:13px;font-weight:700;color:#1f4fa3;background:#fff;border:1.5px solid #c2d6f2;border-radius:8px;cursor:pointer;}
   .sharebtn:hover{background:#eef3fb;}
   .layout{display:grid;grid-template-columns:minmax(0,1fr) 244px;gap:16px;align-items:start;}
-  @media(max-width:860px){ .layout{grid-template-columns:1fr;} }
+  @media(max-width:860px){ .layout{grid-template-columns:minmax(0,1fr);} }   /* min-width:auto 방지 — 넓은 내용(nb-tbl min-width·지도)이 컬럼을 밀어 화면 초과하던 것 차단 */
   .side{position:sticky;top:70px;align-self:start;max-height:calc(100vh - 84px);overflow-y:auto;}
   .side::-webkit-scrollbar{width:0;}
   @media(max-width:860px){ .side{position:static;max-height:none;} }
