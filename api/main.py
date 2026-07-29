@@ -2698,6 +2698,20 @@ def auction_analysis(item_key: str) -> dict:
             res["needs_expert_review"] = True
             res["warnings"] = list(res.get("warnings") or []) + [
                 "건축물대장상 위반건축물 — 대출 난항·이행강제금·1주택 비과세가 깨질 수 있음 (원상복구 가능 여부·이행강제금 확인, 매수 검토 필요)"]
+        # 보증금미상(대항력+확정X+배당X+보증금 null/0 아파트) → AI위험도 '위험'을 '주의'로 완화.
+        #  금액이 '미상'일 뿐 실제 보증금 확인 시 매수 가능 여지 → 목록 매수판정(매수금지→매수검토) 완화와 동일 취지(주인님 지시).
+        try:
+            _du = auction_db._get("items", {"select": "deposit_unknown", "item_key": "eq." + item_key, "limit": "1"})
+            _duj = _du.json() if _du.status_code in (200, 206) else []
+            if _duj and _duj[0].get("deposit_unknown"):
+                res = dict(res)
+                if res.get("risk_level") == "위험":
+                    res["risk_level"] = "주의"
+                res["needs_expert_review"] = True
+                res["warnings"] = list(res.get("warnings") or []) + [
+                    "보증금 미상: 대항력 임차인이 있으나 보증금액이 미상 — 실제 보증금 확인 후 인수부담 판단 필요(매수 검토)"]
+        except Exception:
+            pass
     return res
 
 
