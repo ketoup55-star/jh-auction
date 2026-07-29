@@ -1847,6 +1847,19 @@ def _grade_buckets(force: bool = False) -> dict:
     print(f"[buy_grade] ㉯analysis적용 {_an_hit}건 · 캐시없음 {_an_miss}건 · risk없음 {_an_norisk}건 "
           f"(res {len(res)}건, 캐시조회 {len(_an_cache)}건)", flush=True)
 
+    # ── 보증금미상(대항력+확정X+배당X+보증금 null/0) 아파트 → 매수금지를 매수검토로 완화 ──
+    #  금액이 '미상'일 뿐 실제 보증금 확인 시 매수 가능 여지 → '금지'가 아니라 '검토'(확인 후 판단)가 맞음(주인님 지시).
+    try:
+        _dep_unknown = _apt_deposit_unknown_keys()
+        _dep_moved = 0
+        for k in list(out["매수금지"]):
+            if k in _dep_unknown:
+                out["매수금지"].discard(k); out["매수검토"].add(k); _dep_moved += 1
+        if _dep_moved:
+            print(f"[buy_grade] 보증금미상 매수금지→매수검토 완화 {_dep_moved}건", flush=True)
+    except Exception as _e:
+        print(f"[buy_grade] 보증금미상 완화 skip: {_e}", flush=True)
+
     # ── 다세대·도시형 4층↑ 승강기 없음/미상 → 매수양호만 매수검토로 상향(금지·검토는 유지) ──
     from auction_analysis.crawler_analysis import elevator_caution
     _elev_moved = 0
