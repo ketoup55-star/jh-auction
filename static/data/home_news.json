@@ -1,78 +1,105 @@
 {
  "items": [
   {
-   "keyword": "집값",
-   "title": "집값 상승 기대 4년 10개월 만 최고",
-   "link": "https://www.sentv.co.kr/article/view/sentv202607280012",
-   "image": "https://www.sentv.co.kr/data/sentv/image/2025/02/16/sentv20250216000030.jpg",
-   "source": "(주) 서울경제티브이",
-   "published": "2026-07-28T08:52:43+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "[주간 뉴스 브리핑] 대통령 부동산 토론회, 보유세·양도세 강화 제안",
-   "link": "https://www.newsnjoy.or.kr/news/articleView.html?idxno=400632",
-   "image": "https://cdn.newsnjoy.or.kr/news/photo/202607/400632_201916_3240.png",
-   "source": "뉴스앤조이",
-   "published": "2026-07-28T08:38:41+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "부동산대책 앞두고 짙은 관망세…\"상담 일정 8월로 미뤄\"",
-   "link": "https://kbthink.com/news-list/view.html?newsId=20260728081653030",
-   "image": "https://kbthink.com/content/dam/tam-dcp-cms/kbthink/KB의 생각_한글.png",
-   "source": "KB의 생각",
-   "published": "2026-07-28T08:16:52+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "'집값 더 오르나'…7월 주택가격전망 7p↑·소비심리 3개월째 개선",
-   "link": "https://www.newspim.com/news/view/20260727001250",
-   "image": "https://img.newspim.com/news/2026/07/27/260727165456449_116_tc.jpg",
-   "source": "뉴스핌",
-   "published": "2026-07-28T06:00:00+09:00",
+   "keyword": "대출규제",
+   "title": "누구까지 실수요자인가...대출규제 완화 기준 '난제'",
+   "link": "https://www.fnnews.com/news/202607281553383600",
+   "image": "https://image.fnnews.com/resource/media/image/2026/07/28/202607281153499940_l.jpg",
+   "source": "파이낸셜뉴스",
+   "published": "2026-07-29T08:15:23+09:00",
    "has_time": true
   },
   {
    "keyword": "대출규제",
-   "title": "“그래도 집값 오른다” 세금·대출 규제에도 주택심리 약 5년 만에 최고",
-   "link": "https://biz.heraldcorp.com/article/10821889",
-   "image": "https://wimg.heraldcorp.com/news/cms/2026/07/28/news-p.v1.20260723.0d4568a90a924d7f8ee1f99747b49d91_T1.jpg",
-   "source": "헤럴드경제",
-   "published": "2026-07-28T06:00:00+09:00",
+   "title": "[뉴스&] 투기 지렛대는 거두되, 주거 사다리는 남겨라",
+   "link": "https://www.straightnews.co.kr/news/articleView.html?idxno=307891",
+   "image": "https://cdn.straightnews.co.kr/news/thumbnail/202607/307891_218427_1115_v150.jpg",
+   "source": "스트레이트뉴스",
+   "published": "2026-07-29T08:15:19+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "부동산 정책 눈높이가 서울 아파트에만 머문다면 [뉴스룸에서]",
-   "link": "https://www.hani.co.kr/arti/opinion/column/1270239.html",
-   "image": "https://flexible.img.hani.co.kr/flexible/normal/800/458/imgdb/original/2026/0728/20260728500065.webp",
-   "source": "한겨레",
-   "published": "2026-07-28T05:01:00+09:00",
+   "keyword": "집값",
+   "title": "16년간 집값 5억 그대로?...정부 통계는 대전 아파트값 55% 상승",
+   "link": "https://www.fnnews.com/news/202607281040524062",
+   "image": "https://image.fnnews.com/resource/media/image/2026/07/15/202607151138384150_l.jpg",
+   "source": "파이낸셜뉴스",
+   "published": "2026-07-29T07:00:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "두 번째 부동산 토론회...조만간 종합 정책 발표",
-   "link": "https://www.ytn.co.kr/_ln/0101_202607280007409041",
-   "image": "https://image.ytn.co.kr/general/jpg/2026/0728/202607280007409041_t.jpg",
-   "source": "YTN",
-   "published": "2026-07-28T00:07:00+09:00",
+   "keyword": "집값",
+   "title": "“보유세는 금리가 아니다” 盧·文 정권때 집값 오른 까닭",
+   "link": "https://www.joongang.co.kr/article/25448983",
+   "image": "https://pds.joongang.co.kr/news/component/htmlphoto_mmdata/202607/29/8d23997e-fb4b-4c31-9f67-2d243fd362f8.jpg",
+   "source": "중앙일보",
+   "published": "2026-07-29T05:00:03+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "[뉴스 브리핑] 부동산 세금 확 바뀌나… 1주택자와 다주택자 운명 갈린다",
-   "link": "https://www.thepublic.kr/news/articleViewAmp.html?idxno=312822",
-   "image": "https://cdn.thepublic.kr/news/photo/202607/312822_315854_5144.jpg",
-   "source": "thepublic.kr",
-   "published": "2026-07-28T00:00:00+09:00",
+   "title": "[우보세] 누더기 '부동산 세제' 잔혹사 - 머니투데이",
+   "link": "https://www.mt.co.kr/amp/opinion/2026/07/29/2026072808033115223",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026072808033115223_1.jpg",
+   "source": "머니투데이",
+   "published": "2026-07-29T05:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "20년 넘게 소유하던 서울 집, 상반기 가장 많이 팔았다... 세금 인상 예고 영향",
+   "link": "https://www.hankookilbo.com/news/article/amp/A2026072813140002959",
+   "image": "https://newsimg.hankookilbo.com/2026/07/28/aef5ee0e-69ba-4db0-a7fb-afd7bedb8015.jpg",
+   "source": "hankookilbo.com",
+   "published": "2026-07-29T04:30:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "\"주식 팔면 돼\" 대출 막혀도 강남 집 턱턱…'현금 부자'만 웃은 갈아타기 - 머니투데이",
+   "link": "https://www.mt.co.kr/estate/2026/07/29/2026072814404232446",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/07/2026072814404232446_1.jpg",
+   "source": "머니투데이",
+   "published": "2026-07-29T04:15:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "[사설] 부동산 세제 손보는데, ‘주거 사다리’ 보이지 않는다",
+   "link": "https://www.kmib.co.kr/article/view_amp.asp?arcid=1785221702",
+   "image": "https://image.kmib.co.kr/online_image/2026/0729/2026072820300555411_1785238205_1785221702.jpg",
+   "source": "국민일보",
+   "published": "2026-07-29T01:20:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "[국민의 기업] 아파트 쏠림 속 비아파트 공급 확대…금융지원 강화 나선다",
+   "link": "https://news.nate.com/view/20260729n02332?mid=n0401",
+   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/jo/2026/07/29/29408fc7-8428-453e-bd99-444a59dba13d.jpg",
+   "source": "네이트 뉴스",
+   "published": "2026-07-29T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "빌라 경매",
+   "title": "\"2억이나 아꼈어요\" 6억짜리 아파트 4억대에 낙찰받은 2030 부동산 꿀팁 |",
+   "link": "https://www.nanamcom.co.kr/news/articleViewAmp.html?idxno=52600",
+   "image": "https://cdn.nanamcom.co.kr/news/photo/202607/52600_54206_1136.jpg",
+   "source": "nanamcom.co.kr",
+   "published": "2026-07-29T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "집값",
+   "title": "[팀장칼럼] 세금으로 못 잡은 집값, 세 번째 도전",
+   "link": "https://v.daum.net/v/20260729070128485",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202607/29/NEWS1/20260729070129222wpim.jpg",
+   "source": "Daum",
+   "published": "2026-07-29T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 8,
- "date": "2026-07-28"
+ "count": 11,
+ "date": "2026-07-29"
 }
