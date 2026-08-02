@@ -1,42 +1,51 @@
 {
  "items": [
   {
-   "keyword": "대출규제",
-   "title": "신도림 59㎡ 1년새 4억 뛰었다…대출 규제에 서울 외곽 중소형 급등",
-   "link": "https://www.newsis.com/view/NISX20260731_0003731915",
-   "image": "https://img1.newsis.com/2026/02/02/NISI20260202_0021147593_web.jpg",
-   "source": "뉴시스",
-   "published": "2026-08-01T09:00:00+09:00",
+   "keyword": "부동산 정책",
+   "title": "\"文정부 전철 밟을라\"…李 부동산 정책에 속앓이하는 與 [여의도는 지금]",
+   "link": "https://www.hankyung.com/article/202608029602i",
+   "image": "https://img.hankyung.com/photo/202608/ZN.44867947.1.jpg",
+   "source": "한국경제",
+   "published": "2026-08-02T09:12:31+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "코스피 출렁이고 집값 뛰고…7월도 가계대출 늘었다",
-   "link": "https://www.sedaily.com/article/20074537",
-   "image": "https://wimg.sedaily.com/news/cms/2026/07/31/news-g.v1.20260731.35bad77a0eb54db883ee310938e393cc_R.jpg",
-   "source": "서울경제",
-   "published": "2026-08-01T06:00:00+09:00",
+   "title": "집값 양극화 심화...서울 집값 폭등은 왜 통계에 보이지 않았나",
+   "link": "https://www.dailyjn.com/news/articleView.html?idxno=103963",
+   "image": "https://cdn.dailyjn.com/news/photo/202608/103963_86898_1847.png",
+   "source": "데일리저널",
+   "published": "2026-08-02T08:18:58+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "집값 하락론자 돌아섰다…한문도 \"공급 없는 세금 정책은 실패\"",
-   "link": "https://www.newsis.com/view/NISX20260731_0003731573",
-   "image": "https://img1.newsis.com/2026/07/31/NISI20260731_0002201158_web.jpg",
-   "source": "뉴시스",
-   "published": "2026-08-01T05:30:00+09:00",
+   "keyword": "집값",
+   "title": "벌어지는 집값…서울 고가주택 상승률 최상위, 전국 평균은 하위",
+   "link": "https://www.yna.co.kr/amp/view/AKR20260731175300002",
+   "image": "https://img2.yna.co.kr/photo/yna/YH/2026/07/31/PYH2026073107220001300_P4.jpg",
+   "source": "연합뉴스",
+   "published": "2026-08-02T05:51:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "[TV조선] 정부의 부동산 정책 논란",
-   "link": "https://v.daum.net/v/20260801003731049",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/01/chosun/20260801003732909uagb.jpg",
+   "keyword": "대출규제",
+   "title": "분양 외 기존주택 잔금은 '대출숨통' 미포함…LTV 완화도 배제",
+   "link": "https://www.yna.co.kr/amp/view/AKR20260801046600002",
+   "image": "https://img0.yna.co.kr/photo/yna/YH/2026/07/28/PYH2026072807460001300_P4.jpg",
+   "source": "연합뉴스",
+   "published": "2026-08-02T05:47:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "“AI 썼더니 지갑 털리네”…美 전기세·집값 폭등의 반전",
+   "link": "https://v.daum.net/v/20260802060245714",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/02/joongang/20260802060246556afwr.jpg",
    "source": "Daum",
-   "published": "2026-08-01T00:00:00+09:00",
+   "published": "2026-08-02T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 4,
- "date": "2026-08-01"
+ "count": 5,
+ "date": "2026-08-02"
 }
