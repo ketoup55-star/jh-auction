@@ -1276,14 +1276,22 @@ async function doSearch(){
   const _q=buildQuery();   // 메인 쿼리도 _urlCaseno 읽음
   _urlCaseno="";           // ★상단 사건검색 caseno는 '초기 1회'만 적용 → 사용 직후 해제. 이후 어떤 필터 경로(상태·통계·검색하기 등)로 검색해도 사건번호 안 따라붙음
   let d;
+  // ★목록 캐시(60초): 상세→뒤로가기·페이지 복원·필터 재적용 등 '같은 쿼리' 재검색은 서버 왕복 없이 즉시.
+  //  필터를 바꾼 새 검색은 _q(쿼리)가 달라 캐시 미스 → 자동으로 새 요청이라 신선도 유지.
+  const _ck=_q.toString();
+  window._listCache=window._listCache||new Map();
+  const _cc=window._listCache.get(_ck);
   // 일시적 서버 오류(Supabase 순간 500·콜드 지연·네트워크 blip)는 자동 재시도로 자가복구 —
   // 최대 3회(700ms→1600ms 백오프) 조용히 재시도 후에도 실패할 때만 에러 표시.
   for(let _try=0;;_try++){
+    if(_cc && Date.now()-_cc.t<60000){ d=_cc.d; break; }   // 캐시 히트 → 즉시(서버 왕복 없음)
     try{
       const _r=await fetch("/auctions?"+_q,{cache:"no-store"});
       if(!_r.ok) throw new Error("HTTP "+_r.status);
       d=await _r.json();
       if(!d || typeof d.total!=="number" || !Array.isArray(d.items)) throw new Error("bad response");
+      if(window._listCache.size>40) window._listCache.clear();   // 무한증식 방지(오래된 조합 누적)
+      window._listCache.set(_ck,{d:d,t:Date.now()});
       break;                                   // 성공
     }catch(e){
       if(_try<2){                              // 700ms→1600ms 후 재시도(사용자엔 '검색 중' 유지)
