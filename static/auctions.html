@@ -759,10 +759,10 @@ function buildQuery(){
   return p;
 }
 let statsSeq=0;
-async function loadStats(){
+async function loadStats(sp){
   const box=document.getElementById("statbox");
   const my=++statsSeq;
-  const d=await (await fetch("/auctions/stats?"+filterParams(),{cache:"no-store"})).json();
+  const d=await (await fetch("/auctions/stats?"+(sp||filterParams()),{cache:"no-store"})).json();
   if(my!==statsSeq) return;   // 더 최신 요청이 있으면 무시(경쟁 방지)
   const c=d.counts||{};
   const items=Object.entries(c);
@@ -1272,7 +1272,7 @@ var _MCPH="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1
 async function doSearch(){
   const _g=document.getElementById("grid"); if(_g) _g.innerHTML='<div class="searching">검색 중<span class="sdots"><i></i><i></i><i></i></span></div>';   // 클릭 즉시 피드백 + 통통 튀는 로딩 애니메이션
   const _c=document.getElementById("cnt"); if(_c) _c.textContent="검색 중…";
-  loadStats();   // 물건통계 비동기 갱신(결과와 병렬) — 이 시점 _urlCaseno(상단 사건검색) 동기로 읽음
+  const _statsP=filterParams();   // ★물건통계 파라미터를 지금 캡처(_urlCaseno 해제 전). 발사는 목록 페인트 '후'로 지연 — 목록 fetch와 stats의 2vCPU 경합 제거
   const _q=buildQuery();   // 메인 쿼리도 _urlCaseno 읽음
   _urlCaseno="";           // ★상단 사건검색 caseno는 '초기 1회'만 적용 → 사용 직후 해제. 이후 어떤 필터 경로(상태·통계·검색하기 등)로 검색해도 사건번호 안 따라붙음
   let d;
@@ -1356,6 +1356,9 @@ async function doSearch(){
       ].forEach(function(fn){ try{ fn(); }catch(e){ console.warn('[enrich]', fn.name, e); } });
     }, 300);
   }
+  // ★물건통계(stats)도 목록 페인트 '후'로 지연 발사 — 목록 fetch가 stats와 2vCPU 경합해 간헐 1초+로 밀리던 근본원인 제거(enrich와 동일 전략)
+  if(window._statsT) clearTimeout(window._statsT);
+  window._statsT=setTimeout(function(){ loadStats(_statsP); }, 250);
   const sa=document.getElementById("selectAll"); if(sa) sa.checked=false;
   const pn=Math.floor(offset/LIMIT)+1, pages=Math.max(1,Math.ceil(d.total/LIMIT));
   document.getElementById("pageno").textContent=`${pn} / ${pages}`;
