@@ -1,51 +1,123 @@
 {
  "items": [
   {
+   "keyword": "부동산 세금",
+   "title": "세무법인HKL '稅相 읽기'(44) 착오 바로잡았는데 가혹한 세금?...조세심판원, '기계적 법 적용' 제동",
+   "link": "https://www.intn.co.kr/news/articleView.html?idxno=2052230",
+   "image": "http://www.intn.co.kr/news/thumbnail/202607/2052230_737349_3013_v150.jpg",
+   "source": "日刊 NTN(일간NTN)",
+   "published": "2026-08-03T09:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "요이땅, 2030 서울 아파트 경매 열풍 속 ‘AI 권리분석 솔루션’ 공급 확대",
+   "link": "https://www.sentv.co.kr/article/view/sentv202607310070",
+   "image": "https://www.sentv.co.kr/data/sentv/image/2026/07/31/sentv20260731000079.jpg",
+   "source": "(주) 서울경제티브이",
+   "published": "2026-08-03T08:30:03+09:00",
+   "has_time": true
+  },
+  {
    "keyword": "부동산 정책",
-   "title": "\"文정부 전철 밟을라\"…李 부동산 정책에 속앓이하는 與 [여의도는 지금]",
-   "link": "https://www.hankyung.com/article/202608029602i",
-   "image": "https://img.hankyung.com/photo/202608/ZN.44867947.1.jpg",
-   "source": "한국경제",
-   "published": "2026-08-02T09:12:31+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "집값 양극화 심화...서울 집값 폭등은 왜 통계에 보이지 않았나",
-   "link": "https://www.dailyjn.com/news/articleView.html?idxno=103963",
-   "image": "https://cdn.dailyjn.com/news/photo/202608/103963_86898_1847.png",
-   "source": "데일리저널",
-   "published": "2026-08-02T08:18:58+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "벌어지는 집값…서울 고가주택 상승률 최상위, 전국 평균은 하위",
-   "link": "https://www.yna.co.kr/amp/view/AKR20260731175300002",
-   "image": "https://img2.yna.co.kr/photo/yna/YH/2026/07/31/PYH2026073107220001300_P4.jpg",
-   "source": "연합뉴스",
-   "published": "2026-08-02T05:51:00+09:00",
+   "title": "李대통령 지지율 45.9% '취임 후 최저'…증시 폭락·부동산 정책 영향[리얼미터]",
+   "link": "https://news.einfomax.co.kr/news/articleView.html?idxno=4428220",
+   "image": "https://cdn.news.einfomax.co.kr/news/thumbnail/202608/4428220_334070_63_v150.jpg",
+   "source": "연합인포맥스",
+   "published": "2026-08-03T08:05:00+09:00",
    "has_time": true
   },
   {
    "keyword": "대출규제",
-   "title": "분양 외 기존주택 잔금은 '대출숨통' 미포함…LTV 완화도 배제",
-   "link": "https://www.yna.co.kr/amp/view/AKR20260801046600002",
-   "image": "https://img0.yna.co.kr/photo/yna/YH/2026/07/28/PYH2026072807460001300_P4.jpg",
-   "source": "연합뉴스",
-   "published": "2026-08-02T05:47:00+09:00",
+   "title": "\"이주비대출 규제 합리화 필요\" 대토론회서 지적…재건축 지연 우려",
+   "link": "http://www.weeklysisa.co.kr/news/articleView.html?idxno=43551",
+   "image": "http://www.weeklysisa.co.kr/news/thumbnail/202608/43551_56368_4348_v150.jpg",
+   "source": "주간시사매거진",
+   "published": "2026-08-03T07:44:13+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "“AI 썼더니 지갑 털리네”…美 전기세·집값 폭등의 반전",
-   "link": "https://v.daum.net/v/20260802060245714",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/02/joongang/20260802060246556afwr.jpg",
+   "title": "서울 집값 ‘양극화’…고가주택 상승률 도쿄 이어 세계 2위",
+   "link": "https://www.sedaily.com/article/20074886",
+   "image": "https://wimg.sedaily.com/news/cms/2026/08/02/news-p.v1.20260729.a112f5bc1c464430b204999d888aed1a_R.jpg",
+   "source": "서울경제",
+   "published": "2026-08-03T06:47:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "부동산은 무조건 투기인가?",
+   "link": "https://www.labortoday.co.kr/news/articleView.html?idxno=236033",
+   "image": "https://cdn.labortoday.co.kr/news/thumbnail/202608/236033_114118_2058_v150.jpg",
+   "source": "매일노동뉴스",
+   "published": "2026-08-03T06:30:04+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "[조남현의 종횡무진]집값을 잡겠다고? 문제는 기본이야!",
+   "link": "https://www.imsn.kr/news/articleView.html?idxno=17430",
+   "image": "https://www.imsn.kr/news/thumbnail/202608/17430_24316_5937_v150.jpg",
+   "source": "매일산업뉴스",
+   "published": "2026-08-03T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "조건 5줄로 추천 물건 찾는다…서울 재건축 대어 상계주공6 5억대",
+   "link": "https://realty.chosun.com/site/data/html_dir/2026/07/31/2026073102889.html",
+   "image": "https://image.chosun.com/sitedata/image/202607/31/2026073102886_0.jpg",
+   "source": "realty.chosun.com",
+   "published": "2026-08-03T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "부동산·코스피·민주당…귀국하는 이 대통령 '첩첩산중'",
+   "link": "http://www.newstomato.com/ReadNews.aspx?no=1308971",
+   "image": "https://image.newstomato.com/newsimg/2026/8/3/1308971/attach.jpg?v=202608021753",
+   "source": "NewsTomato",
+   "published": "2026-08-03T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "감정가보다 5억원 비싸도 낙찰…서울 소형 아파트 경매 몰리는 이유는",
+   "link": "https://www.news1.kr/realestate/general/6246585",
+   "image": "https://i3n.news1.kr/system/photos/2026/8/2/8037350/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-08-03T05:46:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "'보금자리론 수요 폭발' 전년대비 70% 늘어…규제지역 가산금리 인상",
+   "link": "https://www.news1.kr/amp/finance/general-finance/6246390",
+   "image": "https://i3n.news1.kr/system/photos/2026/5/14/7906463/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-08-03T05:30:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "李대통령, 오늘 귀국 직후 ‘집값·증시’ 긴급 점검",
+   "link": "https://www.dt.co.kr/article/12076123",
+   "image": "https://wimg.dt.co.kr/news/cms/2026/08/02/news-p.v1.20260802.7dcb90e2e2b0485d8e94199b5722b76b_R.jpg",
+   "source": "디지털타임스",
+   "published": "2026-08-03T05:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "강남구 집값 올라 세 부담 커지자…재산세 분납 신청 두 배 '껑충'",
+   "link": "https://v.daum.net/v/20260803084353400?t=m&x_mn=6a6fdab4fbddf26a833d74d2",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/03/yonhap/20260803084353582nfpm.jpg",
    "source": "Daum",
-   "published": "2026-08-02T00:00:00+09:00",
+   "published": "2026-08-03T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 5,
- "date": "2026-08-02"
+ "count": 13,
+ "date": "2026-08-03"
 }
