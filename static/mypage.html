@@ -413,7 +413,7 @@ function card(L){
     <div class="ib">
       <div class="thumb">
         ${L.thumb_url?`<img src="${L.thumb_url}" onerror="this.style.visibility='hidden'">`:`<div style="width:150px;height:118px;background:var(--label);border-radius:6px;"></div>`}
-        <div class="ov">${bid}${L.status||""}${sellD.label?` <b style="color:${sellD.color};font-size:1.08em">${sellD.label}</b>`:""}<br>${won(L.min_price_raw,L.min_price)}${r!=null?` (${r}%)`:""}</div>
+        <div class="ov">${bid}${L.status||""}${sellD.label?` <b style="color:${sellD.color};font-size:1.08em">${sellD.label}</b>`:""}<br>${L.sale_price?`낙찰 ${won(L.sale_price)}${L.appraisal_price?` (${Math.round(100*L.sale_price/L.appraisal_price)}%)`:""}`:`${won(L.min_price_raw,L.min_price)}${r!=null?` (${r}%)`:""}`}</div>
       </div>
       <table class="igrid">
         <tr><th>소재지</th><td colspan="5">${L.address||"-"}</td></tr>
@@ -426,7 +426,7 @@ function card(L){
           L.sale_2nd_price?`2등 ${won(L.sale_2nd_price)}`:""
         ].filter(Boolean).join("<br>")}</td></tr>`:""}
         <tr><th style="color:var(--danger)">주의사항</th><td colspan="5" class="warn">${tags.length?tags.map(t=>`[${t}]`).join(" "):"-"}</td></tr>
-        <tr><th>메모내용</th><td colspan="5"><div class="memorow"><textarea id="memo_${key}" class="memo" rows="1" placeholder="메모 입력" onclick="event.stopPropagation()">${esc(memo)}</textarea><button class="tbtn" onclick="event.stopPropagation();saveMemo('${key}')">메모수정</button></div></td></tr>
+        <tr><th>메모내용</th><td colspan="5" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" onmouseup="event.stopPropagation()"><div class="memorow"><textarea id="memo_${key}" class="memo" rows="1" placeholder="메모 입력" onclick="event.stopPropagation()">${esc(memo)}</textarea><button class="tbtn" onclick="event.stopPropagation();saveMemo('${key}')">메모수정</button></div></td></tr>
       </table>
       <div class="acts">
         <a href="/static/auction.html?item_key=${ik}" target="_blank" rel="noopener">📄 물건보기</a>

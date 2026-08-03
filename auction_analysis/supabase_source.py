@@ -303,7 +303,7 @@ class SupabaseSource:
                 r = self._get("api_cache",
                               {"select": "cache_key,data", "cache_key": f"in.{inlist}"})
                 if r.status_code != 200:
-                    return out
+                    continue      # ★한 청크 실패로 '나머지 전부'를 버리면 안 된다(아래 주석)
                 fetched = []
                 for row in r.json():
                     out[row["cache_key"]] = row.get("data")
@@ -314,8 +314,12 @@ class SupabaseSource:
                     except Exception:
                         pass
             except Exception:
-                return out
+                continue          # ★예외도 해당 청크만 건너뛰고 계속
         return out
+        # 🔴예전엔 위 두 곳이 `return out` 이라 **청크 하나만 실패해도 남은 청크를 통째로 포기**했다.
+        #  대량 조회(예: _grade_buckets의 res 10.9만건 = 1,089청크)에서 중간에 한 번만 실패하면
+        #  그 뒤가 전부 누락 → 실측 18,673건(17%)만 반환 → 매수판정 ㉯가 캐시를 못 읽고 폴백.
+        #  analysis를 12,500건 예열하고도 일치율이 안 오르던 진짜 원인이었음(2026-07-20).
 
     def cache_count(self, like_prefix: str) -> int:
         """api_cache에서 'prefix:*' 행 수(예열 진행 표시용). 실패 시 0."""
@@ -907,7 +911,7 @@ class SupabaseSource:
             d["appraisal_raw"] = row.get("appraisal_raw")
             d["min_price_raw"] = row.get("min_price_raw")
             out.append(d)
-        return out
+        return self._attach_winners(out)   # 관심물건에도 낙찰가·낙찰자·입찰수·2등가(auction_schedule) 붙임 — 목록/auctions과 동일
 
     def get_auction(self, item_key: str) -> Optional[dict]:
         """**로컬 우선(TTL 5분)** → 신선하면 즉답, 아니면 Supabase. Supabase 타임아웃 시 stale 로컬 폴백.
