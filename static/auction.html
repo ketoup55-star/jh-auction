@@ -1402,9 +1402,10 @@ function ssTax(income){   // 차익(원) → 종합소득세 {세율%, 누진공
   for(const t of T){ if(income<=t[0]) return {rate:t[1],ded:t[2]}; }
   return {rate:45,ded:65940000};
 }
-function _ssBidDefault(){   // 낙찰가 기본값(만): 예상낙찰가 있으면 그것, 없으면 최저가
+function _ssBidDefault(){   // 낙찰가 기본값(만): ★매각물건이면 실제 낙찰가(sale_price) 우선 → 예상낙찰가 → 최저가
   const d=DETAIL||{};
-  const bid=(EXP_BID&&EXP_BID.available&&EXP_BID.expected_bid)?EXP_BID.expected_bid:(d.min_price||0);
+  const bid=(d.sale_price>0)?d.sale_price
+           :((EXP_BID&&EXP_BID.available&&EXP_BID.expected_bid)?EXP_BID.expected_bid:(d.min_price||0));
   return Math.round(bid/10000);
 }
 function _ssEst(){   // 매도가 기본값(원): 아파트 추정시세→없으면 최근실거래 / 빌라·도시형 추정시세
