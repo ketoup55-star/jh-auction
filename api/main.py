@@ -3238,6 +3238,8 @@ def _nearby_filtered(d: dict, geocode: bool = True) -> Optional[dict]:
         return None
     lawd = resolve_lawd(addr)
     if not lawd:
+        lawd = _sgg_geo_fallback(addr)   # 순수 도로명·인천옛구·동명중복 → VWorld 시군구 폴백
+    if not lawd:
         return None
     prop_area = _area_num(d.get("building_area"), d.get("area_text"))
     fm = re.search(r"(\d+)\s*층", addr)
@@ -8360,6 +8362,76 @@ _gongsi_cache: dict[str, object] = {}
 
 
 _pnu_geo_cache: dict = {}   # addr -> PNU(19) : V-World 지오코더 폴백(bjd_codes.tsv 미수록 주소 = 2022+ 신설 법정동 등)
+
+_sgg_geo_cache: dict = {}   # addr -> 시군구코드5 : resolve_lawd 실패분(순수 도로명·인천옛구·화성 능동 동명중복) VWorld 폴백
+# 인천 옛 서/중/동구는 VWorld가 개편 반영으로 NOT_FOUND → 신 구 후보로 치환해 조회.
+_ICN_GU_CANDS = (("서구", ("검단구", "서해구")), ("중구", ("제물포구", "영종구")), ("동구", ("제물포구",)))
+
+
+def _vworld_l4(addr: str):
+    """VWorld: 주소(도로명·지번) → 법정동코드10. getcoord로 좌표 → getAddress 역지오코딩(parcel). 실패 None."""
+    vk = os.environ.get("VWORLD_KEY", "")
+    if not vk or not addr:
+        return None
+    dom = os.environ.get("VWORLD_DOMAIN", "http://localhost:4011")
+    for typ in ("road", "parcel"):
+        try:
+            r = httpx.get("https://api.vworld.kr/req/address", params={
+                "service": "address", "request": "getcoord", "version": "2.0", "crs": "epsg:4326",
+                "address": addr, "type": typ, "format": "json", "key": vk, "domain": dom, "refine": "true"}, timeout=8)
+            js = (r.json() or {}).get("response", {})
+            if js.get("status") != "OK":
+                continue
+            pt = (js.get("result") or {}).get("point") or {}
+            if not pt.get("x"):
+                continue
+            r2 = httpx.get("https://api.vworld.kr/req/address", params={
+                "service": "address", "request": "getAddress", "version": "2.0", "crs": "epsg:4326",
+                "point": f"{pt['x']},{pt['y']}", "type": "parcel", "format": "json",
+                "key": vk, "domain": dom}, timeout=8)
+            res = ((r2.json() or {}).get("response", {}) or {}).get("result") or []
+            l4 = (res[0].get("structure") or {}).get("level4LC") if res else None
+            if l4 and len(l4) >= 10:
+                return l4
+        except Exception:
+            continue
+    return None
+
+
+def _sgg_geo_fallback(addr: str):
+    """resolve_lawd가 못 잡는 주소(순수 도로명·인천옛구 도로명·화성 능동 동명중복) → VWorld 시군구코드5.
+    인천 옛 서/중/동구는 VWorld NOT_FOUND라 신 구 후보로 치환해 시도. 성공분만 캐시(메모리+DB sgg_geo:)."""
+    if not addr:
+        return None
+    key = addr.strip()
+    if key in _sgg_geo_cache:
+        return _sgg_geo_cache[key]
+    ck = "sgg_geo:" + key
+    try:
+        hit = auction_db.cache_get_many([ck]).get(ck)
+        if isinstance(hit, dict) and hit.get("sgg"):
+            _sgg_geo_cache[key] = hit["sgg"]
+            return hit["sgg"]
+    except Exception:
+        pass
+    cands = [key]
+    for oldgu, news in _ICN_GU_CANDS:
+        if "인천" in key and oldgu in key:
+            cands = [key.replace(oldgu, ng, 1) for ng in news]
+            break
+    sgg = None
+    for cand in cands:
+        l4 = _vworld_l4(cand)
+        if l4:
+            sgg = l4[:5]
+            break
+    _sgg_geo_cache[key] = sgg
+    if sgg:
+        try:
+            auction_db.cache_save(ck, {"sgg": sgg})
+        except Exception:
+            pass
+    return sgg
 
 
 def _addr_to_pnu(addr: str):

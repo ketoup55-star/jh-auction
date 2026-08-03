@@ -55,6 +55,25 @@ _SIDO_ABBR = {
     "경남": "경상남도", "제주": "제주특별자치도",
 }
 
+# 인천 2026 구 개편: 옛 서/중/동구 → 신 구. 동명이 여러 신구에 중복(금곡동=검단구+제물포구)이라
+#  ② 폴백이 애매해져 None이 되던 문제를, '옛 구'를 힌트로 신 구를 확정해 해결.
+#  옛 서구 → 검단구/서해구, 옛 동구 → 제물포구, 옛 중구 → 제물포구(육지)/영종구(영종도).
+#  ('인천 중구'는 완전 소멸 — 제물포·영종으로 분할). 도로명주소(동 없음)는 VWorld 폴백이 처리.
+_ICN_OLD2NEW = {
+    "서구": ["검단구", "서해구"],
+    "동구": ["제물포구"],
+    "중구": ["제물포구", "영종구"],
+}
+
+# 시도+시군구가 공백 없이 붙은 주소('경기도부천시 역곡동…') 보정용 정식 시도명 목록.
+_SIDO_FULL = (
+    "서울특별시", "부산광역시", "대구광역시", "인천광역시", "광주광역시",
+    "대전광역시", "울산광역시", "세종특별자치시", "경기도",
+    "강원특별자치도", "강원도", "충청북도", "충청남도",
+    "전북특별자치도", "전라북도", "전라남도", "전남광주통합특별시",
+    "경상북도", "경상남도", "제주특별자치도",
+)
+
 
 def _resolve_code(name: str) -> str | None:
     """법정동명 문자열 → 10자리 법정동코드. 개명·승격·시도개편 폴백 포함."""
@@ -62,6 +81,12 @@ def _resolve_code(name: str) -> str | None:
     code = mp.get(name)
     if code:
         return code
+    # 시도+시군구가 공백 없이 붙은 주소('경기도부천시'→'경기도 부천시') 보정 후 재시도.
+    for _sd in _SIDO_FULL:
+        if name.startswith(_sd) and len(name) > len(_sd) and name[len(_sd)] != " ":
+            c = _resolve_code(_sd + " " + name[len(_sd):])
+            if c:
+                return c
     toks0 = name.split()
     # ⓪-a 시도 축약 → 정식(서울→서울특별시, 경기→경기도). 재귀로 개편치환·①②폴백까지 탄다.
     if toks0 and toks0[0] in _SIDO_ABBR:
@@ -75,6 +100,14 @@ def _resolve_code(name: str) -> str | None:
         code = _resolve_code(renamed)
         if code:
             return code
+    # ⓪-c 인천 옛구 개편: '인천 서/중/동구 XX동' → 신구(검단/서해/제물포/영종)로 tsv 확정.
+    #  동명 중복(금곡동=검단구+제물포구)을 옛 구로 판별. 신구 후보를 tsv에서 정확 매칭하는 것만 채택.
+    if len(toks0) >= 3 and toks0[0].startswith("인천") and toks0[1] in _ICN_OLD2NEW:
+        rest = toks0[2:]
+        for newgu in _ICN_OLD2NEW[toks0[1]]:
+            c = mp.get(" ".join([toks0[0], newgu] + rest))
+            if c:
+                return c
     # ① 읍↔면 승격/강등 치환 (모현읍↔모현면 등)
     for a, b in (("읍", "면"), ("면", "읍")):
         if name.endswith(a):
@@ -140,4 +173,11 @@ def resolve_bjd(address: str):
     code = _resolve_road_paren(address)
     if code and len(code) == 10:
         return code[:5], code[5:], "0000", "0000"
+    # 지번 없는 '동/읍/면/리 + 단지·구역명'(신축·재개발: "가정동 루원시티주상1블록…") 폴백:
+    #  첫 동까지로 시군구 복구(지번 미상 0000). 유사거래·시세는 시군구만 필요.
+    m3 = re.match(r"^(.+?(?:동|읍|면|리))(?:\s|$)", address.strip())
+    if m3:
+        code = _resolve_code(re.sub(r"\s+", " ", m3.group(1)).strip())
+        if code and len(code) == 10:
+            return code[:5], code[5:], "0000", "0000"
     return None
