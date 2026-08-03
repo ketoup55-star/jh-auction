@@ -1750,10 +1750,11 @@ def _grade_buckets(force: bool = False) -> dict:
         return rows
 
     # ── 주거용(analyzed_at) 위험도 ──
-    res_rows = _page("items", {"select": "item_key,usage_name,address",
+    res_rows = _page("items", {"select": "item_key,usage_name,address,tags",
            "search_group": "eq.주거용", "analyzed_at": "not.is.null"})
     res = {x["item_key"] for x in res_rows}
     res_info = {x["item_key"]: (x.get("usage_name"), x.get("address")) for x in res_rows}
+    tags_of = {x["item_key"]: (x.get("tags") or "") for x in res_rows}   # 유치권 등 특수물건 태그(매수판정 반영용)
     # 승강기(brief 캐시) — 다세대·도시형 4층↑ 무승강기 매수검토 상향용. 미상(brief 없음)도 트리거(정책).
     elev_map: dict = {}
     vio_map: dict = {}                              # 위반건축물(brief 캐시) — 신규 물건도 컬럼/필터에 자동 반영
@@ -1881,6 +1882,23 @@ def _grade_buckets(force: bool = False) -> dict:
             _vio_moved += 1
     if _vio_moved:
         print(f"[buy_grade] 위반건축물 매수검토 상향 {_vio_moved}건", flush=True)
+
+    # ── 위험 특수물건(유치권·분묘기지권·법정지상권·대항력있는임차인) → 매수양호만 매수검토로 상향(확인 필요, 주인님 지시). 금지·검토는 유지 ──
+    #  이 권리들은 등기가 아니라 사실상 권리(점유·관습법)라 analysis risk_level(말소기준 기반)에 안 잡혀 '안전→매수양호'로 오분류되던 것 보정.
+    #  ★단 대항력있는임차인이 인수조건변경(HF/HUG/SGI = 대항력 포기)이면 인수부담 해소 → 매수양호 유지(주인님 지시).
+    _RISK_TAGS = ("유치권", "분묘기지권", "법정지상권", "대항력있는임차인")
+    _yc_moved = 0
+    for k in list(out["매수양호"]):
+        _t = tags_of.get(k, "")
+        if not any(rt in _t for rt in _RISK_TAGS):
+            continue
+        if "대항력있는임차인" in _t and "인수조건변경" in _t:
+            continue   # 대항력 포기(확약) → 인수부담 없음 → 매수양호 유지
+        out["매수양호"].discard(k)
+        out["매수검토"].add(k)
+        _yc_moved += 1
+    if _yc_moved:
+        print(f"[buy_grade] 위험특수물건(유치권·분묘·법정지상권·대항력임차인) 매수검토 상향 {_yc_moved}건", flush=True)
 
     # ── 차량외 buy_grade ──
     from auction_analysis.vehicle_parser import buy_grade
@@ -2710,6 +2728,23 @@ def auction_analysis(item_key: str) -> dict:
                 res["needs_expert_review"] = True
                 res["warnings"] = list(res.get("warnings") or []) + [
                     "보증금 미상: 대항력 임차인이 있으나 보증금액이 미상 — 실제 보증금 확인 후 인수부담 판단 필요(매수 검토)"]
+        except Exception:
+            pass
+        # 위험 특수물건(유치권·분묘기지권·법정지상권·대항력있는임차인) → AI위험도 '안전'을 '주의'로 + 경고.
+        #  등기 아닌 사실상 권리라 말소기준 분석에 안 잡힘. 단 대항력있는임차인+인수조건변경(대항력 포기)은 예외(주인님 지시).
+        try:
+            _it = auction_db._get("items", {"select": "tags", "item_key": "eq." + item_key, "limit": "1"})
+            _itj = _it.json() if _it.status_code in (200, 206) else []
+            _tg = (_itj[0].get("tags") if _itj else "") or ""
+            _RISK = ("유치권", "분묘기지권", "법정지상권", "대항력있는임차인")
+            _hit = [rt for rt in _RISK if rt in _tg]
+            if _hit and not ("대항력있는임차인" in _tg and "인수조건변경" in _tg):
+                res = dict(res)
+                if res.get("risk_level") == "안전":
+                    res["risk_level"] = "주의"
+                res["needs_expert_review"] = True
+                res["warnings"] = list(res.get("warnings") or []) + [
+                    "·".join(_hit) + " — 등기 외 사실상 권리로 인수·명도 부담 가능, 확인 후 판단 필요(매수 검토)"]
         except Exception:
             pass
     return res
