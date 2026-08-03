@@ -2984,7 +2984,7 @@ def auction_dagagu_market(item_key: str) -> dict:
     if not rows or not _is_dagagu_usage(rows[0].get("usage_name")):
         return {"available": False}
     addr = rows[0].get("address") or ""
-    lawd = resolve_lawd(addr)
+    lawd = resolve_lawd(addr) or _sgg_geo_fallback(addr)
     if not lawd:
         return {"available": False, "reason": "시군구 코드 없음"}
     trades = _shrent_trades(lawd)
@@ -3368,7 +3368,7 @@ def _compute_brief(item_key: str) -> dict:
                            "grade": v.get("grade")}
             return out
         if re.search(r"아파트|오피스텔", usage):
-            lawd = resolve_lawd(addr)
+            lawd = resolve_lawd(addr) or _sgg_geo_fallback(addr)
             name = _apt_name_from_addr(addr)
             if lawd and name:
                 b = kapt.brief(lawd, name)
@@ -6297,7 +6297,7 @@ def gongmae_apt_info(mng: str, cdtn: Optional[str] = None,
     if "아파트" not in usage and "오피스텔" not in usage:
         return {"available": False, "reason": "아파트/오피스텔 물건이 아님", "usage": usage}
     address = cur.get("address") or ""
-    lawd = resolve_lawd(address)
+    lawd = resolve_lawd(address) or _sgg_geo_fallback(address)
     if not lawd:
         return {"available": False, "reason": "주소에서 법정동코드를 찾지 못함", "address": address}
     area = _area_num(cur.get("building_area"), cur.get("area_text"))
@@ -8266,7 +8266,7 @@ def auction_offi_info(item_key: str, months: int = 12) -> dict:
     if "오피스텔" not in (d.get("usage") or ""):
         return {"available": False, "reason": "오피스텔 물건 아님"}
     addr = d.get("address") or ""
-    lawd = resolve_lawd(addr)
+    lawd = resolve_lawd(addr) or _sgg_geo_fallback(addr)
     if not lawd:
         return {"available": False, "reason": "법정동코드 변환 실패", "address": addr}
     nm = _apt_name_from_addr(addr)
