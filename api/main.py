@@ -8899,7 +8899,7 @@ def _apt_info_compute(item_key: str, months: int) -> dict:
     if "아파트" not in usage and "오피스텔" not in usage:
         return {"available": False, "reason": "아파트/오피스텔 물건이 아님", "usage": usage}
     address = d.get("address") or ""
-    lawd = resolve_lawd(address)
+    lawd = resolve_lawd(address) or _sgg_geo_fallback(address)
     if not lawd:
         return {"available": False, "reason": "주소에서 법정동코드를 찾지 못함", "address": address}
     area = _area_num(d.get("building_area"), d.get("area_text"))
