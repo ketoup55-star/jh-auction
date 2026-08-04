@@ -60,16 +60,6 @@ from .serializers import (
 app = FastAPI(title="경매 정보 API", version="0.1.0", default_response_class=ORJSONResponse)  # orjson=표준 json보다 3~5배 빠른 직렬화(150건 172KB 응답 CPU 절감→2vCPU 동시처리량↑)
 
 
-@app.middleware("http")
-async def _no_cache_static(request, call_next):
-    """정적 화면(HTML/JS) + 동적 지도 API는 항상 최신을 받도록 캐시 비활성화. 브라우저가 옛 trade_area/배후세대 캐싱 방지."""
-    response = await call_next(request)
-    path = request.url.path
-    if path == "/" or path.startswith("/static/") or path.startswith("/auction"):
-        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"   # /auction* + /auctions(검색) 포함
-    return response
-
-
 # ── 성능 재발방지 ①탐지: 느린 요청(SLOW_MS+ms) 자동 로깅 → slow_requests 테이블 ──
 #  '느리다'를 주인님이 발견하기 전에 시스템이 먼저 잡는 장치. best-effort 백그라운드 write라 요청은 안 막는다.
 #  로컬/클라우드(CLOUD_READER) 둘 다 같은 Supabase 테이블에 host 태그로 기록 → /admin/slow에서 통합 집계.
@@ -80,8 +70,8 @@ _SLOW_HOST = "cloud" if os.environ.get("CLOUD_READER", "0") in ("1", "true", "Tr
 def _record_slow(method: str, path: str, query: str, dur_ms: int, status: int) -> None:
     def _w():
         try:
-            httpx.post(auction_db._BASE + "slow_requests",
-                       headers={**auction_db._H, "Content-Type": "application/json", "Prefer": "return=minimal"},
+            httpx.post(auction_db.url + "/rest/v1/slow_requests",
+                       headers={**auction_db._h, "Content-Type": "application/json", "Prefer": "return=minimal"},
                        json={"method": method, "path": path, "query": (query or "")[:300],
                              "duration_ms": dur_ms, "status": status, "host": _SLOW_HOST}, timeout=5)
         except Exception:
@@ -90,15 +80,20 @@ def _record_slow(method: str, path: str, query: str, dur_ms: int, status: int) -
 
 
 @app.middleware("http")
-async def _slow_log_mw(request, call_next):
+async def _http_mw(request, call_next):
+    """no-cache 헤더 + 느린요청(SLOW_MS+ms) slow_requests 로깅을 한 미들웨어로 통합.
+    🔴 FastAPI에서 @app.middleware("http")를 두 개 선언하면 나중 것이 실행되지 않아(첫 것만 스택에 남음),
+       원래 있던 no-cache 미들웨어에 slow-log를 합쳐 한 곳에서 둘 다 처리한다."""
     import time as _t
     _t0 = _t.time()
     response = await call_next(request)
     _dur = int((_t.time() - _t0) * 1000)
-    _p = request.url.path
-    if _dur >= _SLOW_MS and not _p.startswith("/static") and not _p.startswith("/admin/slow"):
+    path = request.url.path
+    if path == "/" or path.startswith("/static/") or path.startswith("/auction"):
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"   # /auction* + /auctions(검색) 포함
+    if _dur >= _SLOW_MS and not path.startswith("/static") and not path.startswith("/admin/slow"):
         try:
-            _record_slow(request.method, _p, str(request.url.query), _dur, response.status_code)
+            _record_slow(request.method, path, str(request.url.query), _dur, response.status_code)
         except Exception:
             pass
     return response
