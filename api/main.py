@@ -2692,6 +2692,13 @@ def case_objects(item_key: str) -> dict:
 
 @app.get("/auction/analysis")
 def auction_analysis(item_key: str) -> dict:
+    """권리분석 — 전체 계산결과를 api_cache(analysis:)에 캐시. 크롤러 갱신 시 _freshness_loop이 무효화.
+    캐시 없을 때만 _compute_analysis(analyze_from_crawler·명세서·items 후처리 5~6쿼리=2~3초) 실행 →
+    상세 재진입은 즉시. (전엔 크롤러 분석물건이 캐시를 안 타 상세 클릭마다 2~3초였음)"""
+    return _cached_doc("analysis", item_key, lambda: _compute_analysis(item_key))
+
+
+def _compute_analysis(item_key: str) -> dict:
     """권리분석(말소기준·인수/소멸). ①크롤러 구조화DB(analyzed_at) 우선 ②없으면 등기 PDF 파싱 폴백."""
     from auction_analysis.crawler_analysis import analyze_from_crawler
     res = None
@@ -2701,8 +2708,7 @@ def auction_analysis(item_key: str) -> dict:
         res = None
     if res is None:                                        # 미분석 물건 → 기존 PDF 파싱 폴백
         from auction_analysis.doc_analysis import analyze_registry
-        res = _cached_doc("analysis", item_key,
-                          lambda: analyze_registry(auction_db, item_key))
+        res = analyze_registry(auction_db, item_key)
     # 환매등기(환매특약)는 소유권이전에 딸린 부기등기 → 소멸분은 별도 권리로 표시 안 함.
     #  (선순위=인수 환매는 실제 중요하므로 유지). 캐시 객체는 보존하고 사본으로 반환.
     if isinstance(res, dict) and isinstance(res.get("rights"), list):
