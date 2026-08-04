@@ -3923,7 +3923,7 @@ def _prewarm_docs() -> None:
             _warm_prefix("review", _compute_review)
         # analysis·appraisal·docsummary·vehicle·encar 를 병렬 스레드로(순차 ~11h → 병렬)
         import threading as _th
-        jobs = [("analysis", residential, analyze_registry),
+        jobs = [("analysis", residential, lambda db, k: _compute_analysis(k)),   # 크롤러 분석물건도 예열(전엔 analyze_registry=PDF만 → 크롤러물건 상세 첫진입 2~4초)
                 ("appraisal", residential, analyze_appraisal),
                 ("docsummary", residential, analyze_doc_summary),
                 ("vehicle2", vehicles, analyze_vehicle)]   # vehicle2: vehicle_specs DB 기반(구 PDF캐시 우회)
