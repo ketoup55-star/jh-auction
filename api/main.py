@@ -4194,6 +4194,38 @@ def _est_col_warm_loop() -> None:
         _t.sleep(1800)          # 30분마다 400건 배치 → 점진 커버 + 유지
 
 
+def _keepwarm_loop() -> None:
+    """콜드스타트 방지(재발방지 ②예방): slow_requests가 지목한 콜드 쿼리(진행물건 목록 3980ms·
+    regions 5043ms)를 주기 self-호출해 서버 쿼리경로·메모리캐시를 웜 유지 → 첫 검색 콜드 제거.
+    CloudType(CLOUD_READER)도 서버 자신이 직접 Supabase 쿼리하므로 콜드 → 여기서 항상 실행.
+    포트 폴백 self-ping(로컬 4011 / 클라우드 PORT·8000)."""
+    import time as _t
+    from datetime import date, timedelta
+    _t.sleep(50)
+    _cand = [p for p in (os.environ.get("PORT"), "8000", "4011") if p]
+    _base = None
+    while True:
+        try:
+            _today = date.today()
+            _params = {"sell_from": str(_today), "sell_to": str(_today + timedelta(days=92)),
+                       "status": "진행물건", "limit": "1"}
+            if _base is None:                       # 첫 성공 포트를 고정
+                for _p in _cand:
+                    try:
+                        httpx.get(f"http://127.0.0.1:{_p}/auctions", params=_params, timeout=30)
+                        _base = f"http://127.0.0.1:{_p}"
+                        break
+                    except Exception:
+                        continue
+            else:
+                httpx.get(_base + "/auctions", params=_params, timeout=30)
+            if _base:
+                httpx.get(_base + "/auctions/regions", timeout=30)   # regions 메모리캐시 웜 유지
+        except Exception:
+            pass
+        _t.sleep(240)                               # 4분마다 — 콜드(플랜/버퍼 만료) 전에 재데움
+
+
 @app.on_event("startup")
 def _start_prewarm() -> None:
     import threading
@@ -4219,6 +4251,7 @@ def _start_prewarm() -> None:
     threading.Thread(target=_baedang_warm, daemon=True).start()  # 배당요구신청 건수 색인 미리 데움(다가구·근린주택)
     threading.Thread(target=_dagagu_warm, daemon=True).start()    # 다가구 우량 색인 미리 데움
     threading.Thread(target=_compete_warm, daemon=True).start()   # 경쟁분산 색인(전 유형) 미리 데움
+    threading.Thread(target=_keepwarm_loop, daemon=True).start()  # 콜드스타트 방지: 진행물건·regions 주기 self-웜(클라우드 포함 항상)
     if not _cloud:
         # V-World를 수분간 순차 호출 → 클라우드(얇은 리더)선 스킵(로컬 워머가 Supabase landuse_cache에 채움).
         threading.Thread(target=_landuse_warm, daemon=True).start()  # 원천 누락 용도지역 V-World 보완(순차, ~수분)
