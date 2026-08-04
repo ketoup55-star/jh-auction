@@ -4151,8 +4151,9 @@ def _est_col_warm() -> None:
         conn = psycopg.connect(dsn, autocommit=True, connect_timeout=15)
         cur = conn.cursor()
         cur.execute("SET statement_timeout=90000")
+        # 아파트 + 오피스텔(둘 다 apt_ests 경로) — 오피 제외 시 목록에서 매번 compute=true 실시간계산(8초)이 재발.
         cur.execute("""SELECT item_key FROM items WHERE data_class='현황'
-                       AND usage_name ILIKE '%아파트%'
+                       AND (usage_name ILIKE '%아파트%' OR usage_name ILIKE '%오피스텔%')
                        AND est_price IS NULL ORDER BY sell_date DESC NULLS LAST LIMIT 400""")
         keys = [r[0] for r in cur.fetchall()]
         if not keys:
