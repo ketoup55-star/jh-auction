@@ -70,6 +70,40 @@ async def _no_cache_static(request, call_next):
     return response
 
 
+# ── 성능 재발방지 ①탐지: 느린 요청(SLOW_MS+ms) 자동 로깅 → slow_requests 테이블 ──
+#  '느리다'를 주인님이 발견하기 전에 시스템이 먼저 잡는 장치. best-effort 백그라운드 write라 요청은 안 막는다.
+#  로컬/클라우드(CLOUD_READER) 둘 다 같은 Supabase 테이블에 host 태그로 기록 → /admin/slow에서 통합 집계.
+_SLOW_MS = int(os.environ.get("SLOW_MS", "1500"))
+_SLOW_HOST = "cloud" if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True") else "local"
+
+
+def _record_slow(method: str, path: str, query: str, dur_ms: int, status: int) -> None:
+    def _w():
+        try:
+            httpx.post(auction_db._BASE + "slow_requests",
+                       headers={**auction_db._H, "Content-Type": "application/json", "Prefer": "return=minimal"},
+                       json={"method": method, "path": path, "query": (query or "")[:300],
+                             "duration_ms": dur_ms, "status": status, "host": _SLOW_HOST}, timeout=5)
+        except Exception:
+            pass
+    threading.Thread(target=_w, daemon=True).start()
+
+
+@app.middleware("http")
+async def _slow_log_mw(request, call_next):
+    import time as _t
+    _t0 = _t.time()
+    response = await call_next(request)
+    _dur = int((_t.time() - _t0) * 1000)
+    _p = request.url.path
+    if _dur >= _SLOW_MS and not _p.startswith("/static") and not _p.startswith("/admin/slow"):
+        try:
+            _record_slow(request.method, _p, str(request.url.query), _dur, response.status_code)
+        except Exception:
+            pass
+    return response
+
+
 store = ListingStore(":memory:")
 
 _ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -4244,6 +4278,35 @@ def _run_prewarm_bg(kind: str) -> None:
 def admin_me(admin: dict = Depends(require_admin)) -> dict:
     return {"id": admin["id"], "name": admin["name"], "email": admin["email"],
             "role": admin["role"]}
+
+
+@app.get("/admin/slow")
+def admin_slow(hours: int = 24, admin: dict = Depends(require_admin)) -> dict:
+    """성능 재발방지 ③감시: 최근 N시간 느린 요청(SLOW_MS+ms)을 path별로 집계(건수·평균·최대·host).
+    주인님이 '느리다'를 말하기 전에 무엇이 얼마나 느린지 데이터로 본다. 로컬+클라우드 통합."""
+    import datetime as _dt
+    since = (_dt.datetime.utcnow() - _dt.timedelta(hours=hours)).isoformat()
+    try:
+        r = httpx.get(auction_db._BASE + "slow_requests", headers=auction_db._H,
+                      params={"select": "path,duration_ms,host,ts,query,status,method",
+                              "ts": "gte." + since, "order": "duration_ms.desc", "limit": "1000"}, timeout=15)
+        rows = r.json() if r.status_code == 200 else []
+    except Exception:
+        rows = []
+    agg: dict = {}
+    for x in rows:
+        k = x.get("path", "?")
+        a = agg.setdefault(k, {"path": k, "count": 0, "max_ms": 0, "sum_ms": 0, "hosts": set()})
+        a["count"] += 1
+        a["max_ms"] = max(a["max_ms"], x.get("duration_ms", 0))
+        a["sum_ms"] += x.get("duration_ms", 0)
+        a["hosts"].add(x.get("host", "?"))
+    by_path = [{"path": a["path"], "count": a["count"], "max_ms": a["max_ms"],
+                "avg_ms": a["sum_ms"] // max(a["count"], 1), "hosts": sorted(a["hosts"])}
+               for a in agg.values()]
+    by_path.sort(key=lambda z: -z["max_ms"])
+    return {"hours": hours, "threshold_ms": _SLOW_MS, "total_slow": len(rows),
+            "by_path": by_path, "recent": rows[:40]}
 
 
 # ───────────── 관리자: 회원관리 / 마일리지 / 쿠폰 ─────────────
