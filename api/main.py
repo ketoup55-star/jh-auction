@@ -88,6 +88,7 @@ async def _http_mw(request, call_next):
     _t0 = _t.time()
     response = await call_next(request)
     _dur = int((_t.time() - _t0) * 1000)
+    response.headers["X-Process-Time"] = str(_dur)   # 서버 순처리시간(ms) 상시노출 — 네트워크 뺀 실측(느림 진단용)
     path = request.url.path
     if path == "/" or path.startswith("/static/") or path.startswith("/auction"):
         response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"   # /auction* + /auctions(검색) 포함
