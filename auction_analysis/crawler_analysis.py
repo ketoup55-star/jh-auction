@@ -263,23 +263,6 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
     deposit_total = sum((x.get("deposit") or 0) for x in tenants_raw)
 
     detail = parse_detail_text(it.get("detail_text") or "")
-    # ── 말소동의·대항력 포기 확약서 제출 → 미배당 보증금 매수인 인수 면제(AI 반영) ──
-    waiver = _detect_waiver(it.get("detail_text") or "")
-    if not waiver and "인수조건변경" in (it.get("tags") or ""):   # 보증기관(HUG/SGI/HF) 인수조건변경 태그 = 임차보증금 인수 면제
-        waiver = "보증기관(HUG·SGI·HF) 인수조건변경 — 임차보증금 미배당분을 낙찰자가 인수하지 않음"
-    waived_total = 0
-    if waiver:
-        assumed_ts = [t for t in tenants if t["assume"]]
-        # 확약서에 이름이 명시된 임차인 우선, 매칭 없고 인수예상 임차인이 1명뿐이면 그 임차인 면제
-        matched = [t for t in assumed_ts if t.get("name") and t["name"] in waiver]
-        # 이름 명시 시 그 임차인만, 아니면(일반 포기·특별매각조건) 인수예상 임차인 전원 면제
-        targets = matched if matched else assumed_ts
-        for t in targets:
-            t["assume_waived"] = t["assume"]
-            t["assume"] = 0
-            t["waiver"] = True
-            waived_total += t["assume_waived"]
-        assumed_total = sum(t["assume"] for t in tenants)
 
     # ── 대항력 자체 판정(크롤러 DB has_opposing_power가 놓쳐도 전입일로 보정) ──
     #  주택임차인은 전입일(익일 0시) 대항요건이 말소기준일보다 빠르면 대항력 있음.
@@ -302,6 +285,25 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
         if t.get("has_opposing_power") and t.get("deposit") and not t.get("assume"):
             t["assume"] = t["deposit"]
             assumed_total += t["deposit"]
+
+    # ── 말소동의·대항력 포기 확약서 / 보증기관(HUG·SGI·HF) 인수조건변경 → 인수 면제(AI 반영) ──
+    #  🔴 반드시 위 '대항력 보정' 뒤에 적용 — 보정이 나중에 추가하는 인수(초기 assume=0이던 대항력 임차인)까지 면제해야
+    #    태그기반(인수조건변경=전원 면제)이 제대로 반영됨. 舊버그: 면제가 보정보다 먼저 실행돼, 보정이 assume=deposit로
+    #    되살려 매수금지 오판(예: 확약서로 미인수인데 1.7억 인수·매수금지). [[project_auction_deposit_unknown_grade]]
+    waiver = _detect_waiver(it.get("detail_text") or "")
+    if not waiver and "인수조건변경" in (it.get("tags") or ""):   # 보증기관(HUG/SGI/HF) 인수조건변경 태그 = 임차보증금 인수 면제
+        waiver = "보증기관(HUG·SGI·HF) 인수조건변경 — 임차보증금 미배당분을 낙찰자가 인수하지 않음"
+    waived_total = 0
+    if waiver:
+        assumed_ts = [t for t in tenants if t["assume"]]
+        matched = [t for t in assumed_ts if t.get("name") and t["name"] in waiver]   # 확약서에 이름 명시 시 그 임차인만
+        targets = matched if matched else assumed_ts                                  # 이름 없으면(일반 포기·보증기관) 인수예상 전원 면제
+        for t in targets:
+            t["assume_waived"] = t["assume"]
+            t["assume"] = 0
+            t["waiver"] = True
+            waived_total += t["assume_waived"]
+        assumed_total = sum(t["assume"] for t in tenants)
 
     # ── 위험도(사이트 자체 지표) ──
     #  확약서로 인수가 제거된 대항력 임차인은 실제 리스크가 없으므로 '주의' 판정에서 제외.
