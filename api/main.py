@@ -7084,6 +7084,191 @@ def auction_nearby_trades(item_key: str, months: int = Query(12, le=24), defer: 
     return _trim_to_radius(result)                 # 현재 반경으로 트림 반환
 
 
+# ───────────── 아파트 유사거래(법정동 월별 표 + 반경 1km 단지별 지도) ─────────────
+_STD_AREAS = [39, 49, 59, 74, 84, 99, 114, 134, 164]   # 표준 전용면적(평형대 클러스터 스냅용)
+_aptmap_cache: dict = {}
+
+
+def _last_ym_labels(n: int = 12) -> list:
+    from datetime import date
+    y, m = date.today().year, date.today().month
+    out = []
+    for _ in range(n):
+        out.append(f"{y}-{m:02d}")
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+    return list(reversed(out))
+
+
+def _ym_ago(n: int) -> str:
+    from datetime import date
+    y, m = date.today().year, date.today().month
+    m -= (n - 1)
+    while m <= 0:
+        m += 12
+        y -= 1
+    return f"{y}-{m:02d}"
+
+
+def _apt_dong_name(addr: str):
+    """지번주소에서 법정동(동/읍/면) 토큰 추출 → molit umd 매칭용. 도로명이면 None(시군구 전체 폴백)."""
+    for tok in (addr or "").split():
+        if re.search(r"(동|읍|면)$", tok) and not re.search(r"(시|군|구)$", tok):
+            return tok
+        if re.match(r"^\d", tok):
+            break
+    return None
+
+
+def _apt_similar_ctx(item_key: str):
+    d = auction_db.get_auction(item_key)
+    if not d or "아파트" not in (d.get("usage") or ""):
+        return None
+    addr = d.get("address") or ""
+    lawd = resolve_lawd(addr) or _sgg_geo_fallback(addr)
+    if not lawd:
+        return None
+    return {"d": d, "addr": addr, "lawd": lawd,
+            "dong": _apt_dong_name(addr),
+            "prop_area": _area_num(d.get("building_area"), d.get("area_text"))}
+
+
+def _apt_area_bands(trades: list, prop_area) -> list:
+    """면적대 선택지 = 경매물건 전용±5㎡(default) + 법정동에 흔한 다른 표준평형(±5㎡)."""
+    bands = []
+    if prop_area:
+        bands.append({"key": "this", "center": float(prop_area),
+                      "lo": prop_area - 5, "hi": prop_area + 5})
+    scored = []   # 각 표준평형 ±5㎡ 범위에 실제 거래 3건 이상인 것만(빈 밴드 방지)
+    for s in _STD_AREAS:
+        if prop_area and abs(s - prop_area) <= 5:
+            continue
+        c = sum(1 for t in trades if abs((t.get("area") or 0) - s) <= 5)
+        if c >= 3:
+            scored.append((c, s))
+    scored.sort(reverse=True)               # 거래 많은 평형대 우선
+    for _c, s in scored[:3]:
+        bands.append({"key": str(s), "center": float(s), "lo": float(s - 5), "hi": float(s + 5)})
+    bands.sort(key=lambda b: b["center"])
+    return bands
+
+
+@app.get("/auction/apt_dong_table")
+def apt_dong_table(item_key: str) -> dict:
+    """아파트 상세: 법정동 전체 유사면적(±5㎡) 매매 월별 거래건수·평균가 표. 면적대 선택 + 최근 12개월."""
+    ctx = _apt_similar_ctx(item_key)
+    if not ctx:
+        return {"available": False}
+    lawd, dong, prop_area = ctx["lawd"], ctx["dong"], ctx["prop_area"]
+    pool = _apt_trades(lawd)
+    trades = [t for t in pool if t.get("umd") == dong] if dong else pool
+    labels = _last_ym_labels(12)
+    out = []
+    for b in _apt_area_bands(trades, prop_area):
+        by: dict = {}
+        for t in trades:
+            a = t.get("area") or 0
+            if b["lo"] <= a <= b["hi"]:
+                ym = (t.get("deal_date") or "")[:7]
+                if ym:
+                    by.setdefault(ym, []).append(t.get("amount") or 0)
+        months = []
+        for ym in labels:
+            amts = by.get(ym) or []
+            months.append({"ym": ym, "count": len(amts),
+                           "avg": round(sum(amts) / len(amts)) if amts else 0,
+                           "min": min(amts) if amts else 0, "max": max(amts) if amts else 0})
+        out.append({"key": b["key"], "center": round(b["center"], 1),
+                    "lo": round(b["lo"], 1), "hi": round(b["hi"], 1), "months": months})
+    return {"available": True, "dong": dong, "prop_area": prop_area,
+            "bands": out, "default_key": "this"}
+
+
+@app.get("/auction/apt_radius_map")
+def apt_radius_map(item_key: str, defer: bool = False) -> dict:
+    """아파트 상세: 경매물건 중심 반경 1km 내, 유사면적(±5㎡) 단지별 매매 거래건수(1/6/12개월)+평균가.
+    무거운 지오코딩(단지별 V-World)은 메모리+DB(aptmap:) 캐시. defer=1이면 백그라운드 계산 후 pending."""
+    import time as _t
+    _now = _t.time()
+    _mem = _aptmap_cache.get(item_key)   # 3일 TTL — 새 실거래 반영(지오코딩은 _geo캐시 영구라 재계산도 빠름)
+    if isinstance(_mem, dict) and _now - (_mem.get("_ts") or 0) < 259200:
+        return _mem
+    try:
+        db = auction_db.cache_get_many(["aptmap:" + item_key]).get("aptmap:" + item_key)
+    except Exception:
+        db = None
+    if isinstance(db, dict) and db.get("v") == 2 and _now - (db.get("_ts") or 0) < 259200:
+        _aptmap_cache[item_key] = db
+        return db
+    if defer:
+        _bg_fill(["aptmap:" + item_key], lambda _k: apt_radius_map(item_key))
+        return {"available": False, "pending": True}
+    ctx = _apt_similar_ctx(item_key)
+    if not ctx:
+        return {"available": False}
+    addr, lawd, dong, prop_area = ctx["addr"], ctx["lawd"], ctx["dong"], ctx["prop_area"]
+    if not prop_area:
+        return {"available": False, "reason": "전용면적 미상"}
+    _sgg_toks = []
+    for _tk in addr.split():
+        if re.search(r"(동|읍|면|리|로|길|가|번길)$", _tk) or re.match(r"^\d", _tk):
+            break
+        _sgg_toks.append(_tk)
+    sigungu_prefix = " ".join(_sgg_toks) or re.sub(r"\s+\S+$", "", addr)
+    pm = re.match(r"^(.*?(?:동|읍|면|리))\s+\d", addr)
+    jm = re.search(r"(?:동|읍|면|리)\s+(\d+(?:-\d+)?)", addr)
+    addr_jibun = jm.group(1) if jm else ""
+    addr_prefix = pm.group(1) if pm else sigungu_prefix
+    _geo_preload([(addr_prefix + " " + addr_jibun).strip(), addr])
+    pc = (_geocode((addr_prefix + " " + addr_jibun).strip()) if addr_jibun else None) or _geocode(addr)
+    if not pc:
+        return {"available": False, "reason": "물건 좌표 변환 실패"}
+    cand = [t for t in _apt_trades(lawd) if abs((t.get("area") or 0) - prop_area) <= 5]
+    blds: dict = {}
+    for t in cand:
+        blds.setdefault(f"{t.get('umd')} {t.get('jibun')}", []).append(t)
+    keys = list(blds.keys())[:600]
+    coords: dict = {}
+    if keys:
+        _geo_preload([sigungu_prefix + " " + k for k in keys])
+        with _cf.ThreadPoolExecutor(max_workers=8) as ex:
+            for k, ll in ex.map(lambda k: (k, _geocode(sigungu_prefix + " " + k)), keys):
+                coords[k] = ll
+        _save_geo_cache()
+    from datetime import date as _date, timedelta as _td
+    _tod = _date.today()
+    cut1 = (_tod - _td(days=30)).isoformat()      # 최근 N개월 = 롤링(달력월 아님) — 실거래 신고지연·월초 공백 회피
+    cut6 = (_tod - _td(days=183)).isoformat()
+    complexes = []
+    for k in keys:
+        ll = coords.get(k)
+        if not ll or haversine_m(pc[0], pc[1], ll[0], ll[1]) > 1000:
+            continue
+        ts = sorted(blds[k], key=lambda t: t.get("deal_date", ""), reverse=True)
+        amts = [t.get("amount") or 0 for t in ts if t.get("amount")]
+        c1 = sum(1 for t in ts if (t.get("deal_date") or "") >= cut1)
+        c6 = sum(1 for t in ts if (t.get("deal_date") or "") >= cut6)
+        name = next((t.get("name") for t in ts if t.get("name")), None) or k
+        complexes.append({"name": name, "lng": ll[0], "lat": ll[1],
+                          "umd": ts[0].get("umd"), "jibun": ts[0].get("jibun"),
+                          "counts": {"1": c1, "6": c6, "12": len(ts)},
+                          "avg": round(sum(amts) / len(amts)) if amts else 0,
+                          "recent_date": ts[0].get("deal_date"), "recent_amount": ts[0].get("amount")})
+    resolved = sum(1 for k in keys if coords.get(k))
+    geo_ok = (not keys) or (resolved >= max(3, int(len(keys) * 0.3)))
+    result = {"available": True, "v": 2, "_ts": _now, "center": {"lat": pc[1], "lng": pc[0]},
+              "radius": 1000, "dong": dong, "prop_area": prop_area,
+              "geo_ok": geo_ok, "complexes": complexes}
+    if geo_ok:
+        _aptmap_cache[item_key] = result
+        try:
+            auction_db.cache_save("aptmap:" + item_key, result)
+        except Exception:
+            pass
+    return result
+
+
 @app.get("/auction/usage_zones")
 def auction_usage_zones(item_key: str) -> dict:
     """상가: 경매물건 중심 반경 1.5km 상업 필지(빨강)·1km 주택 필지(파랑) 병합 폴리곤(GeoJSON).
