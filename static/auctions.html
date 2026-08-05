@@ -846,7 +846,10 @@ async function fillEstimates(){
     }
   }catch(e){}
   const miss=[];
-  keys.forEach(k=>{ const m=cached[k]; if(m&&m.price!=null) _fillAptCell(byKey[k],m); else miss.push(k); });
+  keys.forEach(k=>{ const m=cached[k];
+    if(m&&(m.price!=null||m.none)) _fillAptCell(byKey[k],m);   // 시세 있음 or 실거래無(aptneg='시세없음') → 즉시 렌더(_fillAptCell가 둘 다 처리, compute=true molit 생략 = 콜드 근본해결)
+    else miss.push(k);
+  });
   fillExpBids(); applyAptSort();
   // ② 미캐시만 6개씩 compute=true 점진 — 청크 3개를 '동시에'(순차→병렬로 체감 채움속도 ~3배).
   //    기존 순차는 미캐시 79건이면 ~40초 트리클링이 원인이었음. molit 부하 고려해 동시 3워커로 제한.

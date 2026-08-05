@@ -4260,6 +4260,7 @@ def _keepwarm_loop() -> None:
                 httpx.get(_base + "/auctions", params=_params, timeout=30)
             if _base:
                 httpx.get(_base + "/auctions/regions", timeout=30)   # regions 메모리캐시 웜 유지
+                httpx.get(_base + "/auction/brands", timeout=30)     # 차량 브랜드 버킷(30분캐시) 웜 유지 — 콜드 15초(vehicle_specs 전량 페이징) 방지
         except Exception:
             pass
         _t.sleep(240)                               # 4분마다 — 콜드(플랜/버퍼 만료) 전에 재데움
@@ -5656,9 +5657,9 @@ def auction_apt_ests(keys: str, compute: bool = True, remote: bool = True) -> di
         else:
             need_remote.append(k)                                # 옛버전(v<APT_VER)도 재계산 대상
     miss: list[str] = []
-    if need_remote and remote:                                   # ② 메모리에 없으면 Supabase
+    if need_remote and remote:                                   # ② 메모리에 없으면 Supabase(apt: + aptneg 동시 조회)
         try:
-            rows = auction_db.cache_get_many(["apt:" + k for k in need_remote])
+            rows = auction_db.cache_get_many(["apt:" + k for k in need_remote] + ["aptneg:" + k for k in need_remote])
         except Exception:
             rows = {}
         for k in need_remote:
@@ -5666,25 +5667,35 @@ def auction_apt_ests(keys: str, compute: bool = True, remote: bool = True) -> di
             if isinstance(d, dict) and d.get("v", 0) >= APT_VER:
                 out[k] = _apt_est_value(d)
                 _apt_cache.remember(k, d)                         # 메모리에도 올려 다음엔 즉시
+            elif ("aptneg:" + k) in rows:                         # 실거래無 마커 → '시세없음' 즉시(compute=true molit 생략 = 목록 콜드 근본해결. 빌라 m.none과 동형)
+                out[k] = {"none": True}
             else:
                 out[k] = None
                 miss.append(k)                                    # ③ 미캐시/옛버전 → 계산 대상
     if compute and miss:
+        _neg: list[str] = []
         def one(k):
             try:
                 d = _apt_info_compute(k, 12)
-                if d.get("available"):                            # 실패(molit 등)는 캐시 안 함
+                if d.get("available"):                            # 실패(molit 등)는 apt: 캐시 안 함
                     _apt_cache.remember(k, d)
                     try:
                         auction_db.cache_save("apt:" + k, d)
                     except Exception:
                         pass
-                return k, _apt_est_value(d)
+                    return k, _apt_est_value(d)
+                _neg.append(k)                                    # 실거래無 → aptneg 마커(다음 로딩부터 compute 생략)
+                return k, {"none": True}
             except Exception:
                 return k, None
         with _cf.ThreadPoolExecutor(max_workers=6) as ex:
             for k, v in ex.map(one, miss):
                 out[k] = v
+        for k in _neg:                                            # 실거래無 negative 캐싱 — 매 로딩 molit 재계산 방지(빌라 '시세없음'과 동형). 3일 후 워머가 재검
+            try:
+                auction_db.cache_save("aptneg:" + k, {"available": False})
+            except Exception:
+                pass
     return out
 
 
