@@ -4178,7 +4178,9 @@ def _est_col_warm() -> None:
                             OR NOT EXISTS (SELECT 1 FROM api_cache c WHERE c.cache_key = 'apt:' || i.item_key))
                        AND NOT EXISTS (SELECT 1 FROM api_cache n WHERE n.cache_key = 'aptneg:' || i.item_key
                                        AND n.updated_at > now() - interval '3 days')
-                       ORDER BY (est_price IS NULL) DESC, sell_date_d DESC NULLS LAST LIMIT 400""")
+                       ORDER BY (i.sell_date_d >= now()::date) DESC NULLS LAST,
+                                i.sell_date_d ASC
+                       LIMIT 400""")   # 활성(미래 매각기일) 우선 = 유저가 목록서 실제 보는 물건, 그중 임박순(가장 많이 보는 물건부터)
         keys = [r[0] for r in cur.fetchall()]
         if not keys:
             cur.close(); conn.close(); return
