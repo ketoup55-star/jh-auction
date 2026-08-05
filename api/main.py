@@ -2755,8 +2755,10 @@ def _compute_analysis(item_key: str) -> dict:
         # 보증금미상(대항력+확정X+배당X+보증금 null/0 아파트) → AI위험도 '위험'을 '주의'로 완화.
         #  금액이 '미상'일 뿐 실제 보증금 확인 시 매수 가능 여지 → 목록 매수판정(매수금지→매수검토) 완화와 동일 취지(주인님 지시).
         try:
-            _du = auction_db._get("items", {"select": "deposit_unknown", "item_key": "eq." + item_key, "limit": "1"})
-            _duj = _du.json() if _du.status_code in (200, 206) else []
+            _duj = auction_db.query_pg("SELECT deposit_unknown FROM items WHERE item_key=%s LIMIT 1", (item_key,))
+            if _duj is None:   # psycopg 불가 → REST 폴백
+                _du = auction_db._get("items", {"select": "deposit_unknown", "item_key": "eq." + item_key, "limit": "1"})
+                _duj = _du.json() if _du.status_code in (200, 206) else []
             if _duj and _duj[0].get("deposit_unknown"):
                 res = dict(res)
                 if res.get("risk_level") == "위험":
@@ -2769,8 +2771,10 @@ def _compute_analysis(item_key: str) -> dict:
         # 위험 특수물건(유치권·분묘기지권·법정지상권·대항력있는임차인) → AI위험도 '안전'을 '주의'로 + 경고.
         #  등기 아닌 사실상 권리라 말소기준 분석에 안 잡힘. 단 대항력있는임차인+인수조건변경(대항력 포기)은 예외(주인님 지시).
         try:
-            _it = auction_db._get("items", {"select": "tags", "item_key": "eq." + item_key, "limit": "1"})
-            _itj = _it.json() if _it.status_code in (200, 206) else []
+            _itj = auction_db.query_pg("SELECT tags FROM items WHERE item_key=%s LIMIT 1", (item_key,))
+            if _itj is None:   # psycopg 불가 → REST 폴백
+                _it = auction_db._get("items", {"select": "tags", "item_key": "eq." + item_key, "limit": "1"})
+                _itj = _it.json() if _it.status_code in (200, 206) else []
             _tg = (_itj[0].get("tags") if _itj else "") or ""
             _RISK = ("유치권", "분묘기지권", "법정지상권", "대항력있는임차인")
             _hit = [rt for rt in _RISK if rt in _tg]

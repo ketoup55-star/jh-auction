@@ -23,6 +23,11 @@ import re
 from typing import Any, Optional
 
 import httpx
+import threading as _threading
+
+# psycopg 직접연결(서울 DB 27ms)용 스레드로컬 — REST(PostgREST가 CloudType에서 매 쿼리 SSL 재핸드셰이크 ~882ms)
+#  우회. uvicorn 스레드풀이 스레드를 재사용하므로 '스레드당 연결 1개'를 재사용(psycopg_pool 불필요).
+_PG_TLS = _threading.local()
 
 # 경매결과 그룹옵션 → 포함 상태(여러 result 값 OR 매칭). 스피드옥션 드롭다운의 묶음 항목과 동일.
 _STATUS_GROUPS: dict[str, list[str]] = {
@@ -264,6 +269,27 @@ class SupabaseSource:
     @property
     def configured(self) -> bool:
         return bool(self.url and self.key)
+
+    def query_pg(self, sql: str, params: tuple = ()) -> Optional[list]:
+        """무거운 다중조회를 psycopg(DB 직접, 서울 ~27ms/쿼리)로 실행 — REST(PostgREST가 CloudType에서
+        매 쿼리 SSL 재핸드셰이크 ~882ms) 우회. 스레드로컬 연결 재사용. 실패(DSN없음·연결오류) 시
+        None → 호출측이 기존 REST 경로로 폴백(안전)."""
+        dsn = os.environ.get("SUPABASE_DB_URL")
+        if not dsn:
+            return None
+        try:
+            import psycopg
+            c = getattr(_PG_TLS, "conn", None)
+            if c is None or c.closed:
+                c = psycopg.connect(dsn, autocommit=True, connect_timeout=10)
+                _PG_TLS.conn = c
+            with c.cursor() as cur:
+                cur.execute(sql, params)
+                cols = [d[0] for d in cur.description]
+                return [dict(zip(cols, r)) for r in cur.fetchall()]
+        except Exception:
+            _PG_TLS.conn = None      # 끊긴 연결 폐기 → 다음 호출서 재연결
+            return None
 
     def _get(self, table: str, params: dict[str, Any], *, count: bool = False) -> httpx.Response:
         headers = {"Prefer": "count=exact"} if count else None   # client에 apikey/Authorization 상주

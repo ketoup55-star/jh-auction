@@ -183,14 +183,23 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
             "appraisal_price,appraisal_land,appraisal_building,appraisal_land_pct,"
             "appraisal_building_pct,land_area,building_area,area_text,address,usage_name,tags")
     # Supabase 클라우드 쿼리 왕복지연(~0.7s)이 병목 → items·rights·tenants 3개를 병렬 조회(순차 ~2.2s→~0.9s).
-    with _cf.ThreadPoolExecutor(max_workers=3) as ex:
-        f_it = ex.submit(lambda: db._get("items", {"select": cols, "item_key": f"eq.{item_key}", "limit": "1"}))
-        f_ri = ex.submit(_rows, db, "item_rights", item_key)
-        f_te = ex.submit(_rows, db, "item_tenants", item_key)
-        r = f_it.result()
-        rights_raw = f_ri.result()
-        tenants_raw = f_te.result()
-    head = r.json() if r.status_code in (200, 206) else []
+    # psycopg 직접(서울 DB ~27ms/쿼리, 스레드로컬 재사용) 우선 — CloudType REST(PostgREST가 매 쿼리
+    #  SSL 재핸드셰이크 ~882ms) 우회로 상세 analysis 2~4초→수백ms. 하나라도 실패 시 기존 REST 병렬 폴백(안전).
+    head = db.query_pg(f"SELECT {cols} FROM items WHERE item_key=%s LIMIT 1", (item_key,))
+    rights_raw = db.query_pg("SELECT * FROM item_rights WHERE item_key=%s", (item_key,))
+    tenants_raw = db.query_pg("SELECT * FROM item_tenants WHERE item_key=%s", (item_key,))
+    if head is None or rights_raw is None or tenants_raw is None:
+        with _cf.ThreadPoolExecutor(max_workers=3) as ex:
+            f_it = ex.submit(lambda: db._get("items", {"select": cols, "item_key": f"eq.{item_key}", "limit": "1"}))
+            f_ri = ex.submit(_rows, db, "item_rights", item_key)
+            f_te = ex.submit(_rows, db, "item_tenants", item_key)
+            r = f_it.result()
+            if head is None:
+                head = r.json() if r.status_code in (200, 206) else []
+            if rights_raw is None:
+                rights_raw = f_ri.result()
+            if tenants_raw is None:
+                tenants_raw = f_te.result()
     if not head or not head[0].get("analyzed_at"):
         return None                                    # 크롤러 미분석 → PDF 폴백
     it = head[0]
