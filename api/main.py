@@ -4149,9 +4149,12 @@ def _col_sync_loop() -> None:
 
 
 def _est_col_warm() -> None:
-    """활성 아파트/오피스텔 est(추정시세)를 계산해 items.est_price 컬럼에 '직접' SQL 기록.
-    🔑근본: cache_save의 Supabase 업서트(4s 베스트에포트)가 부하·대용량서 타임아웃돼 예열 est가
-    api_cache에 안 남던 것(=예열해도 커버리지 0.8% 정체의 진짜 원인)을 우회. 직접기록은 무손실.
+    """활성 아파트/오피스텔 est(추정시세)를 계산해 items.est_price 컬럼에 '직접' SQL 기록
+    + 같은 계산결과(apt_info)를 apt: 캐시에도 저장(상세 첫진입 2.3초 콜드 제거, molit 중복호출 0).
+    🔑근본: ①cache_save의 Supabase 업서트(4s 베스트에포트)가 부하·대용량서 타임아웃돼 예열 est가
+    api_cache에 안 남던 것(=예열해도 커버리지 0.8% 정체의 진짜 원인)을 우회(직접기록은 무손실).
+    ②apt: 미캐시가 9,765건 중 144건뿐(=상세 apt_info가 사실상 매번 콜드 재계산)이던 것을, est와
+    같은 apt_info 계산 1회로 apt:에도 저장해 해결. NOT EXISTS 자가제외라 소량배치가 점진 드레인.
     로컬 전용, 소량배치(400) 점진 → 커버리지 성장 + 신규물건 유지. [[project_auction_enrich_columnization]]"""
     dsn = os.environ.get("SUPABASE_DB_URL")
     if not dsn:
@@ -4163,16 +4166,27 @@ def _est_col_warm() -> None:
         cur = conn.cursor()
         cur.execute("SET statement_timeout=90000")
         # 아파트 + 오피스텔(둘 다 apt_ests 경로) — 오피 제외 시 목록에서 매번 compute=true 실시간계산(8초)이 재발.
-        cur.execute("""SELECT item_key FROM items WHERE data_class='현황'
+        #  대상 = est_price 미기록(목록 차익) OR apt: 캐시 미보유(상세 첫진입 2.3초 콜드). 한 번의 apt_info 계산으로
+        #  둘 다 채움(molit 중복호출 0). NOT EXISTS 자가제외라 소량배치(400)가 백로그를 점진 드레인 + 신규 자동유지.
+        cur.execute("""SELECT item_key FROM items i WHERE data_class='현황'
                        AND (usage_name ILIKE '%아파트%' OR usage_name ILIKE '%오피스텔%')
-                       AND est_price IS NULL ORDER BY sell_date DESC NULLS LAST LIMIT 400""")
+                       AND (est_price IS NULL
+                            OR NOT EXISTS (SELECT 1 FROM api_cache c WHERE c.cache_key = 'apt:' || i.item_key))
+                       ORDER BY (est_price IS NULL) DESC, sell_date_d DESC NULLS LAST LIMIT 400""")
         keys = [r[0] for r in cur.fetchall()]
         if not keys:
             cur.close(); conn.close(); return
 
+        apt_rows = []   # (cache_key, apt_info) — apt: 캐시는 est_price처럼 '직접 SQL' 업서트. cache_save(REST 4s)는
+                        #  부하 시 유실돼 로컬SQLite에만 남고 Supabase 미반영→CloudType이 못 읽음(소량검증서 10건중 4건만 저장 확인).
         def _one(k):
             try:
-                v = _apt_est_value(_apt_info_compute(k, 12))
+                _ai = _apt_info_compute(k, 12)
+                # 상세 apt_info 콜드(첫진입 2.3초) 제거 — 이미 계산한 결과를 apt: 영구캐시에도 저장(추가 molit 0).
+                #  endpoint(8702)와 동일 가드: available=True만 저장(쿼터 실패=available False → 미저장 → 다음 주기 재시도).
+                if isinstance(_ai, dict) and _ai.get("available") and _ai.get("v", 0) >= APT_VER:
+                    apt_rows.append(("apt:" + k, _ai))
+                v = _apt_est_value(_ai)
                 if v and v.get("price"):
                     return (int(v["price"]), k)
             except Exception:
@@ -4186,8 +4200,12 @@ def _est_col_warm() -> None:
         if vals:
             cur.executemany("UPDATE items SET est_price=%s WHERE item_key=%s AND est_price IS NULL", vals)
             cur.execute("UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid")
+        if apt_rows:    # apt: 직접 업서트(무손실) → CloudType이 즉시 읽어 상세 apt_info 콜드(2.3초) 제거
+            cur.executemany("INSERT INTO api_cache (cache_key, data) VALUES (%s, %s::jsonb) "
+                            "ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
+                            [(ck, _json.dumps(d, ensure_ascii=False)) for ck, d in apt_rows])
         # 0건이어도 항상 로그 → 루프 가동 확인 + molit 쿼터소진(계산 0) 판별
-        print(f"[est_col] {len(keys)}건 시도 → {len(vals)}건 est_price 기록", flush=True)
+        print(f"[est_col] {len(keys)}건 시도 → est_price {len(vals)}건 · apt:예열 {len(apt_rows)}건", flush=True)
         cur.close(); conn.close()
     except Exception as e:
         print(f"[est_col] skip {str(e)[:60]}", flush=True)
