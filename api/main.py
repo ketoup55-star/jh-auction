@@ -658,13 +658,14 @@ def _filter_cols_backfill() -> None:
         inv = _invest_index()
         over85 = _apt_over85_compute()
         deposit = _apt_deposit_unknown_compute()
+        senior = _apt_senior_lease_keys()   # 선순위임차권(대항력+미배당 인수리스크) — 컬럼화로 복수유형필터 콜드 스캔 제거
         zone_of: dict = {}
         for lab, ks in _zone_build().items():
             for k in ks:
                 zone_of[k] = lab
-        allk = set(fuel_of) | set(brand_of) | set(ok) | set(inv) | over85 | deposit | set(zone_of)
+        allk = set(fuel_of) | set(brand_of) | set(ok) | set(inv) | over85 | deposit | senior | set(zone_of)
         rows = [(k, fuel_of.get(k), brand_of.get(k), (k in ok), inv.get(k),
-                 (k in over85) or None, (k in deposit) or None, zone_of.get(k)) for k in allk]
+                 (k in over85) or None, (k in deposit) or None, (k in senior) or None, zone_of.get(k)) for k in allk]
         if not rows:
             return
         conn = psycopg.connect(dburl, prepare_threshold=None, connect_timeout=20, autocommit=False)
@@ -672,20 +673,20 @@ def _filter_cols_backfill() -> None:
             cur = conn.cursor()
             cur.execute("SET lock_timeout='25s'")
             cur.execute("DROP TABLE IF EXISTS _fcb")   # Supabase pooler 커넥션 재사용 시 이전 세션 temp가 잔존 → 'already exists' 간헐실패 회피
-            cur.execute("CREATE TEMP TABLE _fcb(item_key text primary key, fuel text, brand text, car_ok boolean, invest_amount bigint, over85_ok boolean, deposit_unknown boolean, zone text)")
-            with cur.copy("COPY _fcb(item_key,fuel,brand,car_ok,invest_amount,over85_ok,deposit_unknown,zone) FROM STDIN") as cp:
+            cur.execute("CREATE TEMP TABLE _fcb(item_key text primary key, fuel text, brand text, car_ok boolean, invest_amount bigint, over85_ok boolean, deposit_unknown boolean, senior_lease_ok boolean, zone text)")
+            with cur.copy("COPY _fcb(item_key,fuel,brand,car_ok,invest_amount,over85_ok,deposit_unknown,senior_lease_ok,zone) FROM STDIN") as cp:
                 for r in rows:
                     cp.write_row(r)
             # ① 안정 컬럼: 신규(invest_amount NULL)만
             cur.execute("""UPDATE items i SET fuel=_fcb.fuel, brand=_fcb.brand, car_ok=_fcb.car_ok, invest_amount=_fcb.invest_amount
                            FROM _fcb WHERE i.item_key=_fcb.item_key AND i.invest_amount IS NULL""")
             # ② 멤버십 컬럼: full 재동기 — 옛 멤버 clear 후 현재 멤버 set(한 트랜잭션이라 외부는 중간상태 안 봄)
-            cur.execute("UPDATE items SET over85_ok=NULL, deposit_unknown=NULL, zone=NULL WHERE over85_ok IS NOT NULL OR deposit_unknown IS NOT NULL OR zone IS NOT NULL")
-            cur.execute("""UPDATE items i SET over85_ok=_fcb.over85_ok, deposit_unknown=_fcb.deposit_unknown, zone=_fcb.zone
-                           FROM _fcb WHERE i.item_key=_fcb.item_key AND (_fcb.over85_ok OR _fcb.deposit_unknown OR _fcb.zone IS NOT NULL)""")
+            cur.execute("UPDATE items SET over85_ok=NULL, deposit_unknown=NULL, senior_lease_ok=NULL, zone=NULL WHERE over85_ok IS NOT NULL OR deposit_unknown IS NOT NULL OR senior_lease_ok IS NOT NULL OR zone IS NOT NULL")
+            cur.execute("""UPDATE items i SET over85_ok=_fcb.over85_ok, deposit_unknown=_fcb.deposit_unknown, senior_lease_ok=_fcb.senior_lease_ok, zone=_fcb.zone
+                           FROM _fcb WHERE i.item_key=_fcb.item_key AND (_fcb.over85_ok OR _fcb.deposit_unknown OR _fcb.senior_lease_ok OR _fcb.zone IS NOT NULL)""")
             _mem = cur.rowcount
             conn.commit()
-            print(f"[col_sync] 필터컬럼 재동기: 멤버십 {_mem}행 set (over85={len(over85)}/deposit={len(deposit)}/zone={len(zone_of)})", flush=True)
+            print(f"[col_sync] 필터컬럼 재동기: 멤버십 {_mem}행 set (over85={len(over85)}/deposit={len(deposit)}/senior={len(senior)}/zone={len(zone_of)})", flush=True)
         finally:
             conn.close()
     except Exception as e:
@@ -894,6 +895,19 @@ def _reg_col_ready() -> bool:
         except Exception:
             _reg_col_st["col"] = False
     return bool(_reg_col_st["col"])
+
+
+_senior_col_st = {"col": None}   # items.senior_lease_ok 컬럼 존재(백필됨). 있으면 선순위임차권 유형필터를 컬럼 WHERE로
+
+
+def _senior_lease_col_ready() -> bool:
+    if _senior_col_st["col"] is None:
+        try:
+            r = auction_db._get("items", {"select": "senior_lease_ok", "limit": "1"})
+            _senior_col_st["col"] = (r.status_code in (200, 206))
+        except Exception:
+            _senior_col_st["col"] = False
+    return bool(_senior_col_st["col"])
 
 
 _gm_reg = {"col": None}   # gongmae_items.reg 컬럼 존재 여부(백필 전이면 None 취급 → 규제필터 미적용)
@@ -2410,9 +2424,14 @@ def auctions(
     _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로(IN-리스트 회피)
     _reg_use_col = reg in ("regulated", "metro", "none") and _reg_col_ready()  # reg 컬럼(백필) 있으면 컬럼 WHERE로 → 5천 item_key IN-리스트(2.5초) 대체
     _expbid_col = bool(type_filter) and set(type_filter) <= {"apt_expbid", "villa_expbid"}  # 백데이터 유형필터만 → expected_bid·est_price 컬럼 WHERE(usage는 프론트가 함께 전송). 아파트 0건고장·villa 15청크count(5.8초) 대체
-    _over85_col = type_filter == ["apt_over85"]              # 85초과 → over85_ok 컬럼 WHERE(키셋 IN-리스트 count 4.5초 대체)
-    _deposit_col = type_filter == ["apt_deposit_unknown"]   # 보증금미상 → deposit_unknown 컬럼 WHERE
-    _typ_col = _expbid_col or _over85_col or _deposit_col
+    # 아파트 boolean 유형필터(85초과·보증금미상·선순위임차권)는 컬럼 → 단일/복수 모두 컬럼 OR WHERE.
+    #  기존: 복수선택 시 키셋 union(콜드 senior_lease가 item_tenants 11.7만행 REST 스캔)+item_key IN-리스트 count(4.5초).
+    _TYPE_BOOL_COLS = {"apt_over85": "over85_ok", "apt_deposit_unknown": "deposit_unknown", "apt_senior_lease": "senior_lease_ok"}
+    _type_or = None
+    if type_filter and set(type_filter) <= set(_TYPE_BOOL_COLS):
+        if "apt_senior_lease" not in type_filter or _senior_lease_col_ready():   # senior 컬럼 미준비면 키셋 폴백(안전)
+            _type_or = [_TYPE_BOOL_COLS[t] for t in type_filter]
+    _typ_col = _expbid_col or (_type_or is not None)
     item_keys = _combine_item_keys(_type_filter_keys(None if _typ_col else type_filter), None,  # 연료=fuel 컬럼(아래)
                                    None, None,  # 브랜드=brand 컬럼 / zone=zone 컬럼 WHERE(아래 zone=)
                                    None if _use_col else _grade_filter_keys(grade),
@@ -2429,7 +2448,7 @@ def auctions(
               fail_min=fail_min, fail_max=fail_max,
               barea_min=barea_min, barea_max=barea_max,   # area_excl 숫자컬럼(백필) WHERE로 직접 필터(키셋 39.6초 → 0.15초)
               fuel=fuel, brand=brand, car_ok=(True if buy_ok else None), invest_min=invest_min, invest_max=invest_max, zone=zone,  # 차량속성·투자금·용도지역 컬럼 WHERE(키셋 폐지)
-              over85_ok=(True if _over85_col else None), deposit_unknown=(True if _deposit_col else None),  # 85초과·보증금미상 컬럼 WHERE
+              type_or=_type_or,  # 아파트 boolean 유형필터(단일·복수) 컬럼 OR WHERE(over85_ok/deposit_unknown/senior_lease_ok)
               has_expbid=(True if _expbid_col else None), has_est=(True if _expbid_col else None),  # 백데이터=예상낙찰·시세 컬럼 NOT NULL
               sell_from=sell_from, sell_to=sell_to)
     # 큰 item_keys(용도지역 등) 필터에서 목록·카운트를 병렬 실행하면 청크 IN-리스트 카운트가 0으로
@@ -2542,9 +2561,12 @@ def auction_stats(
             _use_col = bool(grade) and _buy_grade_ready()  # 컬럼 준비되면 매수판정을 컬럼 WHERE로
             _reg_use_col = reg in ("regulated", "metro", "none") and _reg_col_ready()  # reg 컬럼 있으면 컬럼 WHERE로(IN-리스트 회피)
             _expbid_col = bool(type_filter) and set(type_filter) <= {"apt_expbid", "villa_expbid"}  # 백데이터 = 컬럼 WHERE(물건통계도 동일)
-            _over85_col = type_filter == ["apt_over85"]              # 85초과 → over85_ok 컬럼 WHERE
-            _deposit_col = type_filter == ["apt_deposit_unknown"]   # 보증금미상 → deposit_unknown 컬럼 WHERE
-            _typ_col = _expbid_col or _over85_col or _deposit_col
+            _TYPE_BOOL_COLS = {"apt_over85": "over85_ok", "apt_deposit_unknown": "deposit_unknown", "apt_senior_lease": "senior_lease_ok"}
+            _type_or = None
+            if type_filter and set(type_filter) <= set(_TYPE_BOOL_COLS):
+                if "apt_senior_lease" not in type_filter or _senior_lease_col_ready():
+                    _type_or = [_TYPE_BOOL_COLS[t] for t in type_filter]
+            _typ_col = _expbid_col or (_type_or is not None)
             item_keys = _combine_item_keys(_type_filter_keys(None if _typ_col else type_filter), None,  # 연료=fuel 컬럼
                                            None, None,  # 브랜드=brand 컬럼 / zone=zone 컬럼 WHERE(아래)
                                            None if _use_col else _grade_filter_keys(grade),
@@ -2562,7 +2584,7 @@ def auction_stats(
                 barea_min=barea_min, barea_max=barea_max,   # area_excl 컬럼 WHERE(물건통계도 동일 적용)
                 fuel=fuel, brand=brand, car_ok=(True if buy_ok else None), invest_min=invest_min, invest_max=invest_max, zone=zone,  # 차량속성·투자금·용도지역 컬럼
                 has_expbid=(True if _expbid_col else None), has_est=(True if _expbid_col else None),  # 백데이터 컬럼조건
-                over85_ok=(True if _over85_col else None), deposit_unknown=(True if _deposit_col else None),  # 85초과·보증금미상 컬럼 WHERE
+                type_or=_type_or,  # 아파트 boolean 유형필터(단일·복수) 컬럼 OR WHERE
                 sell_from=sell_from, sell_to=sell_to,
             )
             if len(_stats_cache) > 500:            # 무한증식 방지(희귀 필터 조합 누적)

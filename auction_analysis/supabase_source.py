@@ -471,7 +471,7 @@ class SupabaseSource:
                  sell_from=None, sell_to=None, buy_grade=None, reg=None,
                  has_expbid=None, has_est=None,
                  fuel=None, brand=None, car_ok=None, invest_min=None, invest_max=None, zone=None,
-                 over85_ok=None, deposit_unknown=None) -> list[tuple]:
+                 over85_ok=None, deposit_unknown=None, type_or=None) -> list[tuple]:
         """PostgREST 필터를 (key,value) 튜플 리스트로. 같은 컬럼 범위(gte+lte) 지원."""
         if caseno:                     # 특정 사건번호 검색 = 상태·매각기일 무관하게 그 물건을 찾는다
             result_prefix = None       #  프론트가 기본 status=진행물건 + 매각기일범위(오늘~+3개월)를 항상 붙이는데,
@@ -513,6 +513,12 @@ class SupabaseSource:
             f.append(("over85_ok", "is.true"))
         if deposit_unknown:                    # 보증금미상 아파트 — items.deposit_unknown 컬럼(백필). 키셋 대체
             f.append(("deposit_unknown", "is.true"))
+        if type_or:                            # 유형별 필터 복수 선택 = boolean 컬럼 OR(over85_ok/deposit_unknown/senior_lease_ok).
+            _tcols = [c for c in type_or if c]  #  기존 키셋 union(콜드 senior_lease 스캔)+item_key IN-리스트 count(4.5초) 대체
+            if len(_tcols) == 1:
+                f.append((_tcols[0], "is.true"))
+            elif _tcols:
+                f.append(("or", "(" + ",".join(c + ".is.true" for c in _tcols) + ")"))
         if special:                            # 특수물건: tags 부분일치(여러개=AND), '제외' 라벨은 NOT
             for s in special:
                 s = (s or "").strip()
