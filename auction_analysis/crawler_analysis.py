@@ -305,9 +305,29 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
             waived_total += t["assume_waived"]
         assumed_total = sum(t["assume"] for t in tenants)
 
+    # ── 선순위전세권 배당요구 소멸 보정 ──
+    #  전세권자가 임차인으로도 등재되고 그 임차권 배당판정이 '소멸'(＋'인수' 미포함)이면
+    #  → 배당요구로 매각소멸(민집법 91④). 크롤러는 전세권 권리(item_rights)를 선순위 원칙대로
+    #    status='인수' 기본값으로 두는데, 같은 전세권자의 임차권(item_tenants) status는 '소멸예상'으로
+    #    결론내는 모순이 있어(크롤러 두 테이블 불일치), 크롤러 자신의 소멸결론을 우선해 인수에서 제외.
+    #  🔴 임차인 배당요구 ≠ 전세권자 배당요구(명세서에 '전세권자로서는 배당요구 안함, 인수' 명시 사례 존재)
+    #    → 반드시 크롤러 임차권status가 '소멸' 포함·'인수' 미포함일 때만(=크롤러가 소멸로 확정) 적용.
+    def _jeonse_extinguished(r):
+        if "전세권" not in (r.get("type") or "") or not r.get("holder"):
+            return False
+        hd = r["holder"]
+        for t in tenants:
+            nm = t.get("name") or ""
+            if nm and (nm in hd or hd in nm):
+                lab = (t.get("reason") or "") + (t.get("status_label") or "")
+                if "소멸" in lab and "인수" not in lab:
+                    return True
+        return False
+
     # ── 위험도(사이트 자체 지표) ──
     #  확약서로 인수가 제거된 대항력 임차인은 실제 리스크가 없으므로 '주의' 판정에서 제외.
-    has_assume = assumed_total > 0 or any(r["status"] == "인수" for r in rights)
+    has_assume = assumed_total > 0 or any(
+        r["status"] == "인수" and not _jeonse_extinguished(r) for r in rights)
     has_opp = any(t["has_opposing_power"] and not t.get("waiver") for t in tenants)
     risk = "위험" if has_assume else ("주의" if has_opp else "안전")
 
