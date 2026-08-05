@@ -187,6 +187,13 @@
   .hwin{font-size:14px;color:#e8202a;font-weight:800;margin-top:2px;letter-spacing:-.2px;}
   .hbid{font-size:14px;color:var(--text);font-weight:700;}
   .noinfo{font-size:12px;color:var(--muted);font-weight:600;margin-top:2px;}
+  /* 매각 예측 적중 배지(낙찰자 이름 밑): 실제 낙찰가 vs 예상낙찰가 */
+  .predwrap{margin-top:5px;line-height:1.3;}
+  .predchip{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;}
+  .pred-hit{background:#e7f5ec;color:#1a7f4b;border:1px solid #bfe6cf;}   /* 적중=예상≥실제(녹색) */
+  .pred-over{background:#fdeaea;color:#c0392b;border:1px solid #f3c4c0;}  /* 예상 이상=실제>예상(빨강) */
+  .preddiff{font-size:11px;font-weight:600;margin-top:2px;}
+  .preddiff.hit{color:#1a7f4b;} .preddiff.over{color:#c0392b;}
   .pager{display:flex;justify-content:center;gap:10px;margin-top:18px;align-items:center;}
   .pager button{height:34px;padding:0 16px;border-radius:8px;border:1px solid var(--line);background:#fff;cursor:pointer;}.pager button:disabled{opacity:.4;cursor:default;}
   /* 부동산DB '전국' 스티커 — 점멸 + hover 시 좌우 기울기(프리미엄 스티커와 동일 형식) */
@@ -1331,6 +1338,14 @@ async function doSearch(){
       if(L.group==="차량외"){ const s=splitVehicle(L.usage); if(s.brand) uCell=`<div>${s.model||"-"}</div><div class="kv">${s.brand}</div>`; }
       const dd=ddayOf(L.sell_date);
       const rr=splitResult(L.result||L.status||"-"); const rc=resColor(L.result);
+      // 매각 예측 적중 배지(낙찰자 이름 밑): 실제 낙찰가 vs 예상낙찰가. 예상≥실제=적중, 실제>예상=예상 이상. + 차이금액/%
+      let predBadge="";
+      if(hasWin && L.expected_bid>0 && L.sale_price>0){
+        const diff=L.sale_price-L.expected_bid, pct=Math.round(Math.abs(diff)/L.expected_bid*100), over=diff>0;
+        const sign=over?'+':(diff<0?'−':'');
+        const dtxt=diff===0?'예상과 정확히 일치':`예상 대비 ${sign}${won(Math.abs(diff))} (${sign}${pct}%)`;
+        predBadge=`<div class="predwrap"><span class="predchip ${over?'pred-over':'pred-hit'}">${over?'예상 이상':'적중'}</span><div class="preddiff ${over?'over':'hit'}">${dtxt}</div></div>`;
+      }
       cardsAcc.push(`<a class="mcard" href="${href}" target="_blank"><div class="mph"><img class="mimg" loading="lazy" decoding="async" fetchpriority="low" src="${L.thumb_url||_MCPH}" onerror="this.onerror=null;this.src=_MCPH"><div class="mtop">${/아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|근린/.test(L.usage||"")?`<span class="gradechip" data-key="${L.item_key}"></span>`:""}${L.compete>1?`<span class="mbd blue">경쟁분산 ${L.compete}건</span>`:""}${L.violation?`<span class="mbd red">위반건축물</span>`:""}${L.baedang>0?`<span class="mbd amber">배당요구 ${L.baedang}건</span>`:""}</div><div class="mcap"><div class="mcase">${L.court||""}${L.case_no?" · "+L.case_no:""}${(L.obj_no&&String(L.obj_no)!=="1")?" 물번"+L.obj_no:""}</div><div class="mreg">${L.address||"-"}</div><div class="mtyp">${L.usage_disp||L.usage||""}${L.area_text?" · "+L.area_text:""}${L.zone?" · "+L.zone:""} <span class="kapt" data-key="${L.item_key}"></span></div><div class="mprices"><span>감정 <b>${won(L.appraisal_price)}</b></span><span class="hot">최저 <b>${won(L.min_price)}</b></span>${L.group==="차량외"?`<span class="ecarv" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:(/아파트|오피스텔/.test(L.usage||"")?`<span class="aptest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:(/다세대|연립|빌라|도시형/.test(L.usage||"")?`<span class="villaest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:""))}</div><div class="mbot"><span class="dday">${dd.date}${dd.label?" "+dd.label:""}</span><span class="mres">${rr.status}${rr.count?" "+rr.count:""}${rr.pct?" "+rr.pct:""}</span><span class="mhit">조회 ${(L.hit_count||0).toLocaleString()}</span></div></div></div></a>`);
       return `<tr data-idx="${i}"${L.baedang!=null?` data-baedang="${L.baedang}"`:""}${L.trades_3m!=null?` data-t3m="${L.trades_3m}"`:""} onclick="window.open('${href}','_blank')" style="cursor:pointer">
         <td class="cmid"><input type="checkbox" class="rowchk" value="${L.item_key}" onclick="event.stopPropagation()"></td>
@@ -1343,7 +1358,7 @@ async function doSearch(){
           ${L.tags?`<div class="tags">${L.tags}</div>`:""}</div></div></td>
         <td class="cmid" data-label="용도" style="white-space:normal;word-break:break-all;">${uCell}</td>
         <td class="cnum" data-label="감정가·최저가·시세"><div class="price">${won(L.appraisal_price)}</div><div class="low">${won(L.min_price)}</div>${hasWin?`<div class="won">낙찰 : ${won(L.sale_price)}</div>`:(isSold?`<div class="noinfo">낙찰가 정보 없음</div>`:((!isSold&&L.sale_price)?`<div class="prevwon">이전 낙찰 : ${won(L.sale_price)}</div>`:""))}${(hasWin&&L.sale_2nd_price)?`<div class="kv">2등 ${won(L.sale_2nd_price)}</div>`:""}${L.group==="차량외"?`<div class="ecarv" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:(/아파트|오피스텔/.test(L.usage||"")?`<div class="aptest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:(/다세대|연립|빌라|도시형/.test(L.usage||"")?`<div class="villaest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:""))}</td>
-        <td class="cmid" data-label="매각기일"><div>${dd.date}</div>${dd.label?`<div class="kv" style="color:${dd.color};font-weight:600">${dd.label}</div>`:""}${(isSold&&L.bid_count)?`<div class="hbid">입찰 ${L.bid_count}명</div>`:""}${isSold?(L.winner_name?`<div class="hwin">낙찰 ${L.winner_name}</div>`:`<div class="noinfo">낙찰자 정보 없음</div>`):""}</td>
+        <td class="cmid" data-label="매각기일"><div>${dd.date}</div>${dd.label?`<div class="kv" style="color:${dd.color};font-weight:600">${dd.label}</div>`:""}${(isSold&&L.bid_count)?`<div class="hbid">입찰 ${L.bid_count}명</div>`:""}${isSold?(L.winner_name?`<div class="hwin">낙찰 ${L.winner_name}</div>`:`<div class="noinfo">낙찰자 정보 없음</div>`):""}${predBadge}</td>
         <td class="cmid" data-label="결과"><div style="color:${rc};font-weight:600">${rr.status}</div>${rr.count?`<div class="kv" style="color:${rc}">${rr.count}</div>`:""}${rr.pct?`<div class="kv" style="color:${rc}">${rr.pct}</div>`:""}${(hasWin&&salePct!=null)?`<div class="hwin">낙찰 ${salePct}%</div>`:""}</td>
         <td class="cmid" data-label="조회수">${(L.hit_count||0).toLocaleString()}</td></tr>`;
     }).join("");
