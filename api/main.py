@@ -4168,10 +4168,14 @@ def _est_col_warm() -> None:
         # 아파트 + 오피스텔(둘 다 apt_ests 경로) — 오피 제외 시 목록에서 매번 compute=true 실시간계산(8초)이 재발.
         #  대상 = est_price 미기록(목록 차익) OR apt: 캐시 미보유(상세 첫진입 2.3초 콜드). 한 번의 apt_info 계산으로
         #  둘 다 채움(molit 중복호출 0). NOT EXISTS 자가제외라 소량배치(400)가 백로그를 점진 드레인 + 신규 자동유지.
+        #  aptneg 최근 마커(3일) 제외 — 실거래無 시군구는 _apt_trades가 빈결과를 캐시 안 해(3078행) 매 사이클 molit
+        #  재호출 낭비 + top-400이 그 시군구로 클로깅돼 오래된 available이 도달 못하던 것 방지(3일마다만 재검).
         cur.execute("""SELECT item_key FROM items i WHERE data_class='현황'
                        AND (usage_name ILIKE '%아파트%' OR usage_name ILIKE '%오피스텔%')
                        AND (est_price IS NULL
                             OR NOT EXISTS (SELECT 1 FROM api_cache c WHERE c.cache_key = 'apt:' || i.item_key))
+                       AND NOT EXISTS (SELECT 1 FROM api_cache n WHERE n.cache_key = 'aptneg:' || i.item_key
+                                       AND n.updated_at > now() - interval '3 days')
                        ORDER BY (est_price IS NULL) DESC, sell_date_d DESC NULLS LAST LIMIT 400""")
         keys = [r[0] for r in cur.fetchall()]
         if not keys:
@@ -4179,6 +4183,7 @@ def _est_col_warm() -> None:
 
         apt_rows = []   # (cache_key, apt_info) — apt: 캐시는 est_price처럼 '직접 SQL' 업서트. cache_save(REST 4s)는
                         #  부하 시 유실돼 로컬SQLite에만 남고 Supabase 미반영→CloudType이 못 읽음(소량검증서 10건중 4건만 저장 확인).
+        neg_rows = []   # unavailable(실거래無 등) item_key → aptneg 마커. 매 사이클 molit 재호출·클로깅 방지(3일 후 재검).
         def _one(k):
             try:
                 _ai = _apt_info_compute(k, 12)
@@ -4186,6 +4191,8 @@ def _est_col_warm() -> None:
                 #  endpoint(8702)와 동일 가드: available=True만 저장(쿼터 실패=available False → 미저장 → 다음 주기 재시도).
                 if isinstance(_ai, dict) and _ai.get("available") and _ai.get("v", 0) >= APT_VER:
                     apt_rows.append(("apt:" + k, _ai))
+                elif isinstance(_ai, dict):
+                    neg_rows.append(k)   # available=False(실거래無 등) → aptneg 마커로 3일간 재시도 제외
                 v = _apt_est_value(_ai)
                 if v and v.get("price"):
                     return (int(v["price"]), k)
@@ -4204,8 +4211,12 @@ def _est_col_warm() -> None:
             cur.executemany("INSERT INTO api_cache (cache_key, data) VALUES (%s, %s::jsonb) "
                             "ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
                             [(ck, _json.dumps(d, ensure_ascii=False)) for ck, d in apt_rows])
+        if neg_rows:    # aptneg 마커(updated_at만 갱신) — 3일간 SELECT서 제외해 molit 재호출·클로깅 방지. 3일 후 재검(신규 실거래·쿼터회복 반영)
+            cur.executemany("INSERT INTO api_cache (cache_key, data) VALUES (%s, '{\"available\": false}'::jsonb) "
+                            "ON CONFLICT (cache_key) DO UPDATE SET updated_at = now()",
+                            [("aptneg:" + k,) for k in neg_rows])
         # 0건이어도 항상 로그 → 루프 가동 확인 + molit 쿼터소진(계산 0) 판별
-        print(f"[est_col] {len(keys)}건 시도 → est_price {len(vals)}건 · apt:예열 {len(apt_rows)}건", flush=True)
+        print(f"[est_col] {len(keys)}건 시도 → est_price {len(vals)}건 · apt:예열 {len(apt_rows)}건 · neg {len(neg_rows)}건", flush=True)
         cur.close(); conn.close()
     except Exception as e:
         print(f"[est_col] skip {str(e)[:60]}", flush=True)
