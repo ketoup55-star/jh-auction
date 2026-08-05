@@ -4162,7 +4162,9 @@ def _est_col_warm() -> None:
         return
     try:
         import psycopg
-        conn = psycopg.connect(dsn, autocommit=True, connect_timeout=15)
+        # prepare_threshold=None: 클라 prepared statement 비활성 — Supabase 풀러(pgbouncer)가 커넥션 재사용 시
+        #  'prepared statement "_pg3_0" already exists' 충돌로 사이클 통째 실패하던 것 방지(executemany 3개=est·apt:·aptneg).
+        conn = psycopg.connect(dsn, autocommit=True, connect_timeout=15, prepare_threshold=None)
         cur = conn.cursor()
         cur.execute("SET statement_timeout=90000")
         # 아파트 + 오피스텔(둘 다 apt_ests 경로) — 오피 제외 시 목록에서 매번 compute=true 실시간계산(8초)이 재발.
