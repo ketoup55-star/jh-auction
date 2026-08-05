@@ -53,7 +53,9 @@
   .ug{border-bottom:1px dashed var(--line);padding:7px 0;}.ug:last-child{border-bottom:none;}
   .ugrid{display:grid;grid-template-columns:repeat(5,max-content);gap:10px 22px;margin-top:5px;}
   .note{font-size:11px;color:var(--muted);}
-  .special{margin-bottom:6px;display:flex;justify-content:center;}
+  .special{margin-bottom:6px;display:flex;justify-content:center;position:relative;}
+  /* 특수물건·유형별 패널은 absolute 오버레이 — 열어도 아래 목록(150건)을 안 밀어 리플로우/리페인트 렉 제거 */
+  .special > .sppanel{position:absolute;top:calc(100% + 6px);left:0;width:100%;z-index:60;margin:0;max-height:min(65vh,540px);overflow:auto;box-shadow:0 12px 32px rgba(20,40,80,.22);}
   .spbtn{background:var(--primary);color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;}
   .prem-badge{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.04em;color:#7a5c00;
     background:linear-gradient(180deg,#ffe38a,#ffcf45);border:1px solid #e8b830;border-radius:4px;
@@ -385,14 +387,14 @@
   <div class="special">
     <button class="spbtn" onclick="toggleSpecial()">특수물건 검색 필터<span id="spCnt"></span></button>
     <button class="spbtn" onclick="toggleType()" style="margin-left:8px;background:#2c5db0">유형별 필터 <span class="prem-badge">PREMIUM</span><span id="tpCnt"></span></button>
-  </div>
-  <div class="sppanel" id="sppanel" style="display:none">
-    <div class="spnote">* 종합검색 시 특수물건 옵션은 조건 저장이 불가능하며 별도로 특수물건 검색을 활용하면 저장이 가능합니다.</div>
-    <div class="spgrid" id="spgrid"></div>
-  </div>
-  <div class="sppanel" id="typepanel" style="display:none">
-    <div class="spnote">* 유형별 필터 — 항목은 순차적으로 추가됩니다.</div>
-    <div class="spgrid" id="typegrid"></div>
+    <div class="sppanel" id="sppanel" style="display:none">
+      <div class="spnote">* 종합검색 시 특수물건 옵션은 조건 저장이 불가능하며 별도로 특수물건 검색을 활용하면 저장이 가능합니다.</div>
+      <div class="spgrid" id="spgrid"></div>
+    </div>
+    <div class="sppanel" id="typepanel" style="display:none">
+      <div class="spnote">* 유형별 필터 — 항목은 순차적으로 추가됩니다.</div>
+      <div class="spgrid" id="typegrid"></div>
+    </div>
   </div>
 
   <div class="btns">
