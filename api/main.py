@@ -5507,8 +5507,8 @@ def _get_similar(item_key: str):
     if item_key in _similar_cache:
         return _similar_cache[item_key]
     c = _compute_similar(item_key)
-    if c:                                 # 양수만 캐시(0/불명은 캐시 안 함 → 할당량 리셋 후 자동 재조회)
-        _similar_cache[item_key] = c
+    if c is not None:                     # 0(수요없음)도 캐시 — _compute_similar는 geo_ok 신뢰 시에만 0 반환(불명/쿼터=None).
+        _similar_cache[item_key] = c      #  기존 `if c:`는 진짜 0을 falsy로 빼 매 로딩 재계산·프론트 5회 재폴링(7.5초)의 주범이었음.
         _similar_dirty = True
     return c
 

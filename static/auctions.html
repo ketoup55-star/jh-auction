@@ -1117,7 +1117,7 @@ async function fillSimilar(my, attempt){
   attempt=attempt||0;
   const els=[...document.querySelectorAll('.kapt[data-key]')].filter(e=>!e.dataset.simdone);
   if(!els.length) return;
-  const keys=els.map(e=>e.dataset.key);
+  const keys=[...new Set(els.map(e=>e.dataset.key))];   // 표+카드 뷰가 같은 data-key를 2번 갖던 것 dedup → 조회 청크·호출수 절반
   const chunks=[]; for(let i=0;i<keys.length;i+=60) chunks.push(keys.slice(i,i+60));
   const map={}, okKeys=new Set();
   await Promise.all(chunks.map(async c=>{
