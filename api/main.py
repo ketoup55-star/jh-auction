@@ -4294,6 +4294,12 @@ def _keepwarm_loop() -> None:
                 httpx.get(_base + "/auction/brands", timeout=30)     # 차량 브랜드 버킷(30분캐시) 웜 유지 — 콜드 15초(vehicle_specs 전량 페이징) 방지
                 httpx.get(_base + "/auctions", params={"sell_from": str(_today - timedelta(days=92)),  # 최근 3개월 과거(낙찰사례) 목록 웜
                           "sell_to": str(_today), "limit": "1"}, timeout=30)   # keepalive서 빠져 과거검색 첫히트 콜드 2초이던 것 방지(웜 255ms)
+                # 물건통계(stats) 콜드 방지 — 14 count쿼리(콜드 ~76초)를 흔한 조합(전체+group별)으로 미리 계산·캐시 웜.
+                #  (psycopg 미전환 이유: _filters→SQL 변환기가 op 다양해 통계 오류 리스크 → 워머 예방이 안전. 주인님 지정)
+                _sp = {"sell_from": str(_today), "sell_to": str(_today + timedelta(days=92))}
+                httpx.get(_base + "/auctions/stats", params=_sp, timeout=90)                    # 전체(필터 없음)
+                for _g in ("주거용", "상가", "차량외"):
+                    httpx.get(_base + "/auctions/stats", params={**_sp, "group": _g}, timeout=90)   # group별
         except Exception:
             pass
         _t.sleep(240)                               # 4분마다 — 콜드(플랜/버퍼 만료) 전에 재데움
