@@ -7087,6 +7087,62 @@ def auction_nearby_trades(item_key: str, months: int = Query(12, le=24), defer: 
 # ───────────── 아파트 유사거래(법정동 월별 표 + 반경 1km 단지별 지도) ─────────────
 _STD_AREAS = [39, 49, 59, 74, 84, 99, 114, 134, 164]   # 표준 전용면적(평형대 클러스터 스냅용)
 _aptmap_cache: dict = {}
+_sgg_cent_cache = None
+_lawd_inv_cache = None
+
+
+def _lawd_inv() -> dict:
+    """LAWD_CD(5자리) → '시도 시군구[ 구]' 이름 (폐지코드 제외). 지오코딩 prefix용."""
+    global _lawd_inv_cache
+    if _lawd_inv_cache is None:
+        from auction_analysis.lawd_codes import LAWD, _DEAD_CODES
+        _lawd_inv_cache = {c: n for n, c in LAWD.items() if c not in _DEAD_CODES}
+    return _lawd_inv_cache
+
+
+def _sgg_centroids() -> dict:
+    """전국 시군구 대표좌표 {LAWD_CD: (lng,lat)} — 인접 시군구 판정용. 메모리+DB 영구캐시(시군구명 지오코딩 1회)."""
+    global _sgg_cent_cache
+    if _sgg_cent_cache is not None:
+        return _sgg_cent_cache
+    try:
+        c = auction_db.cache_get_many(["sgg_centroids"]).get("sgg_centroids")
+        if isinstance(c, dict) and c.get("v") == 1 and isinstance(c.get("d"), dict):
+            _sgg_cent_cache = {k: tuple(v) for k, v in c["d"].items() if v}
+            return _sgg_cent_cache
+    except Exception:
+        pass
+    names = list(_lawd_inv().items())   # (code, name)
+    try:
+        _geo_preload([n for _, n in names])
+    except Exception:
+        pass
+    out = {}
+    with _cf.ThreadPoolExecutor(max_workers=10) as ex:
+        for (cd, _n), ll in zip(names, ex.map(lambda x: _geocode(x[1]), names)):
+            if ll:
+                out[cd] = ll
+    _save_geo_cache()
+    _sgg_cent_cache = out
+    try:
+        auction_db.cache_save("sgg_centroids", {"v": 1, "d": {k: list(v) for k, v in out.items()}})
+    except Exception:
+        pass
+    return out
+
+
+def _nearby_lawds(lng: float, lat: float, own_lawd: str, buffer_m: int = 4000) -> list:
+    """물건 좌표 반경 1km가 걸칠 수 있는 인접 시군구 코드들(대표좌표 buffer_m 이내). own 포함.
+    ★표시는 여전히 1km 필터 — 여기선 '어느 구의 실거래를 데이터로 부를지' 후보만 넓힌다
+    (국토부 실거래는 시군구 단위 조회라, 경계 물건은 옆 구 단지가 통째 누락되던 것 복구)."""
+    out = {own_lawd} if own_lawd else set()
+    try:
+        for cd, ll in _sgg_centroids().items():
+            if haversine_m(lng, lat, ll[0], ll[1]) < buffer_m:
+                out.add(cd)
+    except Exception:
+        pass
+    return list(out)
 
 
 def _last_ym_labels(n: int = 12) -> list:
@@ -7186,23 +7242,26 @@ def apt_dong_table(item_key: str) -> dict:
 
 
 @app.get("/auction/apt_radius_map")
-def apt_radius_map(item_key: str, defer: bool = False) -> dict:
-    """아파트 상세: 경매물건 중심 반경 1km 내, 유사면적(±5㎡) 단지별 매매 거래건수(1/6/12개월)+평균가.
-    무거운 지오코딩(단지별 V-World)은 메모리+DB(aptmap:) 캐시. defer=1이면 백그라운드 계산 후 pending."""
+def apt_radius_map(item_key: str, band: float = 0, defer: bool = False) -> dict:
+    """아파트 상세: 경매물건 중심 반경 1km 내, 선택 면적대(±5㎡) 단지별 매매 거래건수(1/6/12개월)+평균가.
+    데이터는 반경에 걸치는 인접 시군구까지 병합(옆 구 단지 누락 방지)하되, ★표시는 반경 1km 필터 유지.
+    band(전용면적 center) 미지정=경매물건 전용면적. 무거운 지오코딩은 메모리+DB(aptmap:) 캐시. defer=1이면 pending."""
     import time as _t
     _now = _t.time()
-    _mem = _aptmap_cache.get(item_key)   # 3일 TTL — 새 실거래 반영(지오코딩은 _geo캐시 영구라 재계산도 빠름)
+    _bkey = int(round(band)) if band else 0
+    ck = "aptmap:" + item_key + (f":{_bkey}" if _bkey else "")
+    _mem = _aptmap_cache.get(ck)   # 3일 TTL — 새 실거래 반영(지오코딩은 _geo캐시 영구라 재계산도 빠름)
     if isinstance(_mem, dict) and _now - (_mem.get("_ts") or 0) < 259200:
         return _mem
     try:
-        db = auction_db.cache_get_many(["aptmap:" + item_key]).get("aptmap:" + item_key)
+        db = auction_db.cache_get_many([ck]).get(ck)
     except Exception:
         db = None
-    if isinstance(db, dict) and db.get("v") == 2 and _now - (db.get("_ts") or 0) < 259200:
-        _aptmap_cache[item_key] = db
+    if isinstance(db, dict) and db.get("v") == 3 and _now - (db.get("_ts") or 0) < 259200:
+        _aptmap_cache[ck] = db
         return db
     if defer:
-        _bg_fill(["aptmap:" + item_key], lambda _k: apt_radius_map(item_key))
+        _bg_fill([ck], lambda _k: apt_radius_map(item_key, band=band))
         return {"available": False, "pending": True}
     ctx = _apt_similar_ctx(item_key)
     if not ctx:
@@ -7210,30 +7269,46 @@ def apt_radius_map(item_key: str, defer: bool = False) -> dict:
     addr, lawd, dong, prop_area = ctx["addr"], ctx["lawd"], ctx["dong"], ctx["prop_area"]
     if not prop_area:
         return {"available": False, "reason": "전용면적 미상"}
+    pm = re.match(r"^(.*?(?:동|읍|면|리))\s+\d", addr)
+    jm = re.search(r"(?:동|읍|면|리)\s+(\d+(?:-\d+)?)", addr)
+    addr_jibun = jm.group(1) if jm else ""
     _sgg_toks = []
     for _tk in addr.split():
         if re.search(r"(동|읍|면|리|로|길|가|번길)$", _tk) or re.match(r"^\d", _tk):
             break
         _sgg_toks.append(_tk)
     sigungu_prefix = " ".join(_sgg_toks) or re.sub(r"\s+\S+$", "", addr)
-    pm = re.match(r"^(.*?(?:동|읍|면|리))\s+\d", addr)
-    jm = re.search(r"(?:동|읍|면|리)\s+(\d+(?:-\d+)?)", addr)
-    addr_jibun = jm.group(1) if jm else ""
     addr_prefix = pm.group(1) if pm else sigungu_prefix
     _geo_preload([(addr_prefix + " " + addr_jibun).strip(), addr])
     pc = (_geocode((addr_prefix + " " + addr_jibun).strip()) if addr_jibun else None) or _geocode(addr)
     if not pc:
         return {"available": False, "reason": "물건 좌표 변환 실패"}
-    cand = [t for t in _apt_trades(lawd) if abs((t.get("area") or 0) - prop_area) <= 5]
-    blds: dict = {}
-    for t in cand:
-        blds.setdefault(f"{t.get('umd')} {t.get('jibun')}", []).append(t)
-    keys = list(blds.keys())[:600]
+    target = float(band) if band else float(prop_area)
+    # ★인접 시군구 병합 — 각 구의 실거래를 '그 구 이름'을 prefix로 지오코딩(다른 구로 잘못 찍히는 것 방지)
+    nearby = _nearby_lawds(pc[0], pc[1], lawd)
+    inv = _lawd_inv()
+    trades_by_pref = []
+    pool_all = []
+    for lw in nearby:
+        pref = inv.get(lw)
+        if not pref:
+            continue
+        tr = _apt_trades(lw)
+        if tr:
+            trades_by_pref.append((pref, tr))
+            pool_all.extend(tr)
+    bands = _apt_area_bands(pool_all, prop_area)                 # 면적대 선택지(this + 흔한 표준평형)
+    blds: dict = {}                                             # 완전주소(시군구 prefix + umd + jibun) → 거래들
+    for pref, tr in trades_by_pref:
+        for t in tr:
+            if abs((t.get("area") or 0) - target) <= 5:
+                blds.setdefault(f"{pref} {t.get('umd')} {t.get('jibun')}", []).append(t)
+    keys = list(blds.keys())[:900]
     coords: dict = {}
     if keys:
-        _geo_preload([sigungu_prefix + " " + k for k in keys])
+        _geo_preload(keys)
         with _cf.ThreadPoolExecutor(max_workers=8) as ex:
-            for k, ll in ex.map(lambda k: (k, _geocode(sigungu_prefix + " " + k)), keys):
+            for k, ll in ex.map(lambda k: (k, _geocode(k)), keys):
                 coords[k] = ll
         _save_geo_cache()
     from datetime import date as _date, timedelta as _td
@@ -7243,7 +7318,7 @@ def apt_radius_map(item_key: str, defer: bool = False) -> dict:
     complexes = []
     for k in keys:
         ll = coords.get(k)
-        if not ll or haversine_m(pc[0], pc[1], ll[0], ll[1]) > 1000:
+        if not ll or haversine_m(pc[0], pc[1], ll[0], ll[1]) > 1000:   # ★반경 1km 필터(표시 기준) — 유지
             continue
         ts = sorted(blds[k], key=lambda t: t.get("deal_date", ""), reverse=True)
         amts = [t.get("amount") or 0 for t in ts if t.get("amount")]
@@ -7257,13 +7332,14 @@ def apt_radius_map(item_key: str, defer: bool = False) -> dict:
                           "recent_date": ts[0].get("deal_date"), "recent_amount": ts[0].get("amount")})
     resolved = sum(1 for k in keys if coords.get(k))
     geo_ok = (not keys) or (resolved >= max(3, int(len(keys) * 0.3)))
-    result = {"available": True, "v": 2, "_ts": _now, "center": {"lat": pc[1], "lng": pc[0]},
+    result = {"available": True, "v": 3, "_ts": _now, "center": {"lat": pc[1], "lng": pc[0]},
               "radius": 1000, "dong": dong, "prop_area": prop_area,
+              "cur_area": round(target, 1), "bands": bands,
               "geo_ok": geo_ok, "complexes": complexes}
     if geo_ok:
-        _aptmap_cache[item_key] = result
+        _aptmap_cache[ck] = result
         try:
-            auction_db.cache_save("aptmap:" + item_key, result)
+            auction_db.cache_save(ck, result)
         except Exception:
             pass
     return result

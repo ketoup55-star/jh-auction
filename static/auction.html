@@ -765,7 +765,6 @@ async function load(){
 
         <div id="mockBidBox"></div>
         <div id="bldgBox"></div>
-        <div id="mapBox"></div>
 
         <div class="row2">
           ${(d.schedule||[]).length?`<div class="card"><h2>기일현황</h2><table class="gridtbl">
@@ -845,6 +844,7 @@ async function load(){
     <div id="encarBox"></div>
     <div id="reviewBox"></div>
     <div id="summaryBox"></div>
+    <div id="mapBox"></div>
     <div id="aptBox"></div>
     <div id="dagaguBox"></div>
     <div id="shortSaleBox"></div>
@@ -2726,14 +2726,15 @@ async function submitMockBid(){
 
 // ── 아파트: 법정동 월별 유사거래 표 + 반경 1km 단지별 유사거래 지도(카카오맵) ──
 function _hav(lat1,lng1,lat2,lng2){const R=6371000,rad=Math.PI/180,dLat=(lat2-lat1)*rad,dLng=(lng2-lng1)*rad,a=Math.sin(dLat/2)**2+Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
-let _aptTbl=null,_aptBand="this",_aptPeriod=12,_aptMap=null,_aptMapData=null,_aptMapPer=12,_aptOv=[],_aptPop=null,_aptHub=-1;
+let _aptTbl=null,_aptBand="this",_aptPeriod=12,_aptMap=null,_aptMapData=null,_aptMapPer=12,_aptOv=[],_aptPop=null,_aptHub=-1,_aptSubjOv=null,_aptMapArea=0;
 async function loadAptSimilar(){
   const box=document.getElementById("mapBox"); if(!box) return;
   if(!/아파트/.test((DETAIL&&DETAIL.usage)||"")) return;
   let tbl=null;
   try{ tbl=await (await fetch("/auction/apt_dong_table?item_key="+encodeURIComponent(itemKey))).json(); }catch(e){}
   const hasTbl=tbl&&tbl.available&&(tbl.bands||[]).length;
-  box.innerHTML=`<div class="card" id="aptMapCard"><h2>반경 1km 단지별 유사거래<span class="mapsub">전용 ±5㎡ · 매매</span></h2>
+  box.innerHTML=`<div class="card" id="aptMapCard"><h2>반경 1km 단지별 유사거래<span class="mapsub">전용 ±5㎡ · 매매 · 인접 시군구 포함</span></h2>
+      <div id="aptMapAreas" class="grpseg" style="margin-bottom:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
       <div id="aptMapTabs" class="grpseg" style="margin-bottom:6px"></div>
       <div id="aptMapSum" class="sub" style="margin:2px 0 8px"></div>
       <div id="aptkmap" style="width:100%;height:400px;border-radius:10px;border:1px solid var(--line);background:#eef1f5"></div>
@@ -2775,28 +2776,50 @@ function _drawAptTbl(){
   document.getElementById("aptTblT").innerHTML=`<thead><tr><th style="${th};text-align:left">거래월</th><th style="${th};text-align:right">거래 건수</th><th style="${th};text-align:right">평균가</th><th style="${th};text-align:right">가격대(최저~최고)</th></tr></thead><tbody>${rows||`<tr><td colspan="4" style="${cell};color:var(--muted)">해당 기간 거래 없음</td></tr>`}</tbody>`;
   document.getElementById("aptTblSum").innerHTML=`총 거래 <b>${tot}건</b> · 월평균 <b>${mavg.toFixed(1)}건</b> · 평균가 <b>${avg?won(avg):"—"}</b>`;
 }
-async function _loadAptMap(){
-  let r=null;
-  try{ r=await (await fetch("/auction/apt_radius_map?defer=1&item_key="+encodeURIComponent(itemKey))).json(); }catch(e){}
-  for(let t=0;r&&r.pending&&t<6;t++){ await new Promise(rs=>setTimeout(rs,3000)); try{ r=await (await fetch("/auction/apt_radius_map?defer=1&item_key="+encodeURIComponent(itemKey))).json(); }catch(e){break;} }
+async function _loadAptMap(band){   // band 미지정=경매물건 전용면적. 지정 시 그 면적대로 지도 데이터만 교체(지도객체는 재사용)
   const note=document.getElementById("aptMapNote");
-  if(!r||!r.available||!r.center){ if(note)note.innerHTML='<b style="color:#9a8f00">인근 실거래 없음</b> — 반경 1km 내 유사 면적 거래가 없습니다.'; return; }
-  _aptMapData=r;
+  const q="/auction/apt_radius_map?defer=1&item_key="+encodeURIComponent(itemKey)+(band?("&band="+band):"");
+  let r=null;
+  try{ r=await (await fetch(q)).json(); }catch(e){}
+  for(let t=0;r&&r.pending&&t<8;t++){ await new Promise(rs=>setTimeout(rs,3000)); try{ r=await (await fetch(q)).json(); }catch(e){break;} }
+  if(!r||!r.available||!r.center){ if(note)note.innerHTML='<b style="color:#9a8f00">인근 실거래 없음</b> — 반경 1km 내 이 면적 거래가 없습니다.'; _renderAptMapAreas((r&&r.bands)||[]); return; }
+  _aptMapData=r; _aptMapArea=(r.cur_area||0);
+  _renderAptMapAreas(r.bands||[]);
   try{ await loadKakaoSDK(); }catch(e){ if(note)note.textContent="지도 로드 실패 — 카카오 도메인 등록을 확인하세요."; return; }
   const center=new kakao.maps.LatLng(r.center.lat,r.center.lng);
-  _aptMap=new kakao.maps.Map(document.getElementById("aptkmap"),{center,level:6});
-  try{ addMapTools(_aptMap, document.getElementById("aptkmap")); }catch(e){}
-  new kakao.maps.Circle({map:_aptMap,center,radius:1000,strokeWeight:2,strokeColor:"#1565ff",strokeOpacity:.7,fillColor:"#1565ff",fillOpacity:.04});
+  if(!_aptMap){   // 최초 1회: 지도·반경원·기간탭·클릭 핸들러 (band 변경 시엔 재생성 안 함)
+    _aptMap=new kakao.maps.Map(document.getElementById("aptkmap"),{center,level:6});
+    try{ addMapTools(_aptMap, document.getElementById("aptkmap")); }catch(e){}
+    new kakao.maps.Circle({map:_aptMap,center,radius:1000,strokeWeight:2,strokeColor:"#1565ff",strokeOpacity:.7,fillColor:"#1565ff",fillOpacity:.04});
+    document.getElementById("aptMapTabs").innerHTML=`<span style="font-size:12px;color:var(--muted);margin-right:4px">기간</span>`+[1,6,12].map(n=>`<button type="button" class="eseg aptmapper" data-n="${n}">${n}개월</button>`).join("");
+    document.querySelectorAll(".aptmapper").forEach(b=>b.addEventListener("click",()=>{_aptMapPer=+b.dataset.n;_drawAptPins();}));
+    kakao.maps.event.addListener(_aptMap,"click",()=>{ if(_aptPop){_aptPop.setMap(null);_aptPop=null;} });
+  }
+  // 경매물건 소재 단지(hub) 계산 + 위치핀(hub 없을 때만) — band 변경 시 재계산하므로 기존 위치핀 제거 후 재생성
   _aptHub=-1; let hd=1e9; (r.complexes||[]).forEach((c,i)=>{ const d=_hav(r.center.lat,r.center.lng,c.lat,c.lng); if(d<hd){hd=d;_aptHub=(d<150?i:-1);} });
-  if(_aptHub<0){ const subj=document.createElement("div"); subj.className="mflag subject"; subj.title="경매물건";  // 소재 단지에 거래 없을 때만 빨간 위치핀(있으면 그 단지 깃발이 빨강)
-    new kakao.maps.CustomOverlay({map:_aptMap,position:center,yAnchor:1,zIndex:998,content:subj}).setMap(_aptMap); }
-  document.getElementById("aptMapTabs").innerHTML=`<span style="font-size:12px;color:var(--muted);margin-right:4px">기간</span>`+[1,6,12].map(n=>`<button type="button" class="eseg aptmapper" data-n="${n}">${n}개월</button>`).join("");
-  document.querySelectorAll(".aptmapper").forEach(b=>b.addEventListener("click",()=>{_aptMapPer=+b.dataset.n;_drawAptPins();}));
-  kakao.maps.event.addListener(_aptMap,"click",()=>{ if(_aptPop){_aptPop.setMap(null);_aptPop=null;} });
+  if(_aptSubjOv){ _aptSubjOv.setMap(null); _aptSubjOv=null; }
+  if(_aptHub<0){ const subj=document.createElement("div"); subj.className="mflag subject"; subj.title="경매물건";
+    _aptSubjOv=new kakao.maps.CustomOverlay({map:_aptMap,position:center,yAnchor:1,zIndex:998,content:subj}); _aptSubjOv.setMap(_aptMap); }
+  if(_aptPop){_aptPop.setMap(null);_aptPop=null;}
   _drawAptPins();
   const _cx=(r.complexes||[]).filter(c=>c.lat&&c.lng);   // 단지 분포에 맞춰 지도 범위 자동조정(밀집 시 확대해 겹침 완화)
   if(_cx.length>=2){ const bb=new kakao.maps.LatLngBounds(); bb.extend(center); _cx.forEach(c=>bb.extend(new kakao.maps.LatLng(c.lat,c.lng))); try{ _aptMap.setBounds(bb,36,36,36,36); }catch(e){} }
-  if(note) note.innerHTML=(r.complexes||[]).length?"":"반경 1km 내 유사 면적(전용 ±5㎡) 매매 거래가 없습니다 — 대형·희소 평형이라 인근에 같은 크기 거래가 드뭅니다. 아래 <b>법정동 표</b>에서 동 전체 거래를 확인하세요.";
+  else { try{ _aptMap.setLevel(6); _aptMap.setCenter(center); }catch(e){} }
+  if(note) note.innerHTML=(r.complexes||[]).length?"":"반경 1km 내 이 면적(전용 ±5㎡) 매매 거래가 없습니다 — 위 <b>면적</b> 탭에서 다른 평형대를 선택하거나 아래 <b>법정동 표</b>를 확인하세요.";
+}
+function _renderAptMapAreas(bands){   // 지도 면적대 선택 탭(표와 동일 스타일). 선택 시 band 재요청
+  const box=document.getElementById("aptMapAreas"); if(!box) return;
+  if(!bands||!bands.length){ box.innerHTML=""; return; }
+  const lb=b=>b.key==="this"?`${Math.floor(b.center)}㎡형`:`${b.key}㎡형`;
+  box.innerHTML=`<span style="font-size:12px;color:var(--muted);margin-right:2px">면적</span>`
+    +bands.map(b=>`<button type="button" class="eseg aptmaparea" data-c="${b.center}" data-k="${b.key}">${lb(b)}${b.key==="this"?" ·이물건":""}</button>`).join("");
+  box.querySelectorAll(".aptmaparea").forEach(b=>b.addEventListener("click",()=>{
+    if(b.classList.contains("on")) return;
+    box.querySelectorAll(".aptmaparea").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+    const nt=document.getElementById("aptMapNote"); if(nt)nt.textContent="면적대 변경 중…";
+    _loadAptMap(b.dataset.k==="this"?0:(+b.dataset.c));   // this는 band 미지정(경매물건 전용)
+  }));
+  box.querySelectorAll(".aptmaparea").forEach(x=>x.classList.toggle("on", Math.abs((+x.dataset.c)-(_aptMapArea||0))<0.6));
 }
 function _drawAptPins(){
   document.querySelectorAll(".aptmapper").forEach(x=>x.classList.toggle("on",+x.dataset.n===_aptMapPer));
