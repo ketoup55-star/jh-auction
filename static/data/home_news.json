@@ -2,95 +2,104 @@
  "items": [
   {
    "keyword": "부동산 정책",
-   "title": "[속보]과반 “부동산도 주식도 잘못” 30대의 불만-한길리서치",
-   "link": "https://www.munhwa.com/article/11607300",
-   "image": "https://wimg.munhwa.com/news/cms/2026/08/05/news-p.v1.20260805.601329324bcb49d7be0d545f4cf037f7_R.jpg",
-   "source": "문화일보",
-   "published": "2026-08-05T08:41:31+09:00",
+   "title": "[이슈&리서치] 이재명 정부 ‘부동산 정책’ 국민 57.6%가 잘못…국민 62.5%는 검 ‘보완수사권 필요’",
+   "link": "http://www.issueinfact.com/news/articleView.html?idxno=89321",
+   "image": "http://www.issueinfact.com/news/thumbnail/202608/89321_47808_357_v150.jpg",
+   "source": "이슈인팩트",
+   "published": "2026-08-06T09:06:25+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "케이뱅크, 생활·재테크 서비스 확대…통신비 캐시백 제공",
+   "link": "https://www.digitaltoday.co.kr/news/articleView.html?idxno=690414",
+   "image": "https://cdn.digitaltoday.co.kr/news/photo/202608/690414_638407_5615.jpg",
+   "source": "디지털투데이 (DigitalToday)",
+   "published": "2026-08-06T09:00:01+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "서울은 공급 확대, 이천은 '미분양 늪'… 입주폭탄·대출규제에 얼어붙은 주택시장",
+   "link": "https://www.dampannews.com/news/articleView.html?idxno=11153",
+   "image": "https://cdn.dampannews.com/news/photo/202608/11153_11738_3249.jpg",
+   "source": "서희신문",
+   "published": "2026-08-06T08:32:55+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "[데스크리포트 8월] 세금 때려서는 집값 못 잡는다?",
-   "link": "https://www.businesspost.co.kr/BP?command=article_view&num=443957",
-   "image": "https://www.businesspost.co.kr/news/photo/202608/20260805083509_208342.jpg",
-   "source": "비즈니스포스트",
-   "published": "2026-08-05T08:37:51+09:00",
+   "title": "\"임대주택 공급 위축 우려\" \"재분배인지 집값안정인지 불분명\"…학계 쓴소리",
+   "link": "https://www.asiae.co.kr/article/2026080607331949263",
+   "image": "https://cphoto.asiae.co.kr/listimglink/1/2026080608543071421_1785974070.png",
+   "source": "아시아경제",
+   "published": "2026-08-06T07:33:18+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "필요한 곳에 필요한 주택을 공급해야 집값이 잡힙니다 [최원철의 미래집]",
+   "link": "https://www.hankyung.com/article/202607317649Q",
+   "image": "https://img.hankyung.com/photo/202607/ZA.45124289.1.jpg",
+   "source": "한국경제",
+   "published": "2026-08-06T06:30:02+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "실거래 9.6억 창동 대단지를 7.5억에…아파트 '가성비' 경매 물건",
+   "link": "https://realty.chosun.com/site/data/html_dir/2026/08/05/2026080502400.html",
+   "image": "https://image.chosun.com/sitedata/image/202608/05/2026080502397_0.jpg",
+   "source": "realty.chosun.com",
+   "published": "2026-08-06T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "\"서울 외곽 국민평형 월세 200↑\"...치솟는 월세, 수도권 집값 자극 우려",
+   "link": "https://www.newspim.com/news/view/20260805001291",
+   "image": "https://img.newspim.com/news/2026/08/05/2608051612330500_t1.jpg",
+   "source": "뉴스핌",
+   "published": "2026-08-06T06:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "이 대통령 ‘부동산세 형평성’ 강조…국힘 \"징벌세\" 반발",
-   "link": "https://news.jtbc.co.kr/article/NB12311754",
-   "image": "https://thumb.jtbc.co.kr/photo/r600x0/news/cms/etc/2026/08/05/20260805081349856001.jpg",
-   "source": "JTBC 뉴스",
-   "published": "2026-08-05T08:15:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "8월 수도권 일반분양 1.9만가구 쏟아진다는데…대출 규제 속 내집마련 가능할까[실전재테크]",
-   "link": "https://www.asiae.co.kr/article/2026080413495375085",
-   "image": "https://cphoto.asiae.co.kr/listimglink/1/2025021914282638325_1739942907.jpg",
-   "source": "아시아경제",
-   "published": "2026-08-05T06:30:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "세제개편 다음은 대출규제 손질…잔금 풀고 전세 조인다",
-   "link": "https://www.digitaltoday.co.kr/news/articleView.html?idxno=689815",
-   "image": "https://cdn.digitaltoday.co.kr/news/photo/202608/689815_637823_5940.jpg",
-   "source": "디지털투데이 (DigitalToday)",
-   "published": "2026-08-05T06:21:30+09:00",
+   "title": "세금 올리고 전세대출도 조인다…비거주 규제에 전세시장 '긴장'",
+   "link": "https://www.news1.kr/realestate/general/6250239",
+   "image": "https://i3n.news1.kr/system/photos/2026/7/30/8033856/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-08-06T05:05:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "[서경규 교수의 부동산 에세이] ‘부동산정책 국민 대토론회’에 대한 단상",
-   "link": "https://www.yeongnam.com/web/view.php?key=20260804027220100",
-   "image": "https://www.yeongnam.com/mnt/file/202608/news-p.v1.20260310.630091fd79bb49faad9377a9ed7fde5d_R.png",
-   "source": "영남일보",
-   "published": "2026-08-05T06:00:00+09:00",
+   "title": "與서울시당, 오늘 부동산 정책 간담회…세제 개편안 논의",
+   "link": "https://www.yna.co.kr/amp/view/AKR20260805153400001",
+   "image": "https://img6.yna.co.kr/photo/yna/YH/2026/08/03/PYH2026080314170001300_P4.jpg",
+   "source": "연합뉴스",
+   "published": "2026-08-06T05:00:02+09:00",
    "has_time": true
   },
   {
-   "keyword": "집값",
-   "title": "\"집값 안정 한계\"… 與 서울시당 '공급특위' 꾸린다 - 머니투데이",
-   "link": "https://www.mt.co.kr/economy/2026/08/05/2026080419503365834",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=800,fit=cover,bg=whilte,f=auto,quality=high,sharpen=2,g=face/21/2026/08/2026080419503365834_1.jpg",
+   "keyword": "아파트 경매",
+   "title": "\"작은 집 살더라도 서울에\"...외곽으로, 소형평수로 눈높이 낮췄다 - 머니투데이",
+   "link": "https://www.mt.co.kr/estate/2026/08/06/2026080519274782798",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/08/2026080519274782798_1.jpg",
    "source": "머니투데이",
-   "published": "2026-08-05T03:52:00+09:00",
+   "published": "2026-08-06T03:00:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "대출규제",
-   "title": "\"엄마, 나 전학 갈래\" 학폭 피해 뒤 이사...서울→서울 땐 대출 규제? - 머니투데이",
-   "link": "https://www.mt.co.kr/finance/2026/08/05/2026080419435383104",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=784,fit=cover,bg=whilte,f=auto,quality=high,sharpen=2,g=face/21/2026/08/2026080419435383104_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-08-05T03:48:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "\"10억 번 근로자, 세금이 절반... 100억 번 부동산, 몇억 밖에\" - 머니투데이",
-   "link": "https://www.mt.co.kr/politics/2026/08/05/2026080419442886020",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=892,fit=cover,bg=whilte,f=auto,quality=high,sharpen=2,g=face/21/2026/08/2026080419442886020_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-08-05T03:46:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "[안혜리의 시선] 징벌적 과세는 집값 말고 정권을 잡았다",
-   "link": "https://www.joongang.co.kr/article/25450856",
-   "image": "https://assets.joongang.co.kr/images/share/ja-opengraph-img.png",
-   "source": "중앙일보",
-   "published": "2026-08-05T00:16:00+09:00",
-   "has_time": true
+   "keyword": "부동산 정책",
+   "title": "[경제인칼럼] 수도권 집값에 갇힌 부동산 정책, 지방은 누가 살리나",
+   "link": "https://v.daum.net/v/20260806060009621",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/06/551721-ibwJGih/20260806060010520nngm.jpg",
+   "source": "Daum",
+   "published": "2026-08-06T00:00:00+09:00",
+   "has_time": false
   }
  ],
- "count": 10,
- "date": "2026-08-05"
+ "count": 11,
+ "date": "2026-08-06"
 }
