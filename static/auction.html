@@ -903,7 +903,7 @@ async function loadAnalysis(attempt){
   const rightsCard=`<div class="svcard">
     <div class="sv-hd">등기사항 / 소멸여부</div>
     ${dt2.reg_view_date?`<div class="sv-row"><span class="lbl" style="color:var(--warn,#c47f00)">건물열람</span><span class="dt">${dt2.reg_view_date}</span></div>`:''}
-    ${ot?`<div class="sv-item">
+    ${(ot && !(d.rights||[]).some(r=>(r.type||'').includes('소유권')))?`<div class="sv-item">
         <div class="sv-l">
           <div class="sv-type">${esc(ot.type)||'소유권'}</div>
           <div class="sv-line">· ${ot.date||'-'}</div>
