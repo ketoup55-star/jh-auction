@@ -1,15 +1,6 @@
 {
  "items": [
   {
-   "keyword": "아파트 경매",
-   "title": "케이뱅크, 생활·재테크 서비스 확대…통신비 캐시백 제공",
-   "link": "https://www.digitaltoday.co.kr/news/articleView.html?idxno=690414",
-   "image": "https://cdn.digitaltoday.co.kr/news/photo/202608/690414_638407_5615.jpg",
-   "source": "디지털투데이 (DigitalToday)",
-   "published": "2026-08-06T09:00:01+09:00",
-   "has_time": true
-  },
-  {
    "keyword": "대출규제",
    "title": "서울은 공급 확대, 이천은 '미분양 늪'… 입주폭탄·대출규제에 얼어붙은 주택시장",
    "link": "https://www.dampannews.com/news/articleView.html?idxno=11153",
@@ -91,6 +82,6 @@
    "has_time": false
   }
  ],
- "count": 10,
+ "count": 9,
  "date": "2026-08-06"
 }

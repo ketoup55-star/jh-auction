@@ -117,7 +117,10 @@ _CORE_RE = re.compile("|".join(re.escape(t) for t in CORE_TERMS))
 
 
 def is_relevant(title, desc):
-    """무관 주제(광물·문학·미술품·자동차·코인 등) 제외 + 정치색(정쟁·선거·수사) 제외 + 부동산 핵심어 1개+ 필수.
+    """무관 주제(광물·문학·미술품·자동차·코인)·정치색·홍보성 제외 + 부동산 '주제' 판정.
+    부동산 핵심어가 제목에 있으면 통과. 제목에 없으면 본문요약(desc)에 '서로 다른' 핵심어 2개+ 필요.
+    → desc에 '부동산' 한 단어만 스치는 무관기사(예: 케이뱅크 통신비 캐시백 '…부동산 경매 정보 조회까지…') 차단.
+    (2026-08-06 사고: 핵심어 1회 스침만으로 통과 → 은행 생활서비스 기사가 홈에 노출)
     '경매/공매/낙찰/세금/대출' 단독으론 부족 — 광물 경매·미술품 경매 오염 방지."""
     t = (title or "") + " " + (desc or "")
     if _OFF_RE.search(t):
@@ -126,7 +129,9 @@ def is_relevant(title, desc):
         return False
     if _POLITICS_RE.search(t):                 # 정쟁·선거·수사·국정평가 등 정치색 제외(부동산 표현 걸쳐도)
         return False
-    return bool(_CORE_RE.search(t))
+    if _CORE_RE.search(title or ""):           # 제목에 핵심어 → 부동산 주제 확실(통과)
+        return True
+    return len(set(_CORE_RE.findall(desc or ""))) >= 2   # 제목에 없으면 본문에 '서로 다른' 핵심어 2개+(스침 1회 차단)
 
 
 class RecentNewsService(_BaseService):
