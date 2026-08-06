@@ -227,6 +227,9 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
                        "is_baseline": bool(x.get("is_baseline"))})
         if x.get("is_baseline") and baseline is None:
             baseline = {"date": x.get("reg_date"), "type": rtype, "holder": x.get("holder") or ""}
+    # 등기 목록은 접수일자순으로 정렬 — psycopg 직접쿼리(성능 최적화)엔 ORDER BY가 없어
+    #  DB 저장순(갑구/을구 뒤섞임)으로 나와 날짜가 뒤죽박죽이던 것 통일. is_baseline 플래그는 순서 무관.
+    rights.sort(key=lambda r: (r.get("date") or "9999-99-99"))
 
     # ── 임차인 ──
     tenants: list[dict] = []
