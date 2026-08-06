@@ -2727,7 +2727,7 @@ async function submitMockBid(){
 
 // ── 아파트: 법정동 월별 유사거래 표 + 반경 1km 단지별 유사거래 지도(카카오맵) ──
 function _hav(lat1,lng1,lat2,lng2){const R=6371000,rad=Math.PI/180,dLat=(lat2-lat1)*rad,dLng=(lng2-lng1)*rad,a=Math.sin(dLat/2)**2+Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
-let _aptTbl=null,_aptBand="this",_aptPeriod=12,_aptMap=null,_aptMapData=null,_aptMapPer=12,_aptOv=[],_aptPop=null,_aptHub=-1,_aptSubjOv=null,_aptMapArea=0;
+let _aptTbl=null,_aptBand="this",_aptPeriod=12,_aptMap=null,_aptMapData=null,_aptMapPer=12,_aptOv=[],_aptPop=null,_aptHub=-1,_aptSubjOv=null,_aptMapArea=0,_aptMapMode="count";
 async function loadAptSimilar(){
   const box=document.getElementById("mapBox"); if(!box) return;
   if(!/아파트/.test((DETAIL&&DETAIL.usage)||"")) return;
@@ -2793,8 +2793,10 @@ async function _loadAptMap(band){   // band 미지정=경매물건 전용면적.
     _aptMap=new kakao.maps.Map(document.getElementById("aptkmap"),{center,level:6});
     try{ addMapTools(_aptMap, document.getElementById("aptkmap")); }catch(e){}
     new kakao.maps.Circle({map:_aptMap,center,radius:1000,strokeWeight:2,strokeColor:"#1565ff",strokeOpacity:.7,fillColor:"#1565ff",fillOpacity:.04});
-    document.getElementById("aptMapTabs").innerHTML=`<span style="font-size:12px;color:var(--muted);margin-right:4px">기간</span>`+[1,6,12].map(n=>`<button type="button" class="eseg aptmapper" data-n="${n}">${n}개월</button>`).join("");
+    document.getElementById("aptMapTabs").innerHTML=`<span style="font-size:12px;color:var(--muted);margin-right:4px">기간</span>`+[1,6,12].map(n=>`<button type="button" class="eseg aptmapper" data-n="${n}">${n}개월</button>`).join("")
+      +`<span style="font-size:12px;color:var(--muted);margin:0 4px 0 14px">표시</span><button type="button" class="eseg aptmapmode" data-m="count">건수</button><button type="button" class="eseg aptmapmode" data-m="avg">월평균</button>`;
     document.querySelectorAll(".aptmapper").forEach(b=>b.addEventListener("click",()=>{_aptMapPer=+b.dataset.n;_drawAptPins();}));
+    document.querySelectorAll(".aptmapmode").forEach(b=>b.addEventListener("click",()=>{_aptMapMode=b.dataset.m;_drawAptPins();}));
     kakao.maps.event.addListener(_aptMap,"click",()=>{ if(_aptPop){_aptPop.setMap(null);_aptPop=null;} });
   }
   // 경매물건 소재 단지(hub) 계산 + 위치핀(hub 없을 때만) — band 변경 시 재계산하므로 기존 위치핀 제거 후 재생성
@@ -2823,24 +2825,34 @@ function _renderAptMapAreas(bands){   // 지도 면적대 선택 탭(표와 동�
   }));
   box.querySelectorAll(".aptmaparea").forEach(x=>x.classList.toggle("on", Math.abs((+x.dataset.c)-(_aptMapArea||0))<0.6));
 }
+function _aptRange(per){   // 기간(개월)의 실제 날짜 범위 — 백엔드 롤링 기준(1=30일·6=183일·12=365일 전 ~ 오늘)과 동일
+  const days=per===1?30:(per===6?183:365);
+  const to=new Date(), from=new Date(); from.setDate(from.getDate()-days);
+  const f=d=>`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}`;
+  return f(from)+"~"+f(to);
+}
 function _drawAptPins(){
   document.querySelectorAll(".aptmapper").forEach(x=>x.classList.toggle("on",+x.dataset.n===_aptMapPer));
+  document.querySelectorAll(".aptmapmode").forEach(x=>x.classList.toggle("on",x.dataset.m===_aptMapMode));
   _aptOv.forEach(o=>o.setMap(null)); _aptOv=[];
-  const per=String(_aptMapPer); let tot=0,dong=0;
+  const per=String(_aptMapPer), avg=(_aptMapMode==="avg");
+  const avgN=v=>_aptMapPer>1?(v/_aptMapPer).toFixed(1):String(v);   // 1개월은 그 자체가 월치라 정수 표시
+  let tot=0,dong=0;
   (_aptMapData.complexes||[]).forEach((c,i)=>{
     const cnt=(c.counts&&c.counts[per])||0; tot+=cnt; if(cnt>0)dong++;
     const isHub=(i===_aptHub);
     const el=document.createElement("div");
     el.className="aptflag"+(isHub?" hub":(cnt===0?" zero":""));
-    el.textContent=cnt;
+    el.textContent=avg?avgN(cnt):cnt;
     el.addEventListener("click",ev=>{ev.stopPropagation();_openAptPop(c);});
     _aptOv.push(new kakao.maps.CustomOverlay({map:_aptMap,position:new kakao.maps.LatLng(c.lat,c.lng),yAnchor:1,zIndex:isHub?999:(cnt>0?(20+cnt):8),content:el}));
   });
-  const sm=document.getElementById("aptMapSum"); if(sm) sm.innerHTML=`반경 1km 내 총 <b>${tot}건</b> · 거래 단지 <b>${dong}개</b>`;
+  const sm=document.getElementById("aptMapSum");
+  if(sm) sm.innerHTML=(avg?`반경 1km 내 월평균 <b>${avgN(tot)}건</b>`:`반경 1km 내 총 <b>${tot}건</b>`)+` · 거래 단지 <b>${dong}개</b> <span style="color:var(--muted)">· ${_aptRange(_aptMapPer)}</span>`;
   const items=(_aptMapData.complexes||[]).map((c,i)=>({c,i,cnt:(c.counts&&c.counts[per])||0})).filter(x=>x.cnt>0).sort((a,b)=>b.cnt-a.cnt);
   const lst=document.getElementById("aptMapList");
   if(lst){
-    lst.innerHTML=items.length?`<div style="font-size:12px;color:var(--muted);margin:2px 0 4px">단지별 거래 (${_aptMapPer}개월) · 클릭하면 지도에서 위치</div>`+items.map(x=>`<div class="aptrow" data-i="${x.i}" style="display:flex;justify-content:space-between;gap:10px;padding:6px 4px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer"><span style="color:#1565ff">${x.c.name}</span><span style="white-space:nowrap"><b>${x.cnt}건</b> · 평균 ${x.c.avg?won(x.c.avg):"-"}</span></div>`).join(""):"";
+    lst.innerHTML=items.length?`<div style="font-size:12px;color:var(--muted);margin:2px 0 4px">단지별 ${avg?"월평균 ":""}거래 (${_aptMapPer}개월 · ${_aptRange(_aptMapPer)}) · 클릭하면 지도에서 위치</div>`+items.map(x=>`<div class="aptrow" data-i="${x.i}" style="display:flex;justify-content:space-between;gap:10px;padding:6px 4px;border-bottom:1px solid var(--line);font-size:13px;cursor:pointer"><span style="color:#1565ff">${x.c.name}</span><span style="white-space:nowrap"><b>${avg?avgN(x.cnt)+"건/월":x.cnt+"건"}</b> · 평균 ${x.c.avg?won(x.c.avg):"-"}</span></div>`).join(""):"";
     lst.querySelectorAll(".aptrow").forEach(row=>row.addEventListener("click",()=>{const c=_aptMapData.complexes[+row.dataset.i]; if(_aptMap){_aptMap.setLevel(4);_aptMap.setCenter(new kakao.maps.LatLng(c.lat,c.lng));} _openAptPop(c);}));
   }
 }
