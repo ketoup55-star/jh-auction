@@ -972,6 +972,27 @@ class SupabaseSource:
 
     def _get_auction_remote(self, item_key: str) -> Optional[dict]:
         import concurrent.futures as _cf
+        # psycopg 직접(서울 DB ~27ms) 우선 — CloudType REST(PostgREST가 매 쿼리 SSL 재핸드셰이크
+        #  ~882ms)로 클라우드 상세 메인 get_auction이 5~10초 걸리던 것 회피(analysis와 동일 전략).
+        #  query_pg가 None(psycopg 불가/실패)이면 아래 기존 REST 병렬로 폴백(안전).
+        _it = self.query_pg("SELECT * FROM items WHERE item_key=%s LIMIT 1", (item_key,))
+        if _it is not None:
+            if not _it:
+                return None
+            item = self._detail(_it[0])
+            _sc = self.query_pg("SELECT round,sell_date,min_price,result,sale_price,sale_rate,"
+                                "bid_count,sale_2nd_price,winner_name FROM auction_schedule "
+                                "WHERE item_key=%s ORDER BY round", (item_key,)) or []
+            for s in _sc:
+                if s.get("winner_name"):
+                    s["winner_name"] = self._name(s["winner_name"])
+            item["schedule"] = _sc
+            _md = self.query_pg("SELECT kind,seq,r2_key,content_type FROM media "
+                                "WHERE item_key=%s ORDER BY kind,seq", (item_key,)) or []
+            for m in _md:
+                m["url"] = f"{self.r2}/{m['r2_key']}" if self.r2 and m.get("r2_key") else None
+            item["media"] = _md
+            return item
         # items·schedule·media 모두 item_key만 필요 → 3쿼리 병렬(순차 ~1.3초 → ~0.45초)
         with _cf.ThreadPoolExecutor(max_workers=3) as _ex:
             f_item = _ex.submit(self._get, "items",
