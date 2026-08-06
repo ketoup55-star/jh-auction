@@ -2671,18 +2671,22 @@ def auction_detail(item_key: str, user: dict = Depends(require_national_user)) -
     return d
 
 
-def _cached_doc(prefix: str, item_key: str, compute) -> dict:
+def _cached_doc(prefix: str, item_key: str, compute, schema_ver: str = "") -> dict:
     """문서분석(등기·감정평가서·명세서·차량) 결과를 Supabase api_cache(prefix:)에 영구 저장.
-    ①DB 있으면 즉시 반환(파싱 X) ②없으면 계산 후 DB 저장. 재시작·재배포에도 유지."""
+    ①DB 있으면 즉시 반환(파싱 X) ②없으면 계산 후 DB 저장. 재시작·재배포에도 유지.
+    schema_ver: 계산 로직을 바꿔 기존 캐시를 무효화해야 할 때 버전 문자열을 올린다(캐시 _sv 불일치→재계산).
+    → DB 전량삭제 없이 상세 조회 시 점진 재계산으로 새 스키마 반영."""
     ck = prefix + ":" + item_key
     try:
         db = auction_db.cache_get_many([ck]).get(ck)
     except Exception:
         db = None
-    if isinstance(db, dict):                # 캐시 있으면 available 여부 무관 즉시 반환
-        return db                           #  → 스캔본/서류없음(available=False)도 캐시해 매번 재파싱·블로킹 방지
+    if isinstance(db, dict) and (not schema_ver or db.get("_sv") == schema_ver):
+        return db                           # 캐시 있고 스키마 일치 → 즉시 반환(available=False도 캐시)
     out = compute()
     if isinstance(out, dict):
+        if schema_ver:
+            out["_sv"] = schema_ver
         try:
             auction_db.cache_save(ck, out)  # available=False 결과도 저장(재파싱 안 함)
         except Exception:
@@ -2717,7 +2721,8 @@ def auction_analysis(item_key: str) -> dict:
     """권리분석 — 전체 계산결과를 api_cache(analysis:)에 캐시. 크롤러 갱신 시 _freshness_loop이 무효화.
     캐시 없을 때만 _compute_analysis(analyze_from_crawler·명세서·items 후처리 5~6쿼리=2~3초) 실행 →
     상세 재진입은 즉시. (전엔 크롤러 분석물건이 캐시를 안 타 상세 클릭마다 2~3초였음)"""
-    return _cached_doc("analysis", item_key, lambda: _compute_analysis(item_key))
+    return _cached_doc("analysis", item_key, lambda: _compute_analysis(item_key),
+                       schema_ver="rights_date_sorted_v1")   # 등기 접수일자순 정렬 반영 → 기존 캐시 무효화
 
 
 def _compute_analysis(item_key: str) -> dict:
