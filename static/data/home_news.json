@@ -1,15 +1,6 @@
 {
  "items": [
   {
-   "keyword": "부동산 정책",
-   "title": "[이슈&리서치] 이재명 정부 ‘부동산 정책’ 국민 57.6%가 잘못…국민 62.5%는 검 ‘보완수사권 필요’",
-   "link": "http://www.issueinfact.com/news/articleView.html?idxno=89321",
-   "image": "http://www.issueinfact.com/news/thumbnail/202608/89321_47808_357_v150.jpg",
-   "source": "이슈인팩트",
-   "published": "2026-08-06T09:06:25+09:00",
-   "has_time": true
-  },
-  {
    "keyword": "아파트 경매",
    "title": "케이뱅크, 생활·재테크 서비스 확대…통신비 캐시백 제공",
    "link": "https://www.digitaltoday.co.kr/news/articleView.html?idxno=690414",
@@ -100,6 +91,6 @@
    "has_time": false
   }
  ],
- "count": 11,
+ "count": 10,
  "date": "2026-08-06"
 }

@@ -88,6 +88,22 @@ PROMO_TERMS = [
 _PROMO_EXTRA = [r"과정\s*\d+\s*기", r"\d+\s*기\s*(?:모집|수강|개강|수강생)", r"\d+\s*주\s*완성"]
 _PROMO_RE = re.compile("|".join([re.escape(t) for t in PROMO_TERMS] + _PROMO_EXTRA))
 
+# 정치색 블랙리스트 — 정쟁·선거·수사·국정평가 등 '정치 이슈'면 제외(주인님 지정: '정쟁·선거·수사만 제외').
+#   "부동산 정책" 키워드가 정부 국정평가·검찰 수사권 여론조사 같은 정치 기사를 '부동산' 단어만 걸쳐 끌어오던 것 차단.
+#   (2026-08-06 실제 사고: "이재명 정부 부동산 정책 국민 57.6% 잘못…검 보완수사권" 여론조사가 홈에 노출)
+#   단, 종부세·대출규제·공급 등 순수 부동산 정책 뉴스와 정당의 부동산 세제 간담회는 유지 → 정당명·정치인명 단독은 넣지 않음.
+POLITICS_TERMS = [
+    # 여론조사·국정평가
+    "여론조사", "지지율", "지지도", "국정운영", "국정 운영", "국정평가", "국정 평가", "국정 지지",
+    # 사법·정쟁(부동산과 무관한 정치 사법 — '수사'·'압수수색' 단독은 전세사기 수사 오탐이라 제외)
+    "보완수사권", "수사권", "검찰개혁", "공수처", "특검", "탄핵", "계엄", "내란", "불체포특권", "방탄국회",
+    # 선거·정당 경쟁
+    "대선", "총선", "지방선거", "보궐선거", "재보궐", "재보선", "공천", "경선", "당대표", "원내대표", "전당대회",
+    # 국회 정쟁
+    "국정감사", "국정조사", "대정부질문", "필리버스터",
+]
+_POLITICS_RE = re.compile("|".join(re.escape(t) for t in POLITICS_TERMS))
+
 # 부동산 핵심어 — 1개 이상 반드시 있어야 통과('경매·공매·낙찰·세금·대출·시세'는 단독으론 부족).
 CORE_TERMS = [
     "집값", "집 값", "아파트", "빌라", "오피스텔", "주택", "다세대", "연립", "도시형",
@@ -101,12 +117,14 @@ _CORE_RE = re.compile("|".join(re.escape(t) for t in CORE_TERMS))
 
 
 def is_relevant(title, desc):
-    """무관 주제(광물·문학·미술품·자동차·코인 등) 제외 + 부동산 핵심어 1개+ 필수.
+    """무관 주제(광물·문학·미술품·자동차·코인 등) 제외 + 정치색(정쟁·선거·수사) 제외 + 부동산 핵심어 1개+ 필수.
     '경매/공매/낙찰/세금/대출' 단독으론 부족 — 광물 경매·미술품 경매 오염 방지."""
     t = (title or "") + " " + (desc or "")
     if _OFF_RE.search(t):
         return False
     if _PROMO_RE.search(t):                    # 세미나·특강·설명회 등 홍보성 이벤트 제외(뉴스 아님)
+        return False
+    if _POLITICS_RE.search(t):                 # 정쟁·선거·수사·국정평가 등 정치색 제외(부동산 표현 걸쳐도)
         return False
     return bool(_CORE_RE.search(t))
 
@@ -350,14 +368,36 @@ def is_ad(link, title):
     return False
 
 
+# 중복판정에서 제외할 '너무 흔한' 부동산 뉴스 단어(이것들만 겹친 건 같은 사건이 아님)
+_DUP_STOP = {"오늘", "부동산", "정책", "관련", "대한", "기자", "시론", "사설", "내년", "올해",
+             "서울", "아파트", "관계", "정부", "집값", "대출", "규제", "시장", "전세", "매매"}
+# 같은 사건을 다르게 부르는 표현 → 하나로 정규화(끝장토론/대토론회/국민토론회 = 토론회)
+_DUP_SYN = [(r"(끝장토론|대토론회|국민\s*대?토론회|대국민\s*토론회|부동산\s*토론회)", "토론회")]
+
+
 def _tokens(t):
+    for _pat, _rep in _DUP_SYN:
+        t = re.sub(_pat, _rep, t)
     t = re.sub(r"[·\-|,\[\]\"'“”…()]", " ", t)
     ws = [re.sub(r"[^가-힣0-9a-zA-Z]", "", w) for w in t.split()]
     return set(w for w in ws if len(w) >= 2)
 
 
+def _shared_tokens(a, b):
+    """부분문자열까지 겹침으로 인정 — '대토론회'⊃'토론회', '부동산정책'⊃'부동산' 등 표면 표현차 흡수."""
+    sh = set()
+    for x in a:
+        for y in b:
+            if x == y or (len(x) >= 2 and len(y) >= 2 and (x in y or y in x)):
+                sh.add(x)
+                break
+    return sh
+
+
 def is_dupe(title, kept_titles):
-    """같은 사건 중복 — 고유명사 토큰 2개+ 겹치고 overlap>=0.5."""
+    """같은 사건 중복 판정. 2026-07-23 개선(대토론회 기사 6개가 다 노출된 문제).
+    기존 `exact 토큰 overlap>=0.5`만으론 긴 제목의 같은 사건이 0.2~0.4로 통과했다.
+    → ①동의어 정규화 ②부분문자열 매칭 ③핵심토큰 3개+ 겹치고 흔한말 제외 2개+면 중복."""
     a = _tokens(title)
     if not a:
         return False
@@ -365,8 +405,11 @@ def is_dupe(title, kept_titles):
         b = _tokens(kt)
         if not b:
             continue
-        shared = a & b
-        if len(shared) >= 2 and len(shared) / min(len(a), len(b)) >= 0.5:
+        sh = _shared_tokens(a, b)
+        core = sh - _DUP_STOP
+        if len(sh) >= 3 and len(core) >= 2:      # 긴 제목의 같은 사건(표현 달라도 핵심 3개 겹침)
+            return True
+        if len(sh) >= 2 and len(sh) / min(len(a), len(b)) >= 0.5:   # 짧은 제목(기존 규칙)
             return True
     return False
 
