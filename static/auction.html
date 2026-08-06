@@ -157,6 +157,8 @@
   .aptflag::after{content:"";position:absolute;left:50%;bottom:-7px;transform:translateX(-50%);border:6px solid transparent;border-top-color:#1a73e8;}
   .aptflag.zero{background:#9db4c9;box-shadow:0 1px 3px rgba(0,0,0,.3);}
   .aptflag.zero::after{border-top-color:#9db4c9;}
+  .aptflag.hub{background:#e23b2e;border-color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.5);}
+  .aptflag.hub::after{border-top-color:#e23b2e;}
   .aptflag:hover{filter:brightness(1.1);}
   /* 깃발 클릭 정보창 */
   .mpop{position:relative;background:#fff;border:1px solid var(--line);border-radius:9px;
@@ -2735,7 +2737,7 @@ async function loadAptSimilar(){
       <div id="aptMapTabs" class="grpseg" style="margin-bottom:6px"></div>
       <div id="aptMapSum" class="sub" style="margin:2px 0 8px"></div>
       <div id="aptkmap" style="width:100%;height:400px;border-radius:10px;border:1px solid var(--line);background:#eef1f5"></div>
-      <div class="sub" style="margin-top:8px"><span style="color:#d84a4a">📍</span> 경매물건 &nbsp; <span style="color:#1a73e8">⚑</span> 유사거래 단지 &nbsp;·&nbsp; 깃발 숫자 = 거래 건수(기간 내)</div>
+      <div class="sub" style="margin-top:8px"><span style="color:#e23b2e">⚑</span> 경매물건 소재 단지 &nbsp; <span style="color:#1a73e8">⚑</span> 유사거래 단지 &nbsp;·&nbsp; 깃발 숫자 = 거래 건수(기간 내)</div>
       <div id="aptMapNote" class="sub" style="margin-top:6px">지도 불러오는 중…</div>
       <div id="aptMapList" style="margin-top:8px"></div></div>`
     +(hasTbl?`<div class="card" id="aptTblCard"></div>`:"");
@@ -2785,9 +2787,9 @@ async function _loadAptMap(){
   _aptMap=new kakao.maps.Map(document.getElementById("aptkmap"),{center,level:6});
   try{ addMapTools(_aptMap, document.getElementById("aptkmap")); }catch(e){}
   new kakao.maps.Circle({map:_aptMap,center,radius:1000,strokeWeight:2,strokeColor:"#1565ff",strokeOpacity:.7,fillColor:"#1565ff",fillOpacity:.04});
-  const subj=document.createElement("div"); subj.className="mflag subject"; subj.title="경매물건";
-  new kakao.maps.CustomOverlay({map:_aptMap,position:center,yAnchor:1,zIndex:30,content:subj}).setMap(_aptMap);
-  _aptHub=-1; let hd=1e9; (r.complexes||[]).forEach((c,i)=>{ const d=_hav(r.center.lat,r.center.lng,c.lat,c.lng); if(d<hd){hd=d;_aptHub=(d<120?i:-1);} });
+  _aptHub=-1; let hd=1e9; (r.complexes||[]).forEach((c,i)=>{ const d=_hav(r.center.lat,r.center.lng,c.lat,c.lng); if(d<hd){hd=d;_aptHub=(d<150?i:-1);} });
+  if(_aptHub<0){ const subj=document.createElement("div"); subj.className="mflag subject"; subj.title="경매물건";  // 소재 단지에 거래 없을 때만 빨간 위치핀(있으면 그 단지 깃발이 빨강)
+    new kakao.maps.CustomOverlay({map:_aptMap,position:center,yAnchor:1,zIndex:998,content:subj}).setMap(_aptMap); }
   document.getElementById("aptMapTabs").innerHTML=`<span style="font-size:12px;color:var(--muted);margin-right:4px">기간</span>`+[1,6,12].map(n=>`<button type="button" class="eseg aptmapper" data-n="${n}">${n}개월</button>`).join("");
   document.querySelectorAll(".aptmapper").forEach(b=>b.addEventListener("click",()=>{_aptMapPer=+b.dataset.n;_drawAptPins();}));
   kakao.maps.event.addListener(_aptMap,"click",()=>{ if(_aptPop){_aptPop.setMap(null);_aptPop=null;} });
@@ -2802,11 +2804,12 @@ function _drawAptPins(){
   const per=String(_aptMapPer); let tot=0,dong=0;
   (_aptMapData.complexes||[]).forEach((c,i)=>{
     const cnt=(c.counts&&c.counts[per])||0; tot+=cnt; if(cnt>0)dong++;
+    const isHub=(i===_aptHub);
     const el=document.createElement("div");
-    el.className="aptflag"+(cnt===0?" zero":"");
+    el.className="aptflag"+(isHub?" hub":(cnt===0?" zero":""));
     el.textContent=cnt;
     el.addEventListener("click",ev=>{ev.stopPropagation();_openAptPop(c);});
-    _aptOv.push(new kakao.maps.CustomOverlay({map:_aptMap,position:new kakao.maps.LatLng(c.lat,c.lng),yAnchor:1,zIndex:cnt>0?(20+cnt):8,content:el}));
+    _aptOv.push(new kakao.maps.CustomOverlay({map:_aptMap,position:new kakao.maps.LatLng(c.lat,c.lng),yAnchor:1,zIndex:isHub?999:(cnt>0?(20+cnt):8),content:el}));
   });
   const sm=document.getElementById("aptMapSum"); if(sm) sm.innerHTML=`반경 1km 내 총 <b>${tot}건</b> · 거래 단지 <b>${dong}개</b>`;
   const items=(_aptMapData.complexes||[]).map((c,i)=>({c,i,cnt:(c.counts&&c.counts[per])||0})).filter(x=>x.cnt>0).sort((a,b)=>b.cnt-a.cnt);
@@ -2825,7 +2828,7 @@ function _openAptPop(c){
     +`<div class="mpop-rw">평균 <b>${c.avg?won(c.avg):"-"}</b></div>`
     +`<div class="mpop-rw">최근거래 ${c.recent_date||"-"} · ${c.recent_amount?won(c.recent_amount):"-"}</div>`;
   wrap.querySelector(".mpop-x").addEventListener("click",ev=>{ev.stopPropagation();if(_aptPop){_aptPop.setMap(null);_aptPop=null;}});
-  _aptPop=new kakao.maps.CustomOverlay({map:_aptMap,position:new kakao.maps.LatLng(c.lat,c.lng),yAnchor:1.4,zIndex:40,content:wrap}); _aptPop.setMap(_aptMap);
+  _aptPop=new kakao.maps.CustomOverlay({map:_aptMap,position:new kakao.maps.LatLng(c.lat,c.lng),yAnchor:1.4,zIndex:1000,content:wrap}); _aptPop.setMap(_aptMap);
 }
 
 load().then(()=>{ loadFavStatus(); loadMockBid(); loadCaseObjects(); loadAnalysis(); loadDocSummary(); loadAptInfo(); loadExpectedBid(); loadOffiInfo(); loadGeocode(); loadBuildingBrief(); loadVehicle(); loadEncar(); loadReview(); loadNearbyMap(); loadAptSimilar(); loadMarketAnalysis(); loadDagaguAnalysis(); loadShortSale(); /* 주동선 지도 제거→계량분석 패널(주인님 결정) */ });
