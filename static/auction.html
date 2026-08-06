@@ -2727,7 +2727,7 @@ async function submitMockBid(){
 
 // ── 아파트: 법정동 월별 유사거래 표 + 반경 1km 단지별 유사거래 지도(카카오맵) ──
 function _hav(lat1,lng1,lat2,lng2){const R=6371000,rad=Math.PI/180,dLat=(lat2-lat1)*rad,dLng=(lng2-lng1)*rad,a=Math.sin(dLat/2)**2+Math.cos(lat1*rad)*Math.cos(lat2*rad)*Math.sin(dLng/2)**2;return 2*R*Math.asin(Math.sqrt(a));}
-let _aptTbl=null,_aptBand="this",_aptPeriod=12,_aptMap=null,_aptMapData=null,_aptMapPer=12,_aptOv=[],_aptPop=null,_aptHub=-1,_aptSubjOv=null,_aptMapArea=0,_aptMapMode="count";
+let _aptTbl=null,_aptBand="this",_aptPeriod=12,_aptMap=null,_aptMapData=null,_aptMapPer=12,_aptOv=[],_aptPop=null,_aptHub=-1,_aptSubjOv=null,_aptMapArea=0,_aptMapMode="count",_aptSubjName="";
 async function loadAptSimilar(){
   const box=document.getElementById("mapBox"); if(!box) return;
   if(!/아파트/.test((DETAIL&&DETAIL.usage)||"")) return;
@@ -2772,12 +2772,14 @@ function _drawAptTbl(){
   const comps=(b.complexes||[]).map(c=>Object.assign({name:c.name},(c.periods&&c.periods[per])||{count:0,avg:0,min:0,max:0})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count||b.avg-a.avg);
   const cell="padding:7px 8px;border-bottom:1px solid var(--line)";
   let rows="", totC=0;
-  comps.forEach(c=>{ totC+=c.count;
-    rows+=`<tr><td style="${cell}">${c.name}</td><td style="${cell};text-align:right">${c.count}건</td><td style="${cell};text-align:right"><b>${won(c.avg)}</b></td><td style="${cell};text-align:right;color:var(--muted)">${won(c.min)}~${won(c.max)}</td></tr>`; });
+  comps.forEach(c=>{ totC+=c.count; const mavg=(c.count/mn).toFixed(1);
+    const subj=(_aptSubjName && c.name===_aptSubjName);   // 우리가 보는 경매물건이 속한 단지 → 빨강 강조
+    const nmSty=subj?`${cell};color:#e23b2e;font-weight:700`:cell;
+    rows+=`<tr><td style="${nmSty}">${c.name}</td><td style="${cell};text-align:right${subj?';color:#e23b2e;font-weight:700':''}">${c.count}건</td><td style="${cell};text-align:right;color:${subj?'#e23b2e':'var(--muted)'}${subj?';font-weight:700':''}">${mavg}건</td><td style="${cell};text-align:right"><b${subj?' style="color:#e23b2e"':''}>${won(c.avg)}</b></td><td style="${cell};text-align:right;color:var(--muted)">${won(c.min)}~${won(c.max)}</td></tr>`; });
   // 각 단지의 월평균 거래'건수'(거래수÷개월)를 구해 단지 단위로 다시 평균 = totC/(개월×단지수)
   const dongMonthly=comps.length?(totC/(mn*comps.length)):0;
   const th=`padding:7px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px`;
-  document.getElementById("aptTblT").innerHTML=`<thead><tr><th style="${th};text-align:left">단지명</th><th style="${th};text-align:right">거래 건수</th><th style="${th};text-align:right">평균 실거래가</th><th style="${th};text-align:right">가격대(최저~최고)</th></tr></thead><tbody>${rows||`<tr><td colspan="4" style="${cell};color:var(--muted)">해당 기간 거래 없음</td></tr>`}</tbody>`;
+  document.getElementById("aptTblT").innerHTML=`<thead><tr><th style="${th};text-align:left">단지명</th><th style="${th};text-align:right">거래 건수</th><th style="${th};text-align:right">월평균</th><th style="${th};text-align:right">평균 실거래가</th><th style="${th};text-align:right">가격대(최저~최고)</th></tr></thead><tbody>${rows||`<tr><td colspan="5" style="${cell};color:var(--muted)">해당 기간 거래 없음</td></tr>`}</tbody>`;
   document.getElementById("aptTblSum").innerHTML=`거래 단지 <b>${comps.length}개</b> · 총 <b>${totC}건</b> · <span title="각 단지의 월평균 거래건수(거래수÷개월)를 단지 단위로 다시 평균">단지당 월평균 <b>${dongMonthly.toFixed(1)}건</b></span>`;
 }
 async function _loadAptMap(band){   // band 미지정=경매물건 전용면적. 지정 시 그 면적대로 지도 데이터만 교체(지도객체는 재사용)
@@ -2812,6 +2814,8 @@ async function _loadAptMap(band){   // band 미지정=경매물건 전용면적.
   if(_cx.length>=2){ const bb=new kakao.maps.LatLngBounds(); bb.extend(center); _cx.forEach(c=>bb.extend(new kakao.maps.LatLng(c.lat,c.lng))); try{ _aptMap.setBounds(bb,36,36,36,36); }catch(e){} }
   else { try{ _aptMap.setLevel(6); _aptMap.setCenter(center); }catch(e){} }
   if(note) note.innerHTML=(r.complexes||[]).length?"":"반경 1km 내 이 면적(전용 ±5㎡) 매매 거래가 없습니다 — 위 <b>면적</b> 탭에서 다른 평형대를 선택하거나 아래 <b>법정동 표</b>를 확인하세요.";
+  _aptSubjName=(_aptHub>=0 && (_aptMapData.complexes||[])[_aptHub])?_aptMapData.complexes[_aptHub].name:"";  // 경매물건 소재 단지명 → 법정동 표 빨강 강조
+  if(_aptTbl && _aptSubjName) _drawAptTbl();   // 지도 hub 확정 후 표 재렌더(경매물건 단지 빨강)
 }
 function _renderAptMapAreas(bands){   // 지도 면적대 선택 탭(표와 동일 스타일). 선택 시 band 재요청
   const box=document.getElementById("aptMapAreas"); if(!box) return;
