@@ -867,7 +867,7 @@ async function loadAnalysis(attempt){
   if(!attempt) box.innerHTML='<div class="card"><h2>분석</h2><div class="sub">문서 분석 중…</div></div>';
   let d=null, ap={available:false};
   try{
-    const ra=await fetch("/auction/analysis?item_key="+encodeURIComponent(itemKey));
+    const ra=await fetch("/auction/analysis?item_key="+encodeURIComponent(itemKey)+"&_="+Date.now(),{cache:"no-store"});
     if(ra.ok) d=await ra.json().catch(()=>null);              // analysis(등기·임차인·물건현황·면적)
     // 크롤러 분석 물건은 detail_text로 4컬럼을 채우므로 감정평가서 PDF(느림) 불필요 → 미수집 물건만 폴백.
     const needAppr = d && d.available && !(d.detail && (d.detail.status_bullets||[]).length);
