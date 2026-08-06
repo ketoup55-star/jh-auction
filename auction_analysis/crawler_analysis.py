@@ -230,6 +230,21 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
     # 등기 목록은 접수일자순으로 정렬 — psycopg 직접쿼리(성능 최적화)엔 ORDER BY가 없어
     #  DB 저장순(갑구/을구 뒤섞임)으로 나와 날짜가 뒤죽박죽이던 것 통일. is_baseline 플래그는 순서 무관.
     rights.sort(key=lambda r: (r.get("date") or "9999-99-99"))
+    # 소유권 중복 제거 — 등기부 '소유권이전 + 거래가액'이 2행으로 수집되던 것(같은 날짜·소유자)을
+    #  한 줄로 합침(거래가액 있는 행 유지). 근저당 등 같은 채권자 다른 날짜는 정상이므로 소유권만 대상.
+    _own_seen: dict = {}
+    _dedup: list = []
+    for r in rights:
+        if "소유권" in (r.get("type") or ""):
+            k = (r.get("date"), r.get("holder"))
+            prev = _own_seen.get(k)
+            if prev is not None:
+                if (r.get("amount") or 0) > (prev.get("amount") or 0):
+                    prev["amount"] = r.get("amount")   # 금액 있는 행 정보로 갱신
+                continue
+            _own_seen[k] = r
+        _dedup.append(r)
+    rights = _dedup
 
     # ── 임차인 ──
     tenants: list[dict] = []

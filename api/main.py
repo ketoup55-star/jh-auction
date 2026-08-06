@@ -2722,7 +2722,7 @@ def auction_analysis(item_key: str) -> dict:
     캐시 없을 때만 _compute_analysis(analyze_from_crawler·명세서·items 후처리 5~6쿼리=2~3초) 실행 →
     상세 재진입은 즉시. (전엔 크롤러 분석물건이 캐시를 안 타 상세 클릭마다 2~3초였음)"""
     return _cached_doc("analysis", item_key, lambda: _compute_analysis(item_key),
-                       schema_ver="rights_date_sorted_v1")   # 등기 접수일자순 정렬 반영 → 기존 캐시 무효화
+                       schema_ver="rights_date_sorted_v2")   # v2: 접수일자순 정렬 + 소유권 중복 제거 → 캐시 무효화
 
 
 def _compute_analysis(item_key: str) -> dict:
