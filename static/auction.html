@@ -2752,7 +2752,7 @@ function _renderAptTbl(tbl){
   const bands=tbl.bands; _aptBand=(bands.find(b=>b.key===tbl.default_key)?tbl.default_key:bands[0].key);
   const lb=b=>b.key==="this"?`${Math.floor(b.center)}㎡형`:`${b.key}㎡형`;
   document.getElementById("aptTblCard").innerHTML=
-    `<h2>이 법정동 유사 면적 실거래<span class="mapsub">${tbl.dong||""} · 전용 ±5㎡ · 매매</span></h2>
+    `<h2>이 법정동 단지별 실거래<span class="mapsub">${tbl.dong||""} · 전용 ±5㎡ · 매매 · 단지별 평균가</span></h2>
      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0"><span style="font-size:12px;color:var(--muted)">면적</span>
        ${bands.map(b=>`<button type="button" class="eseg aptband" data-k="${b.key}">${lb(b)}${b.key==="this"?" ·이물건":""}</button>`).join("")}</div>
      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin:8px 0">
@@ -2768,15 +2768,16 @@ function _drawAptTbl(){
   const b=_aptTbl.bands.find(x=>x.key===_aptBand)||_aptTbl.bands[0];
   document.querySelectorAll(".aptband").forEach(x=>x.classList.toggle("on",x.dataset.k===_aptBand));
   document.querySelectorAll(".aptper").forEach(x=>x.classList.toggle("on",+x.dataset.n===_aptPeriod));
-  const ms=b.months.slice(-_aptPeriod); let tot=0,psum=0,pn=0,rows="";
+  const per=String(_aptPeriod), mn=_aptPeriod;
+  const comps=(b.complexes||[]).map(c=>Object.assign({name:c.name},(c.periods&&c.periods[per])||{count:0,avg:0,min:0,max:0})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count||b.avg-a.avg);
   const cell="padding:7px 8px;border-bottom:1px solid var(--line)";
-  for(let i=ms.length-1;i>=0;i--){ const m=ms[i]; tot+=m.count; let pr="—",rg="—";
-    if(m.count){ psum+=m.avg*m.count; pn+=m.count; pr=won(m.avg); rg=won(m.min)+"~"+won(m.max); }
-    rows+=`<tr><td style="${cell}">${m.ym}</td><td style="${cell};text-align:right">${m.count}건</td><td style="${cell};text-align:right">${pr}</td><td style="${cell};text-align:right;color:var(--muted)">${rg}</td></tr>`; }
-  const avg=pn?Math.round(psum/pn):0, mavg=(tot/_aptPeriod);
+  let rows="", totC=0, wsum=0;
+  comps.forEach(c=>{ totC+=c.count; wsum+=c.avg*c.count; const mavg=(c.count/mn).toFixed(1);
+    rows+=`<tr><td style="${cell}">${c.name}</td><td style="${cell};text-align:right">${c.count}건</td><td style="${cell};text-align:right;color:var(--muted)">${mavg}건</td><td style="${cell};text-align:right"><b>${won(c.avg)}</b></td><td style="${cell};text-align:right;color:var(--muted)">${won(c.min)}~${won(c.max)}</td></tr>`; });
+  const avg=totC?Math.round(wsum/totC):0;
   const th=`padding:7px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px`;
-  document.getElementById("aptTblT").innerHTML=`<thead><tr><th style="${th};text-align:left">거래월</th><th style="${th};text-align:right">거래 건수</th><th style="${th};text-align:right">평균가</th><th style="${th};text-align:right">가격대(최저~최고)</th></tr></thead><tbody>${rows||`<tr><td colspan="4" style="${cell};color:var(--muted)">해당 기간 거래 없음</td></tr>`}</tbody>`;
-  document.getElementById("aptTblSum").innerHTML=`총 거래 <b>${tot}건</b> · 월평균 <b>${mavg.toFixed(1)}건</b> · 평균가 <b>${avg?won(avg):"—"}</b>`;
+  document.getElementById("aptTblT").innerHTML=`<thead><tr><th style="${th};text-align:left">단지명</th><th style="${th};text-align:right">거래 건수</th><th style="${th};text-align:right">월평균</th><th style="${th};text-align:right">평균 실거래가</th><th style="${th};text-align:right">가격대(최저~최고)</th></tr></thead><tbody>${rows||`<tr><td colspan="5" style="${cell};color:var(--muted)">해당 기간 거래 없음</td></tr>`}</tbody>`;
+  document.getElementById("aptTblSum").innerHTML=`거래 단지 <b>${comps.length}개</b> · 총 <b>${totC}건</b> · 평균가 <b>${avg?won(avg):"—"}</b>`;
 }
 async function _loadAptMap(band){   // band 미지정=경매물건 전용면적. 지정 시 그 면적대로 지도 데이터만 교체(지도객체는 재사용)
   const note=document.getElementById("aptMapNote");

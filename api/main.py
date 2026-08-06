@@ -7212,7 +7212,8 @@ def _apt_area_bands(trades: list, prop_area) -> list:
 
 @app.get("/auction/apt_dong_table")
 def apt_dong_table(item_key: str) -> dict:
-    """아파트 상세: 법정동 전체 유사면적(±5㎡) 매매 월별 거래건수·평균가 표. 면적대 선택 + 최근 12개월."""
+    """아파트 상세: 법정동 유사면적(±5㎡) 매매 '단지별' 거래건수·월평균·평균 실거래가·가격대 표.
+    면적대 + 기간(1/6/12개월) 선택. months(월별)도 함께 반환(하위호환)."""
     ctx = _apt_similar_ctx(item_key)
     if not ctx:
         return {"available": False}
@@ -7220,23 +7221,45 @@ def apt_dong_table(item_key: str) -> dict:
     pool = _apt_trades(lawd)
     trades = [t for t in pool if t.get("umd") == dong] if dong else pool
     labels = _last_ym_labels(12)
+    from datetime import date as _d, timedelta as _td
+    _tod = _d.today()
+    _cuts = {"1": (_tod - _td(days=30)).isoformat(),
+             "6": (_tod - _td(days=183)).isoformat(),
+             "12": (_tod - _td(days=365)).isoformat()}
     out = []
     for b in _apt_area_bands(trades, prop_area):
+        band_trades = [t for t in trades if b["lo"] <= (t.get("area") or 0) <= b["hi"]]
         by: dict = {}
-        for t in trades:
-            a = t.get("area") or 0
-            if b["lo"] <= a <= b["hi"]:
-                ym = (t.get("deal_date") or "")[:7]
-                if ym:
-                    by.setdefault(ym, []).append(t.get("amount") or 0)
+        for t in band_trades:
+            ym = (t.get("deal_date") or "")[:7]
+            if ym:
+                by.setdefault(ym, []).append(t.get("amount") or 0)
         months = []
         for ym in labels:
             amts = by.get(ym) or []
             months.append({"ym": ym, "count": len(amts),
                            "avg": round(sum(amts) / len(amts)) if amts else 0,
                            "min": min(amts) if amts else 0, "max": max(amts) if amts else 0})
+        # 단지별 집계 — 기간(1/6/12개월)별 거래건수·평균 실거래가·최저~최고
+        comps: dict = {}
+        for t in band_trades:
+            nm = t.get("name") or f"{t.get('umd')} {t.get('jibun')}"
+            comps.setdefault(nm, []).append(t)
+        complexes = []
+        for nm, ts in comps.items():
+            periods = {}
+            for p, cut in _cuts.items():
+                amts = [t.get("amount") or 0 for t in ts
+                        if (t.get("deal_date") or "") >= cut and t.get("amount")]
+                periods[p] = {"count": len(amts),
+                              "avg": round(sum(amts) / len(amts)) if amts else 0,
+                              "min": min(amts) if amts else 0, "max": max(amts) if amts else 0}
+            if any(periods[p]["count"] for p in periods):
+                complexes.append({"name": nm, "periods": periods})
+        complexes.sort(key=lambda c: c["periods"]["12"]["count"], reverse=True)
         out.append({"key": b["key"], "center": round(b["center"], 1),
-                    "lo": round(b["lo"], 1), "hi": round(b["hi"], 1), "months": months})
+                    "lo": round(b["lo"], 1), "hi": round(b["hi"], 1),
+                    "months": months, "complexes": complexes})
     return {"available": True, "dong": dong, "prop_area": prop_area,
             "bands": out, "default_key": "this"}
 
