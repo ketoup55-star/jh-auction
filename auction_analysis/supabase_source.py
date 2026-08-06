@@ -733,31 +733,35 @@ class SupabaseSource:
         tree: dict = {}
         years: set = set()
         codes: set = set()
-        offset = 0
-        while True:
-            params = [("select", "address,case_no,court_code"),
-                      ("data_class", f"eq.{data_class}"),
-                      ("limit", "1000"), ("offset", str(offset))]
-            rows = self._get("items", params).json()
-            if not rows:
-                break
-            for row in rows:
-                cn = row.get("case_no") or ""
-                if len(cn) >= 4 and cn[:4].isdigit():
-                    years.add(cn[:4])
-                if row.get("court_code"):
-                    codes.add(row["court_code"])
-                sido, gu, dong = normalize_address(row.get("address") or "")
-                if not sido:
-                    continue
-                gd = tree.setdefault(sido, {})
-                if gu:
-                    dl = gd.setdefault(gu, set())
-                    if dong:
-                        dl.add(dong)
-            if len(rows) < 1000:
-                break
-            offset += 1000
+        # psycopg 전량 1쿼리(REST 페이지네이션 30회 ~4초 → ~0.3초). psycopg 불가(None) 시 기존 REST 폴백.
+        all_rows = self.query_pg("SELECT address,case_no,court_code FROM items WHERE data_class=%s", (data_class,))
+        if all_rows is None:
+            all_rows = []
+            offset = 0
+            while True:
+                params = [("select", "address,case_no,court_code"),
+                          ("data_class", f"eq.{data_class}"), ("limit", "1000"), ("offset", str(offset))]
+                page = self._get("items", params).json()
+                if not page:
+                    break
+                all_rows.extend(page)
+                if len(page) < 1000:
+                    break
+                offset += 1000
+        for row in all_rows:
+            cn = row.get("case_no") or ""
+            if len(cn) >= 4 and cn[:4].isdigit():
+                years.add(cn[:4])
+            if row.get("court_code"):
+                codes.add(row["court_code"])
+            sido, gu, dong = normalize_address(row.get("address") or "")
+            if not sido:
+                continue
+            gd = tree.setdefault(sido, {})
+            if gu:
+                dl = gd.setdefault(gu, set())
+                if dong:
+                    dl.add(dong)
         dong_tree = {s: {g: sorted(dl) for g, dl in gd.items()} for s, gd in tree.items()}
         # 법원코드 → 지법 → {지원명: code}. 미매핑(비정상) 코드는 제외(기타 숨김).
         raw: dict = {}
