@@ -2768,16 +2768,17 @@ function _drawAptTbl(){
   const b=_aptTbl.bands.find(x=>x.key===_aptBand)||_aptTbl.bands[0];
   document.querySelectorAll(".aptband").forEach(x=>x.classList.toggle("on",x.dataset.k===_aptBand));
   document.querySelectorAll(".aptper").forEach(x=>x.classList.toggle("on",+x.dataset.n===_aptPeriod));
-  const per=String(_aptPeriod);
+  const per=String(_aptPeriod), mn=_aptPeriod;
   const comps=(b.complexes||[]).map(c=>Object.assign({name:c.name},(c.periods&&c.periods[per])||{count:0,avg:0,min:0,max:0})).filter(x=>x.count>0).sort((a,b)=>b.count-a.count||b.avg-a.avg);
   const cell="padding:7px 8px;border-bottom:1px solid var(--line)";
-  let rows="", totC=0, psum=0;
-  comps.forEach(c=>{ totC+=c.count; psum+=c.avg;   // psum = 각 단지 평균가의 합(단지 동등)
+  let rows="", totC=0;
+  comps.forEach(c=>{ totC+=c.count;
     rows+=`<tr><td style="${cell}">${c.name}</td><td style="${cell};text-align:right">${c.count}건</td><td style="${cell};text-align:right"><b>${won(c.avg)}</b></td><td style="${cell};text-align:right;color:var(--muted)">${won(c.min)}~${won(c.max)}</td></tr>`; });
-  const dongAvg=comps.length?Math.round(psum/comps.length):0;   // 각 단지 평균가를 '또 평균'(거래건수 무관, 단지 동등 가중)
+  // 각 단지의 월평균 거래'건수'(거래수÷개월)를 구해 단지 단위로 다시 평균 = totC/(개월×단지수)
+  const dongMonthly=comps.length?(totC/(mn*comps.length)):0;
   const th=`padding:7px 8px;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px`;
   document.getElementById("aptTblT").innerHTML=`<thead><tr><th style="${th};text-align:left">단지명</th><th style="${th};text-align:right">거래 건수</th><th style="${th};text-align:right">평균 실거래가</th><th style="${th};text-align:right">가격대(최저~최고)</th></tr></thead><tbody>${rows||`<tr><td colspan="4" style="${cell};color:var(--muted)">해당 기간 거래 없음</td></tr>`}</tbody>`;
-  document.getElementById("aptTblSum").innerHTML=`거래 단지 <b>${comps.length}개</b> · 총 <b>${totC}건</b> · <span title="각 단지 평균가를 단지 단위로 다시 평균(거래건수 무관)">단지 평균가의 평균 <b>${dongAvg?won(dongAvg):"—"}</b></span>`;
+  document.getElementById("aptTblSum").innerHTML=`거래 단지 <b>${comps.length}개</b> · 총 <b>${totC}건</b> · <span title="각 단지의 월평균 거래건수(거래수÷개월)를 단지 단위로 다시 평균">단지당 월평균 <b>${dongMonthly.toFixed(1)}건</b></span>`;
 }
 async function _loadAptMap(band){   // band 미지정=경매물건 전용면적. 지정 시 그 면적대로 지도 데이터만 교체(지도객체는 재사용)
   const note=document.getElementById("aptMapNote");
