@@ -2739,7 +2739,7 @@ async function loadAptSimilar(){
   let tbl=null;
   try{ tbl=await (await fetch("/auction/apt_dong_table?item_key="+encodeURIComponent(itemKey))).json(); }catch(e){}
   const hasTbl=tbl&&tbl.available&&(tbl.bands||[]).length;
-  box.innerHTML=`<div class="card" id="aptMapCard"><h2>반경 1km 단지별 유사거래<span class="mapsub">전용 ±5㎡ · 매매 · 인접 시군구 포함</span></h2>
+  box.innerHTML=`<div class="card" id="aptMapCard"><h2>반경 1km ${/오피스텔/.test((DETAIL&&DETAIL.usage)||"")?'오피스텔':'단지별'} 유사거래<span class="mapsub">전용 ±5㎡ · 매매 · 인접 시군구 포함</span></h2>
       <div id="aptMapAreas" class="grpseg" style="margin-bottom:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"></div>
       <div id="aptMapTabs" class="grpseg" style="margin-bottom:6px"></div>
       <div id="aptMapSum" class="sub" style="margin:2px 0 8px"></div>
@@ -2757,7 +2757,7 @@ function _renderAptTbl(tbl){
   const bands=tbl.bands; _aptBand=(bands.find(b=>b.key===tbl.default_key)?tbl.default_key:bands[0].key);
   const lb=b=>b.key==="this"?`${Math.floor(b.center)}㎡형`:`${b.key}㎡형`;
   document.getElementById("aptTblCard").innerHTML=
-    `<h2>이 법정동 단지별 실거래<span class="mapsub">${tbl.dong||""} · 전용 ±5㎡ · 매매 · 단지별 평균가</span></h2>
+    `<h2>이 법정동 ${/오피스텔/.test((DETAIL&&DETAIL.usage)||"")?'오피스텔':'단지별'} 실거래<span class="mapsub">${tbl.dong||""} · 전용 ±5㎡ · 매매 · 단지별 평균가</span></h2>
      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0"><span style="font-size:12px;color:var(--muted)">면적</span>
        ${bands.map(b=>`<button type="button" class="eseg aptband" data-k="${b.key}">${lb(b)}${b.key==="this"?" ·이물건":""}</button>`).join("")}</div>
      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin:8px 0">
