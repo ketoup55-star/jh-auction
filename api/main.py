@@ -2746,11 +2746,13 @@ def _compute_analysis(item_key: str) -> dict:
     # 차임(월세) 병합 — item_tenants엔 차임 컬럼이 없어 매각물건명세서(tenant_rents)에서 이름 매칭으로 채움
     if isinstance(res, dict) and res.get("tenants"):
         try:
-            from auction_analysis.doc_analysis import analyze_doc_summary
-            ds = analyze_doc_summary(auction_db, item_key)
+            from auction_analysis.doc_analysis import sale_statement_rents
+            # 명세서 차임을 analysis와 분리해 docrents:로 영구캐시 → 등기 schema_ver 무효화·재배포에도 명세서(1.3초) 재파싱 안 함
+            tr_list = _cached_doc("docrents", item_key,
+                                  lambda: {"rents": sale_statement_rents(auction_db, item_key)}).get("rents") or []
             _nm = lambda s: re.sub(r"\([^)]*\)|\s", "", s or "")   # 괄호(호수·별지)·공백 제거 후 이름 비교
             rmap = {_nm(tr.get("name")): tr
-                    for tr in (ds.get("tenant_rents") or []) if tr.get("name")}
+                    for tr in tr_list if tr.get("name")}
             if rmap:
                 ts = [dict(t) for t in res["tenants"]]
                 for t in ts:
@@ -3997,7 +3999,7 @@ def _flush_all_caches() -> None:
 
 
 _CACHE_PREFIXES = ("brief", "apt", "nearby", "analysis", "appraisal",
-                   "docsummary", "vehicle2", "encar", "encar2", "review")
+                   "docsummary", "docrents", "vehicle2", "encar", "encar2", "review")
 
 
 def _invalidate_item_caches(keys: list) -> None:

@@ -191,6 +191,19 @@ def analyze_doc_summary(source, item_key: str) -> dict:
     return out
 
 
+def sale_statement_rents(source, item_key: str) -> list:
+    """명세서 임차인 차임/전입/확정만 반환 — 문건접수송달 httpx 없이(권리분석 차임병합 전용, 경량).
+    analyze_doc_summary의 tenant_rents와 동일하되, _compute_analysis가 안 쓰는 문건접수송달 파싱을 생략."""
+    try:
+        ms = _load_sale_statement(source, item_key)
+        return [{"name": t.name, "rent": getattr(t, "rent", 0) or 0,
+                 "move_in": t.move_in_date.isoformat() if getattr(t, "move_in_date", None) else None,
+                 "fixed": t.fixed_date.isoformat() if getattr(t, "fixed_date", None) else None}
+                for t in _merge_tenants(ms.get("tenants") or [])]
+    except Exception:
+        return []
+
+
 def analyze_appraisal(source, item_key: str) -> dict:
     """감정평가서 기반 물건현황·감정평가현황(dict). 캐시 적용."""
     if item_key in _appraisal_cache:
