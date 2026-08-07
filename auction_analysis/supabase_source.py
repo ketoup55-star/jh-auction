@@ -799,6 +799,59 @@ class SupabaseSource:
         return sorted(seen)
 
     # ---- 목록/검색 ----
+    def _order_to_sql(self, o: str) -> str:
+        """REST order('profit.desc.nullslast,item_key.asc') → SQL ORDER BY."""
+        parts = []
+        for seg in o.split(","):
+            p = seg.split("."); col = p[0]
+            d = "DESC" if "desc" in p else "ASC"
+            n = " NULLS LAST" if "nullslast" in p else (" NULLS FIRST" if "nullsfirst" in p else "")
+            parts.append(f'"{col}" {d}{n}')
+        return ", ".join(parts)
+
+    def _filters_to_sql(self, filters):
+        """_filters 튜플 → (where, params). or절 등 변환불가면 None → 호출측이 REST 폴백."""
+        conds, params = [], []
+        for key, opval in filters:
+            if key == "or":
+                return None                      # or절(지역·시도·유형복수) → REST가 안전
+            op = opval.split(".", 1)[0]
+            val = opval.split(".", 1)[1] if "." in opval else ""
+            if op == "eq": conds.append(f'"{key}"=%s'); params.append(val)
+            elif op == "in":
+                items = [x.strip().strip('"') for x in val.strip("()").split(",")]
+                conds.append(f'"{key}" IN ({",".join(["%s"]*len(items))})'); params += items
+            elif op == "gte": conds.append(f'"{key}">=%s'); params.append(val)
+            elif op == "lte": conds.append(f'"{key}"<=%s'); params.append(val)
+            elif op == "ilike": conds.append(f'"{key}" ILIKE %s'); params.append(val.replace("*", "%"))
+            elif op == "not":
+                rest = opval[4:]
+                if rest == "is.null": conds.append(f'"{key}" IS NOT NULL')
+                elif rest.startswith("ilike."): conds.append(f'"{key}" NOT ILIKE %s'); params.append(rest[6:].replace("*", "%"))
+                else: return None
+            elif op == "is":
+                if val == "true": conds.append(f'"{key}" IS TRUE')
+                elif val == "false": conds.append(f'"{key}" IS FALSE')
+                elif val == "null": conds.append(f'"{key}" IS NULL')
+                else: return None
+            else:
+                return None                      # 미지원 op → REST 폴백
+        return (" AND ".join(conds) or "TRUE"), params
+
+    def _list_pg(self, cols: str, filt: list, order: str, limit: int, offset: int):
+        """or절 없는 기본검색은 psycopg 직접쿼리(REST SSL 재핸드셰이크·직렬화 회피).
+        변환불가(or절)·실패·psycopg 미가용이면 None → 호출측 REST 폴백."""
+        conv = self._filters_to_sql(filt)
+        if conv is None:
+            return None
+        where, params = conv
+        sql = (f"SELECT {cols} FROM items WHERE {where} "
+               f"ORDER BY {self._order_to_sql(order)} LIMIT %s OFFSET %s")
+        try:
+            return self.query_pg(sql, tuple(params) + (limit, offset))
+        except Exception:
+            return None
+
     def list_auctions(self, *, limit: int = 20, offset: int = 0,
                       sort: str = "매각기일", sort2: Optional[str] = None, **kw) -> list[dict]:
         order = self._SORTS.get(sort, self._SORTS["매각기일"])
@@ -828,12 +881,16 @@ class SupabaseSource:
                     merged += rows
             page = self._chunk_sort(merged, order)[offset:offset + limit]
             return self._attach_winners([self._summary(row) for row in page])
+        filt = self._filters(**kw)
+        _pg = self._list_pg(cols, filt, order, limit, offset)   # psycopg 우선(or절 없는 기본검색) — REST SSL 재핸드셰이크·직렬화 회피. 변환불가(or절)면 None→REST 폴백
+        if _pg is not None:
+            return self._attach_winners([self._summary(row) for row in _pg])
         base = [
             ("select", cols),
             ("order", order),
             ("limit", str(limit)), ("offset", str(offset)),
         ]
-        r = self._get("items", base + self._filters(**kw))
+        r = self._get("items", base + filt)
         r.raise_for_status()
         return self._attach_winners([self._summary(row) for row in r.json()])
 
