@@ -7294,31 +7294,37 @@ def _apt_demand_compute(item_key: str) -> dict:
     ctr = rm.get("center") or {}
     if "lat" not in ctr or not comps_rm:
         return {"available": False}
-    hub, hd = None, 1e9
+    hub, hub_comp, hd = None, None, 1e9
     for c in comps_rm:
         d = haversine_m(ctr["lng"], ctr["lat"], c["lng"], c["lat"])
         if d < hd:
-            hd = d; hub = c["name"] if d < 150 else None   # 프론트 _aptHub와 동일 임계(150m)
+            hd = d
+            hub, hub_comp = (c["name"], c) if d < 150 else (None, None)   # 프론트 _aptHub와 동일 임계(150m)
     if not hub:
         return {"available": False}
     try:
         dt = apt_dong_table(item_key)
     except Exception:
-        return {"available": False}
+        dt = {}
     tb = next((b for b in (dt.get("bands") or []) if b.get("key") == "this"), None) if isinstance(dt, dict) else None
     comps = (tb or {}).get("complexes") or []
-    if not comps:
-        return {"available": False}
-    tot = sum(c["periods"]["12"]["count"] for c in comps)
-    dong_m = tot / (12 * len(comps))
-    subj = next((c for c in comps if c["name"] == hub), None)
-    if not subj:
-        return {"available": False}
-    subj_m = subj["periods"]["12"]["count"] / 12
-    sr, dr = round(subj_m, 1), round(dong_m, 1)
-    dem = "양호" if sr > dr else ("검토" if sr < dr else "보통")
-    return {"available": True, "demand": dem, "hub": hub,
-            "subj_monthly": round(subj_m, 2), "dong_monthly": round(dong_m, 2)}
+    # subj(물건 단지) 12개월 월평균 거래 — 법정동표에 있으면 그 값, 없으면 지도(반경1km) hub 단지 거래로
+    subj_dt = next((c for c in comps if c["name"] == hub), None)
+    subj_m = (subj_dt["periods"]["12"]["count"] / 12) if subj_dt else (hub_comp.get("counts", {}).get("12", 0) / 12)
+    others = [c for c in comps if c["name"] != hub]
+    if others:   # 같은 동네·같은 평형대의 '다른 단지'가 있음 → 동네 평균 대비 상대판정
+        tot = sum(c["periods"]["12"]["count"] for c in comps)
+        dong_m = tot / (12 * len(comps))
+        sr, dr = round(subj_m, 1), round(dong_m, 1)
+        dem = "양호" if sr > dr else ("검토" if sr < dr else "보통")
+        return {"available": True, "demand": dem, "hub": hub, "mode": "상대",
+                "subj_monthly": round(subj_m, 2), "dong_monthly": round(dong_m, 2)}
+    # 비교할 다른 단지가 없음 → 물건 단지 월평균 절대기준(주인님 지정: 월 3건↑ 양호·2건↑ 보통·그 미만 검토)
+    if subj_m <= 0:
+        return {"available": False}   # 물건 단지 거래조차 없으면 판정 불가
+    dem = "양호" if subj_m >= 3 else ("보통" if subj_m >= 2 else "검토")
+    return {"available": True, "demand": dem, "hub": hub, "mode": "절대",
+            "subj_monthly": round(subj_m, 2)}
 
 
 @app.get("/auction/apt_demands")
@@ -7333,11 +7339,11 @@ def apt_demands(keys: str, compute: bool = False) -> dict:
         cached = {}
     for k in ks:
         c = cached.get("aptdemand:" + k)
-        if isinstance(c, dict):
+        if isinstance(c, dict) and c.get("_sv") == "demand_v2":   # 현재 스키마 일치만 캐시 인정(fallback 로직 반영 → 옛 캐시 재계산)
             out[k] = c.get("demand") if c.get("available") else None
         elif compute:
             try:
-                r = _cached_doc("aptdemand", k, lambda: _apt_demand_compute(k))
+                r = _cached_doc("aptdemand", k, lambda kk=k: _apt_demand_compute(kk), schema_ver="demand_v2")
                 out[k] = r.get("demand") if isinstance(r, dict) and r.get("available") else None
             except Exception:
                 out[k] = None
