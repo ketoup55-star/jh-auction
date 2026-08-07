@@ -9188,10 +9188,40 @@ def auction_competing_listings(item_key: str) -> dict:
         rows = r.json() if r.status_code in (200, 206) else []
     except Exception:
         rows = []
-    if not rows or not rows[0].get("kb_complex_no"):
+    area_text = rows[0].get("area_text") if rows else ""
+    cno = rows[0].get("kb_complex_no") if rows else None
+    if not cno:
+        # 주소 폴백 — kb_complex_no 백필 안 된 물건도 match_address(kb_search=공개 통합검색API·토큰불요)로 실시간 KB단지 매칭.
+        #  kbmatch: 캐시(None도 저장)로 KB API 반복 방지. (진행 아파트 62.5%가 kb_complex_no None이라 폴백으로 경쟁매물 커버리지 확대)
+        _mk = "kbmatch:" + item_key
+        try:
+            _mc = auction_db.cache_get_many([_mk]).get(_mk)
+        except Exception:
+            _mc = None
+        if isinstance(_mc, dict):
+            cno = _mc.get("complex_no")
+        else:
+            _ad = ""
+            try:
+                _d = auction_db.get_auction(item_key)
+                _ad = (_d.get("address") if _d else "") or ""
+                if not area_text:
+                    area_text = (_d.get("area_text") if _d else "") or ""
+            except Exception:
+                _ad = ""
+            if _ad:
+                try:
+                    from kb_crawler import match_address
+                    cno = (match_address(_ad) or {}).get("complex_no")
+                except Exception:
+                    cno = None
+            try:
+                auction_db.cache_save(_mk, {"complex_no": cno})   # None도 캐시(매칭실패 물건 매번 KB API 방지)
+            except Exception:
+                pass
+    if not cno:
         return {"matched": False, "count": 0, "listings": []}
-    cno = rows[0]["kb_complex_no"]
-    m = re.search(r"전용\s*([\d.]+)", rows[0].get("area_text") or "")
+    m = re.search(r"전용\s*([\d.]+)", area_text or "")
     area = round(float(m.group(1)), 2) if m else None
     params = [("select", "listing_id,area_excl,price,floor,dong,ho,unit_price,"
                          "direction,room_cnt,bath_cnt,feature,agent_name,confirm_date"),
