@@ -31,16 +31,24 @@
   app.include_router(kb_router)
 
 --------------------------------------------------------------------------------
-1. 이 모듈이 하는 일 (2가지 모드)
+1. 이 모듈이 하는 일 (4가지 모드)
 --------------------------------------------------------------------------------
- [모드A] 아파트 매매 수집  collect_apartments()  /  POST /kb/collect/apartments
-   흐름: DB의 진행중 경매 아파트(items) → 주소로 KB단지 매칭 → 그 단지의 '매매' 매물
-         전량 수집(서명 API) → kb_listing/kb_complex/items 적재.
-   ※ 이 모드는 auction 성 'items' 테이블을 소스로 읽는다(아래 6. 의존성 주의).
+ [모드A] 경매 아파트 매매 수집  collect_apartments()  /  POST /kb/collect/apartments
+   진행중 경매 아파트(items) → KB단지 매칭 → 그 단지 '매매' 매물+사진 → kb_listing/kb_complex/items.
 
  [모드B] 지역 매물/중개사 수집  collect_region()  /  POST /kb/collect/region
-   흐름: 주소→좌표 → 법정동코드 지역의 매물 전량 수집(캡처헤더) → JSON 반환.
-   ※ DB 불필요. 어떤 프로젝트든 그대로 사용 가능(가장 이식성 높음).
+   주소→좌표 → 법정동 지역 매물 전량 → JSON 반환. DB 불필요(가장 이식성 높음).
+
+ [모드C] 공매 아파트+오피 수집  collect_gongmae()  /  python kb_crawler.py --gongmae
+   공매물건(gongmae_items 아파트+오피, data->>'name' 전체주소) → KB단지 매칭 →
+   (신규 단지만) 매매매물+사진 수집 → 적재. item_key='GM|'+manage_no. 경매 중복단지는 스킵.
+   이미 매칭한 공매물건은 스킵(skip_processed) → 정기 실행 시 신규만 빠르게.
+
+ [모드D] 전체 새로고침  refresh_kb_all()  /  python kb_crawler.py --refresh-all
+   kb_complex 전체(경매+공매) 단지의 매물+사진을 새로 긁어 신선도 유지(2주마다 권장).
+
+ ※ 모드A/C/D 는 프로젝트 DB 테이블(items / gongmae_items / kb_*)에 의존한다(6. 참고).
+ ※ 사진(kb_listing_photo)은 매물마다 phtoList API로 수집(with_photos=False 로 생략 가능).
 
 --------------------------------------------------------------------------------
 2. FastAPI 엔드포인트 (router 를 include 하면 자동 노출)
@@ -61,9 +69,26 @@
 --------------------------------------------------------------------------------
   import kb_crawler as kb
   data = kb.collect_region(address="대전 서구 도마동", lawd_code="3017010300")   # JSON
-  stat = kb.collect_apartments(limit=50)                                         # DB 적재
+  stat = kb.collect_apartments(limit=50)                                         # 경매 아파트→DB
+  stat = kb.collect_gongmae(limit=50)                                            # 공매 아파트+오피→DB
+  stat = kb.refresh_kb_all()                                                     # 전체 단지 새로고침
   m    = kb.match_address("서울 강남구 대치동 316 은마아파트 11동 502호")          # 매칭만
   ok, report = kb.selfcheck()                                                    # 자가진단
+
+  CLI:  python kb_crawler.py --gongmae         # 공매 신규 수집(모드C)
+        python kb_crawler.py --refresh-all     # 전체 새로고침(모드D)
+        python kb_crawler.py --collect         # 경매 수집(모드A)
+
+--------------------------------------------------------------------------------
+3-1. 정기 실행 스케줄 (예: Windows 작업 스케줄러, 2주마다)
+--------------------------------------------------------------------------------
+  # 공매 신규 — 2주마다 일요일 20:00
+  $py="python.exe경로"; $s="kb_crawler.py경로"
+  $a=New-ScheduledTaskAction -Execute $py -Argument "`"$s`" --gongmae"
+  $t=New-ScheduledTaskTrigger -Weekly -WeeksInterval 2 -DaysOfWeek Sunday -At 8PM
+  Register-ScheduledTask -TaskName "KB_Gongmae_Biweekly" -Action $a -Trigger $t -Force
+  # 전체 새로고침 — 2주마다 일요일 21:00  ( --refresh-all, 21시로 )
+  (리눅스/크론:  0 20 */14 * *  python kb_crawler.py --gongmae )
 
 --------------------------------------------------------------------------------
 4. 인증 (우선순위)
@@ -80,21 +105,25 @@
 --------------------------------------------------------------------------------
 5. 환경변수
 --------------------------------------------------------------------------------
-  SUPABASE_DB_URL   (모드A/DB필수)  postgresql://user:pw@host:6543/postgres
-  KB_SITE_TOKEN     (인증)  siteToken 직접 주입 — 배포 환경 권장
+  SUPABASE_DB_URL   (모드A/C/D DB필수)  postgresql://user:pw@host:6543/postgres
+  KB_REFRESH_TOKEN  (★인증 권장)  refresh_token → siteToken 무한 자동갱신. 서버/무인 실행 최적.
+  KB_SITE_TOKEN     (인증)  siteToken 직접 주입(만료되면 수동 교체)
   KB_EMAIL, KB_PW   (인증)  카카오 자동로그인용(playwright 필요)
+  KB_TOKEN_FILE     (선택)  토큰 캐시 파일, 기본 .kb_token.json (rotate된 refresh_token 저장)
   KB_REQUEST_DELAY  (선택)  API 요청 간격 초, 기본 0.4 (KB 부하방지/승인서 준수 — 낮추면 IP차단 위험)
   KB_LOG_LEVEL      (선택)  콘솔 로그레벨, 기본 INFO (DEBUG면 요청단위까지)
   KB_LOG_FILE       (선택)  로그파일 경로, 기본 kb_crawler.log (회전 5MB×5, 파일엔 DEBUG 전량)
+  ※ 같은 폴더 .env 를 자동 로드(python-dotenv 불필요). 위 값들을 .env 에 넣으면 됨.
 
 --------------------------------------------------------------------------------
 6. 의존성 & 주의 (오류 없이 쓰려면)
 --------------------------------------------------------------------------------
   * 파이썬 3.10+ (union 타입표기 사용).
-  * 모드A(아파트)는 소스로 'items' 테이블(경매 물건: item_key, address, usage_name,
-    data_class, status_reason, +kb_* 요약컬럼)이 있어야 한다. 이 테이블이 없는
-    프로젝트면 모드A는 못 쓰고 모드B(지역)만 쓴다. --selfcheck 가 유무를 알려준다.
-  * kb_* 4개 테이블은 --init-db 로 자동생성(SCHEMA_DDL 내장).
+  * 모드A(경매)는 'items' 테이블, 모드C(공매)는 'gongmae_items' 테이블(manage_no, address,
+    usage, data jsonb — data->>'name' 에 지번+단지명 전체주소)을 소스로 읽는다.
+    이 테이블들이 없는 프로젝트면 해당 모드는 못 쓰고 모드B(지역)만 쓴다. --selfcheck 가 알려준다.
+  * kb_* 4개 테이블(kb_complex/kb_item_match/kb_listing/kb_listing_photo)은 --init-db 로 자동생성.
+  * DB 는 Supabase 풀러(pgbouncer) 대응으로 prepare_threshold=None 사용(내장).
   * 배포(컨테이너)에서 자동로그인 쓰려면 chromium 설치 필요 + 카카오 캡차 위험 →
     KB_SITE_TOKEN 주입 방식 권장.
   * 지역 모드(B)는 캡처 인증헤더가 이상적이라 자동로그인 환경에서 완전동작.
@@ -191,8 +220,12 @@ ACTIVE_APT_SQL = """
     select item_key, address from items
     where usage_name like '%아파트%'
       and data_class = '현황'
-      and (status_reason like '진행%' or status_reason like '재%')
+      and is_active is true
 """
+# 🔴진행물건 판정 = is_active(앱 supabase_source와 동일·set_case_sort 트리거 자동유지).
+#  舊: status_reason like '진행%/재%' → status_reason은 외부 크롤러가 채우는 불안정 필드로 재크롤 시 대부분 NULL화
+#      → 진행 아파트 4,104건 중 100건만 수집대상으로 붕괴(강북화성파크드림 등 is_active=true 물건이 status_reason=None이라 탈락).
+#  新: is_active is true → 앱 '진행물건'과 정확히 일치(4,104건)·신규물건 트리거로 자동 편입(재발방지).
 
 # ──────────────────────────────────────────────────────────────────────────
 # 로깅 — 모든 단계 기록. 콘솔=KB_LOG_LEVEL(기본 INFO), 파일=DEBUG 전량(회전).
