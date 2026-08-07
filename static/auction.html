@@ -2735,7 +2735,7 @@ function _hav(lat1,lng1,lat2,lng2){const R=6371000,rad=Math.PI/180,dLat=(lat2-la
 let _aptTbl=null,_aptBand="this",_aptPeriod=12,_aptMap=null,_aptMapData=null,_aptMapPer=12,_aptOv=[],_aptPop=null,_aptHub=-1,_aptSubjOv=null,_aptMapArea=0,_aptMapMode="count",_aptSubjName="";
 async function loadAptSimilar(){
   const box=document.getElementById("mapBox"); if(!box) return;
-  if(!/아파트/.test((DETAIL&&DETAIL.usage)||"")) return;
+  if(!/아파트|오피스텔/.test((DETAIL&&DETAIL.usage)||"")) return;   // 아파트+오피스텔(offi 실거래로 동일 지도·법정동표)
   let tbl=null;
   try{ tbl=await (await fetch("/auction/apt_dong_table?item_key="+encodeURIComponent(itemKey))).json(); }catch(e){}
   const hasTbl=tbl&&tbl.available&&(tbl.bands||[]).length;

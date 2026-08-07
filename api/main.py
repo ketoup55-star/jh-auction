@@ -3110,6 +3110,18 @@ def _apt_trades(lawd: str, months: int = 12) -> list:
     return tr
 
 
+def _res_trades(lawd: str, is_offi: bool = False, months: int = 12) -> list:
+    """주거용 실거래 풀 — 오피스텔이면 offi_deals(매매), 아니면 아파트 _apt_trades.
+    두 소스는 필드 동일(name·umd·jibun·area·deal_date·amount)이라 유사거래/법정동표/수요 로직 공용."""
+    if is_offi:
+        try:
+            from auction_analysis.offi_source import offi_deals
+            return offi_deals(lawd, months, rent=False)
+        except Exception:
+            return []
+    return _apt_trades(lawd, months)
+
+
 # ── 서버측 지오코딩(V-World) + 디스크 캐시: 목록/상세 1km 필터 공용 ──
 from auction_analysis.geocode_source import VGeocoder, haversine_m  # noqa: E402
 _geocoder = VGeocoder()
@@ -3912,8 +3924,9 @@ def _prewarm_docs() -> None:
                     vehicles.append(ik)
                 else:
                     residential.append(ik)
-                    if "아파트" in (d.get("usage") or ""):
-                        apts.append(ik)   # 수요 판정(aptdemand)은 아파트만
+                    _u = d.get("usage") or ""
+                    if "아파트" in _u or "오피스텔" in _u:
+                        apts.append(ik)   # 수요 판정(aptdemand) — 아파트+오피스텔(offi 실거래)
             if len(items) < 200:
                 break
             off += 200
@@ -7195,7 +7208,8 @@ def _apt_dong_name(addr: str):
 
 def _apt_similar_ctx(item_key: str):
     d = auction_db.get_auction(item_key)
-    if not d or "아파트" not in (d.get("usage") or ""):
+    usage = (d.get("usage") or "") if d else ""
+    if not d or not ("아파트" in usage or "오피스텔" in usage):   # 아파트+오피스텔(offi 실거래로 동일 로직)
         return None
     addr = d.get("address") or ""
     lawd = resolve_lawd(addr) or _sgg_geo_fallback(addr)
@@ -7203,7 +7217,8 @@ def _apt_similar_ctx(item_key: str):
         return None
     return {"d": d, "addr": addr, "lawd": lawd,
             "dong": _apt_dong_name(addr),
-            "prop_area": _area_num(d.get("building_area"), d.get("area_text"))}
+            "prop_area": _area_num(d.get("building_area"), d.get("area_text")),
+            "is_offi": ("오피스텔" in usage and "아파트" not in usage)}   # 실거래 소스 분기용
 
 
 def _apt_area_bands(trades: list, prop_area) -> list:
@@ -7234,7 +7249,7 @@ def apt_dong_table(item_key: str) -> dict:
     if not ctx:
         return {"available": False}
     lawd, dong, prop_area = ctx["lawd"], ctx["dong"], ctx["prop_area"]
-    pool = _apt_trades(lawd)
+    pool = _res_trades(lawd, ctx.get("is_offi"))
     trades = [t for t in pool if t.get("umd") == dong] if dong else pool
     labels = _last_ym_labels(12)
     from datetime import date as _d, timedelta as _td
@@ -7404,7 +7419,7 @@ def apt_radius_map(item_key: str, band: float = 0, defer: bool = False) -> dict:
         pref = inv.get(lw)
         if not pref:
             continue
-        tr = _apt_trades(lw)
+        tr = _res_trades(lw, ctx.get("is_offi"))
         if tr:
             trades_by_pref.append((pref, tr))
             pool_all.extend(tr)
