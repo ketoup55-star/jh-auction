@@ -9445,8 +9445,19 @@ def _kb_band_min_price(cno: Optional[str], band: Optional[str], area) -> Optiona
         p, fl = l.get("price"), l.get("floor")
         if not p:
             continue
-        fm = re.search(r"(\d+)", str(fl or ""))   # kb_listing floor는 '6층'·'고층' 등 문자열 → 숫자 추출('고층/중간층' 등 숫자 없는 건 층군 판정 불가로 제외)
-        if not fm or _floor_band(int(fm.group(1))) != band:
+        _s = str(fl or "")
+        _fm = re.search(r"(\d+)", _s)
+        if _fm:                       # '6층'·'14층' 등 숫자 층 → 그 층의 밴드
+            _b = _floor_band(int(_fm.group(1)))
+        elif "저" in _s:              # 🔴kb_listing floor에 '저층'·'중간층'·'고층' 문자표기 다수 → 층군 매핑
+            _b = "1~6층"              #  (숫자 없다고 버리면 '저층'인 최저호가를 놓쳐 추정시세가 호가보다 높아지던 버그)
+        elif "중" in _s:
+            _b = "7~15층"
+        elif "고" in _s:
+            _b = "16층↑"
+        else:
+            _b = None
+        if _b != band:
             continue
         prices.append(int(p) * 10000)   # kb_listing price는 '만원' 단위 → 원으로(est A와 단위 일치)
     return min(prices) if prices else None
@@ -9542,7 +9553,7 @@ def _brief_as_detail(item_key: str, name: str):
             "elevator": b.get("elevator"), "_src": "건축물대장"}
 
 
-APT_VER = 6   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v6: 추정시세에 KB 층군 최저호가 결합=주인님 지정)
+APT_VER = 7   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v7: KB floor '저/중/고층' 문자표기 층군매핑=저층 최저호가 놓쳐 추정시세>호가이던 버그 픽스)
 
 
 def _apt_info_compute(item_key: str, months: int) -> dict:
