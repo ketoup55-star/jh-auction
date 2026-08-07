@@ -9410,7 +9410,7 @@ def _estimate_price(same_area: list, auction_floor) -> Optional[dict]:
     from datetime import date
     band = _floor_band(auction_floor)
     today = date.today()
-    for window in (3, 6):
+    for window in (3,):   # 3개월만(주인님 지정 2026-08-08) — 6개월 폴백 제거. 3개월 거래 없으면 추정시세 없음
         yy, mm = today.year, today.month - (window - 1)
         while mm <= 0:
             mm += 12
@@ -9476,7 +9476,7 @@ def _brief_as_detail(item_key: str, name: str):
             "elevator": b.get("elevator"), "_src": "건축물대장"}
 
 
-APT_VER = 4   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v4: _area_num 전용 우선=대지권 오採用 버그 픽스 반영)
+APT_VER = 5   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v5: 추정시세 3개월만·6개월 폴백 제거=주인님 지정)
 
 
 def _apt_info_compute(item_key: str, months: int) -> dict:
