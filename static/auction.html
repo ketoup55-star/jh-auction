@@ -230,6 +230,11 @@
   .acc.open .acc-chev{transform:rotate(180deg);}
   .acc-b{display:none;border-top:1px solid var(--line);}
   .acc.open .acc-b{display:block;}
+  /* '이 법정동 단지별 실거래' 카드 — PC·폰 공통 기본 접힘(제목 클릭 시 펼침) */
+  #aptTblCard>h2{cursor:pointer;position:relative;padding-right:64px;user-select:none;}
+  #aptTblCard>h2::after{content:"▼ 펼치기";position:absolute;right:0;top:3px;font-size:11.5px;color:#1565ff;font-weight:700;}
+  #aptTblCard.acc-open>h2::after{content:"▲ 접기";}
+  #aptTblCard:not(.acc-open)>:not(h2){display:none!important;}
   /* 차량/중기현황 표 */
   .foldbtn{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted,#667);background:var(--label,#eef2f7);border:1px solid var(--line,#dde3ea);border-radius:7px;padding:3px 11px;cursor:pointer;}
   .foldbtn:hover{background:var(--line,#dde3ea);}
@@ -2877,11 +2882,11 @@ function _openAptPop(c){
 load().then(()=>{ loadFavStatus(); loadMockBid(); loadCaseObjects(); loadAnalysis(); loadDocSummary(); loadAptInfo(); loadExpectedBid(); loadOffiInfo(); loadGeocode(); loadBuildingBrief(); loadVehicle(); loadEncar(); loadReview(); loadNearbyMap(); loadAptSimilar(); loadMarketAnalysis(); loadDagaguAnalysis(); loadShortSale(); /* 주동선 지도 제거→계량분석 패널(주인님 결정) */ });
 // 폰(≤600px) 상세: 섹션(.card) 아코디언 — 제목 탭하면 펼침. 이벤트 위임이라 나중에 채워지는 섹션도 자동 적용.
 document.addEventListener("click",function(e){
-  if(window.innerWidth>600) return;
   var el=e.target;
   while(el && el!==document.body && el.tagName!=="H2") el=el.parentNode;
-  if(el && el.tagName==="H2" && el.parentNode && el.parentNode.classList && el.parentNode.classList.contains("card"))
-    el.parentNode.classList.toggle("acc-open");
+  if(!(el && el.tagName==="H2" && el.parentNode && el.parentNode.classList && el.parentNode.classList.contains("card"))) return;
+  if(window.innerWidth>600 && el.parentNode.id!=="aptTblCard") return;   // PC에선 '이 법정동 단지별 실거래'만 아코디언(나머지 카드는 항상 펼침)
+  el.parentNode.classList.toggle("acc-open");
 });
 // 첫 섹션(물건 정보)은 기본 펼침
 setTimeout(function(){ if(window.innerWidth<=600){ var f=document.querySelector(".layout .card")||document.querySelector(".card"); if(f) f.classList.add("acc-open"); } }, 900);
