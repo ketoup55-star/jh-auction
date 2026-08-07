@@ -9386,6 +9386,72 @@ def _floor_band(f) -> Optional[str]:
     return "16층 이상"
 
 
+def _floor100(x) -> int:
+    """백만원 단위 내림(주인님 지정 '반내림'). 예: 160,750,000 → 160,000,000."""
+    return (int(x) // 1000000) * 1000000
+
+
+def _kb_complex_no_of(item_key: str, d: Optional[dict] = None) -> Optional[str]:
+    """물건의 KB complex_no — items.kb_complex_no 우선, 없으면 match_address(kb_search 공개API·토큰불요) 폴백. kbmatch: 캐시(None도)."""
+    try:
+        r = auction_db._get("items", [("select", "kb_complex_no"), ("item_key", f"eq.{item_key}"), ("limit", "1")])
+        rows = r.json() if r.status_code in (200, 206) else []
+    except Exception:
+        rows = []
+    if rows and rows[0].get("kb_complex_no"):
+        return rows[0]["kb_complex_no"]
+    _mk = "kbmatch:" + item_key
+    try:
+        _mc = auction_db.cache_get_many([_mk]).get(_mk)
+    except Exception:
+        _mc = None
+    if isinstance(_mc, dict):
+        return _mc.get("complex_no")
+    _ad = (d.get("address") if d else "") or ""
+    if not _ad:
+        try:
+            _dd = auction_db.get_auction(item_key); _ad = (_dd.get("address") if _dd else "") or ""
+        except Exception:
+            _ad = ""
+    cno = None
+    if _ad:
+        try:
+            from kb_crawler import match_address
+            cno = (match_address(_ad) or {}).get("complex_no")
+        except Exception:
+            cno = None
+    try:
+        auction_db.cache_save(_mk, {"complex_no": cno})
+    except Exception:
+        pass
+    return cno
+
+
+def _kb_band_min_price(cno: Optional[str], band: Optional[str], area) -> Optional[int]:
+    """KB 매매 매물 중 층군(band=1~6층 등)+동일평형(전용±3㎡)의 '최저 호가'(원). 없으면 None."""
+    if not cno or not band:
+        return None
+    params = [("select", "price,floor,area_excl"), ("complex_no", f"eq.{cno}"),
+              ("trade_type", "eq.매매"), ("limit", "300")]
+    if area:
+        params += [("area_excl", f"gte.{round(area - 3, 2)}"), ("area_excl", f"lte.{round(area + 3, 2)}")]
+    try:
+        lr = auction_db._get("kb_listing", params)
+        listings = lr.json() if lr.status_code in (200, 206) else []
+    except Exception:
+        return None
+    prices = []
+    for l in listings:
+        p, fl = l.get("price"), l.get("floor")
+        if not p:
+            continue
+        fm = re.search(r"(\d+)", str(fl or ""))   # kb_listing floor는 '6층'·'고층' 등 문자열 → 숫자 추출('고층/중간층' 등 숫자 없는 건 층군 판정 불가로 제외)
+        if not fm or _floor_band(int(fm.group(1))) != band:
+            continue
+        prices.append(int(p) * 10000)   # kb_listing price는 '만원' 단위 → 원으로(est A와 단위 일치)
+    return min(prices) if prices else None
+
+
 def _price_threshold(p: int) -> int:
     """기준가 구간별 이상치 제외 임계(원). 이 값 '이상' 벌어지면 제외."""
     억, 만 = 100000000, 10000
@@ -9476,7 +9542,7 @@ def _brief_as_detail(item_key: str, name: str):
             "elevator": b.get("elevator"), "_src": "건축물대장"}
 
 
-APT_VER = 5   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v5: 추정시세 3개월만·6개월 폴백 제거=주인님 지정)
+APT_VER = 6   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v6: 추정시세에 KB 층군 최저호가 결합=주인님 지정)
 
 
 def _apt_info_compute(item_key: str, months: int) -> dict:
@@ -9520,6 +9586,16 @@ def _apt_info_compute(item_key: str, months: int) -> dict:
     fm = re.search(r"(\d+)\s*층", address)
     auction_floor = int(fm.group(1)) if fm else None
     est = _estimate_price(same, auction_floor)
+    if est and est.get("price"):
+        # ★KB 층군 최저호가 결합(주인님 지정 2026-08-08): B=경쟁매물 층군(1~6층) 최저호가.
+        #  B<A(실거래) → 호가 B 백만원내림 / B≥A → (A+B)/2 백만원내림 / B없음 → A 백만원내림.
+        _A = est["price"]
+        _B = _kb_band_min_price(_kb_complex_no_of(item_key, d), est.get("band"), area)
+        if _B:
+            est = {**est, "price": (_floor100(_B) if _B < _A else _floor100((_A + _B) / 2)),
+                   "price_src": ("호가" if _B < _A else "실거래+호가평균"), "kb_ask": _B}
+        else:
+            est = {**est, "price": _floor100(_A), "price_src": "실거래"}
     amounts = [t["amount"] for t in same if t.get("amount")]
     summary = None
     if amounts:
