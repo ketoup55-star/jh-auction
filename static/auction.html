@@ -1212,10 +1212,9 @@ function renderAptAI(){
       +`<span class="demand-sub">최근 6개월 ${dm.count6}건</span>`;
     row.appendChild(el);
   }
-  if(((APT_AI&&APT_AI.available)||_colEst) && !row.querySelector('.est-item')){
+  if((APT_AI&&APT_AI.available)||_colEst){
     const est=APT_AI&&APT_AI.est, summ=APT_AI&&APT_AI.summary;
-    const el=document.createElement('div'); el.className='aiitem est-item';
-    el.innerHTML = (est && est.price)
+    const _html = (est && est.price)
       ? `<span class="k">추정시세</span>`
         +`<span class="v" style="color:var(--hotblue);font-size:15px">${won(est.price)}</span>`
         +`<span class="demand-sub">최근 ${est.window}개월·${est.band}·${est.count}건 평균</span>`
@@ -1228,7 +1227,11 @@ function renderAptAI(){
             +`<span class="v" style="color:var(--hotblue);font-size:15px">${won(_colEst)}</span>`
             +`<span class="demand-sub">유사 실거래 기준 추정</span>`
           : `<span class="k">추정시세</span><span class="demand-sub">산출불가(유사 실거래 없음)</span>`));
-    row.appendChild(el);
+    // ★est-item이 이미 있어도 갱신 — apt_info est(정확값)가 비동기로 늦게 오면 목록 폴백값(_colEst)을 교체.
+    //  (기존엔 `!querySelector('.est-item')` 가드로 첫 렌더된 폴백값이 고정돼 정확값이 반영 안 되던 버그)
+    let el=row.querySelector('.est-item');
+    if(!el){ el=document.createElement('div'); el.className='aiitem est-item'; row.appendChild(el); }
+    el.innerHTML=_html;
   }
   if(typeof ssApplyEst==='function') ssApplyEst();   // 추정시세 → 단기매도 매도가 자동
 }
