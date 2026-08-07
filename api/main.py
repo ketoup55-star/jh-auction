@@ -3898,7 +3898,7 @@ def _prewarm_docs() -> None:
     from auction_analysis.doc_analysis import (
         analyze_registry, analyze_appraisal, analyze_doc_summary, analyze_vehicle)
     try:
-        residential, vehicles = [], []
+        residential, vehicles, apts = [], [], []
         off = 0
         while True:   # 현황 전체 페이징(if not items/len<limit로 종료) — 옛 12000 상한은 DB 커지며 현황 누락 유발해 제거
             items = auction_db.list_auctions(limit=200, offset=off)
@@ -3912,6 +3912,8 @@ def _prewarm_docs() -> None:
                     vehicles.append(ik)
                 else:
                     residential.append(ik)
+                    if "아파트" in (d.get("usage") or ""):
+                        apts.append(ik)   # 수요 판정(aptdemand)은 아파트만
             if len(items) < 200:
                 break
             off += 200
@@ -3959,6 +3961,7 @@ def _prewarm_docs() -> None:
         jobs = [("analysis", residential, lambda db, k: _compute_analysis(k)),   # 크롤러 분석물건도 예열(전엔 analyze_registry=PDF만 → 크롤러물건 상세 첫진입 2~4초)
                 ("appraisal", residential, analyze_appraisal),
                 ("docsummary", residential, analyze_doc_summary),
+                ("aptdemand", apts, lambda db, k: _apt_demand_compute(k)),   # 아파트 수요 판정(물건단지 vs 법정동 평균) 예열 → 목록 배지 즉시(재발방지: 신규 아파트도 12h주기 자동)
                 ("vehicle2", vehicles, analyze_vehicle)]   # vehicle2: vehicle_specs DB 기반(구 PDF캐시 우회)
         ths = [_th.Thread(target=warm, args=j, daemon=True) for j in jobs]
         ths.append(_th.Thread(target=warm_encar, daemon=True))    # encar 독립(docs 안 기다림)
@@ -3999,7 +4002,7 @@ def _flush_all_caches() -> None:
 
 
 _CACHE_PREFIXES = ("brief", "apt", "nearby", "analysis", "appraisal",
-                   "docsummary", "docrents", "vehicle2", "encar", "encar2", "review")
+                   "docsummary", "docrents", "aptdemand", "vehicle2", "encar", "encar2", "review")
 
 
 def _invalidate_item_caches(keys: list) -> None:
@@ -7275,6 +7278,72 @@ def apt_dong_table(item_key: str) -> dict:
                     "months": months, "complexes": complexes})
     return {"available": True, "dong": dong, "prop_area": prop_area,
             "bands": out, "default_key": "this"}
+
+
+def _apt_demand_compute(item_key: str) -> dict:
+    """아파트 수요 판정 — 물건 단지(hub, 물건 좌표 최근접<150m)의 12개월 월평균 거래(subj)를
+    법정동 단지당 월평균(dong, 물건 면적대 'this')과 비교. subj>dong=양호 / ≈=보통 / <dong=검토.
+    hub 미특정(150m 초과)·좌표 없음·법정동표 미매칭이면 available False(배지 없음)."""
+    try:
+        rm = apt_radius_map(item_key, band=0)
+    except Exception:
+        return {"available": False}
+    if not isinstance(rm, dict) or not rm.get("available"):
+        return {"available": False}
+    comps_rm = rm.get("complexes") or []
+    ctr = rm.get("center") or {}
+    if "lat" not in ctr or not comps_rm:
+        return {"available": False}
+    hub, hd = None, 1e9
+    for c in comps_rm:
+        d = haversine_m(ctr["lng"], ctr["lat"], c["lng"], c["lat"])
+        if d < hd:
+            hd = d; hub = c["name"] if d < 150 else None   # 프론트 _aptHub와 동일 임계(150m)
+    if not hub:
+        return {"available": False}
+    try:
+        dt = apt_dong_table(item_key)
+    except Exception:
+        return {"available": False}
+    tb = next((b for b in (dt.get("bands") or []) if b.get("key") == "this"), None) if isinstance(dt, dict) else None
+    comps = (tb or {}).get("complexes") or []
+    if not comps:
+        return {"available": False}
+    tot = sum(c["periods"]["12"]["count"] for c in comps)
+    dong_m = tot / (12 * len(comps))
+    subj = next((c for c in comps if c["name"] == hub), None)
+    if not subj:
+        return {"available": False}
+    subj_m = subj["periods"]["12"]["count"] / 12
+    sr, dr = round(subj_m, 1), round(dong_m, 1)
+    dem = "양호" if sr > dr else ("검토" if sr < dr else "보통")
+    return {"available": True, "demand": dem, "hub": hub,
+            "subj_monthly": round(subj_m, 2), "dong_monthly": round(dong_m, 2)}
+
+
+@app.get("/auction/apt_demands")
+def apt_demands(keys: str, compute: bool = False) -> dict:
+    """목록 아파트 수요 판정 일괄(양호/보통/검토). 캐시(aptdemand:) 우선 즉시반환,
+    compute=1이면 미캐시만 계산(무거운 법정동 조회 → 프론트 2단계: 캐시즉시→미캐시점진)."""
+    ks = [k for k in (keys or "").split(",") if k][:200]
+    out: dict = {}
+    try:
+        cached = auction_db.cache_get_many(["aptdemand:" + k for k in ks]) or {}
+    except Exception:
+        cached = {}
+    for k in ks:
+        c = cached.get("aptdemand:" + k)
+        if isinstance(c, dict):
+            out[k] = c.get("demand") if c.get("available") else None
+        elif compute:
+            try:
+                r = _cached_doc("aptdemand", k, lambda: _apt_demand_compute(k))
+                out[k] = r.get("demand") if isinstance(r, dict) and r.get("available") else None
+            except Exception:
+                out[k] = None
+        else:
+            out[k] = None
+    return {"demands": out}
 
 
 @app.get("/auction/apt_radius_map")

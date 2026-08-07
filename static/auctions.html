@@ -158,6 +158,10 @@
   .nosise{color:#9aa0a6;font-weight:600;}   /* 시세 산출불가 표시 */
   .ecsi:has(.nosise){justify-content:flex-end;}   /* '시세 없음' 단독은 우측정렬(가격과 균형) */
   .t3mchip{display:inline-block;background:#e9f7ee;border:1px solid #bfe3cd;color:#1a7d46;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px;margin-left:2px;white-space:nowrap;}.t3mchip:empty{display:none;}
+  .demchip{display:inline-block;font-size:10.5px;font-weight:800;border-radius:6px;padding:1px 8px;margin-left:2px;white-space:nowrap;}.demchip:empty{display:none;}
+  .demchip.dem-good{background:#e7f6ec;border:1px solid #a7dcb8;color:#1a7d3c;}   /* 수요 양호 */
+  .demchip.dem-mid{background:#f0f2f5;border:1px solid #cfd6df;color:#5a6472;}    /* 수요 보통 */
+  .demchip.dem-rev{background:#fff2e6;border:1px solid #f2c79a;color:#b3610a;}    /* 수요 검토 */
   .regchip{display:inline-block;font-size:10.5px;font-weight:700;border-radius:6px;padding:1px 7px;margin-left:2px;white-space:nowrap;}
   .regchip.reg-regulated{background:#fdecea;border:1px solid #f5b7b1;color:#c0392b;}
   .regchip.reg-metro{background:#fff4e5;border:1px solid #f0cfa0;color:#b06a00;}
@@ -1027,6 +1031,24 @@ async function fillKbCounts(attempt){
     setTimeout(()=>fillKbCounts(attempt+1), 1500);
   }
 }
+// 아파트 행: 수요 판정(물건단지 12개월 월평균 거래 vs 법정동 단지당 월평균) 배지.
+//  캐시(aptdemand:) 즉시 → 미캐시만 compute(무거운 법정동조회 → 20개씩 순차, 서버 과부하 방지). 워머가 대부분 미리 채움.
+async function fillAptDemand(){
+  const els=[...document.querySelectorAll('.demchip[data-key]')].filter(e=>!e.dataset.done);
+  if(!els.length) return;
+  const setD=(k,v)=>{ document.querySelectorAll('.demchip[data-key="'+k+'"]').forEach(e=>{ e.dataset.done="1"; if(v){ e.textContent="수요 "+v; e.classList.add("dem-"+({"양호":"good","보통":"mid","검토":"rev"}[v]||"mid")); } }); };
+  const keys=[...new Set(els.map(e=>e.dataset.key))];
+  try{
+    const d=await (await fetch("/auction/apt_demands?keys="+encodeURIComponent(keys.join(",")))).json();
+    const dm=d.demands||{}, miss=[];
+    keys.forEach(k=>{ if(dm[k]) setD(k,dm[k]); else miss.push(k); });   // 캐시 히트 즉시
+    for(let i=0;i<miss.length && i<80;i+=20){                          // 미캐시는 20개씩 순차 compute(최대 80개/1회, 나머지는 워머·다음조회)
+      const chunk=miss.slice(i,i+20);
+      try{ const d2=await (await fetch("/auction/apt_demands?compute=1&keys="+encodeURIComponent(chunk.join(",")))).json();
+        const dm2=d2.demands||{}; chunk.forEach(k=>setD(k, dm2[k])); }catch(e){}
+    }
+  }catch(e){}
+}
 // 매수판정 필터(AI 위험도 기반): 매수양호/매수검토/매수금지 드롭다운
 let buyFilter=false;                     // (구) 차량 전용 매수양호 — gradeFilter로 통합, 비활성 유지
 let gradeFilter="";                      // "" | 매수양호 | 매수검토 | 매수금지
@@ -1320,6 +1342,9 @@ async function doSearch(){
   document.getElementById("cnt").innerHTML=`검색결과 <b>${d.total.toLocaleString()}</b>건`;
   if(!d.items.length){ document.getElementById("grid").innerHTML='<div class="kv" style="padding:20px;text-align:center">조건에 맞는 물건이 없습니다.</div>'; }
   else{
+    const isMobile=window.matchMedia("(max-width:600px)").matches;   // @media(max-width:600px) 기준 — 보이는 레이아웃만 생성(카드/테이블 이중생성 제거 → 렌더 블록 130ms→~65ms)
+    window._wasMobile=isMobile;
+    if(!window._respBound){ window._respBound=true; let _rt; window.addEventListener("resize",function(){ clearTimeout(_rt); _rt=setTimeout(function(){ if(window.matchMedia("(max-width:600px)").matches!==window._wasMobile) doSearch(); }, 250); }); }   // 창 크기가 PC↔폰 경계(600px)를 넘으면 반대 레이아웃으로 재렌더(목록캐시라 서버왕복 없음)
     const cardsAcc=[];
     const rows=d.items.map((L,i)=>{
       const href="/static/auction.html?item_key="+encodeURIComponent(L.item_key);
@@ -1346,15 +1371,15 @@ async function doSearch(){
         const dtxt=diff===0?'예상과 정확히 일치':`예상 대비 ${sign}${won(Math.abs(diff))} (${sign}${pct}%)`;
         predBadge=`<div class="predwrap"><span class="predchip ${over?'pred-over':'pred-hit'}">${over?'예상 이상':'적중'}</span><div class="preddiff ${over?'over':'hit'}">${dtxt}</div></div>`;
       }
-      cardsAcc.push(`<a class="mcard" href="${href}" target="_blank"><div class="mph"><img class="mimg" loading="lazy" decoding="async" fetchpriority="low" src="${L.thumb_url||_MCPH}" onerror="this.onerror=null;this.src=_MCPH"><div class="mtop">${/아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|근린/.test(L.usage||"")?`<span class="gradechip" data-key="${L.item_key}"></span>`:""}${L.compete>1?`<span class="mbd blue">경쟁분산 ${L.compete}건</span>`:""}${L.violation?`<span class="mbd red">위반건축물</span>`:""}${L.baedang>0?`<span class="mbd amber">배당요구 ${L.baedang}건</span>`:""}</div><div class="mcap"><div class="mcase">${L.court||""}${L.case_no?" · "+L.case_no:""}${(L.obj_no&&String(L.obj_no)!=="1")?" 물번"+L.obj_no:""}</div><div class="mreg">${L.address||"-"}</div><div class="mtyp">${L.usage_disp||L.usage||""}${L.area_text?" · "+L.area_text:""}${L.zone?" · "+L.zone:""} <span class="kapt" data-key="${L.item_key}"></span></div><div class="mprices"><span>감정 <b>${won(L.appraisal_price)}</b></span><span class="hot">최저 <b>${won(L.min_price)}</b></span>${L.group==="차량외"?`<span class="ecarv" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:(/아파트|오피스텔/.test(L.usage||"")?`<span class="aptest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:(/다세대|연립|빌라|도시형/.test(L.usage||"")?`<span class="villaest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:""))}</div><div class="mbot"><span class="dday">${dd.date}${dd.label?" "+dd.label:""}</span><span class="mres">${rr.status}${rr.count?" "+rr.count:""}${rr.pct?" "+rr.pct:""}</span><span class="mhit">조회 ${(L.hit_count||0).toLocaleString()}</span></div></div></div></a>`);
-      return `<tr data-idx="${i}"${L.baedang!=null?` data-baedang="${L.baedang}"`:""}${L.trades_3m!=null?` data-t3m="${L.trades_3m}"`:""} onclick="window.open('${href}','_blank')" style="cursor:pointer">
+      if(isMobile) cardsAcc.push(`<a class="mcard" href="${href}" target="_blank"><div class="mph"><img class="mimg" loading="lazy" decoding="async" fetchpriority="low" src="${L.thumb_url||_MCPH}" onerror="this.onerror=null;this.src=_MCPH"><div class="mtop">${/아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|근린/.test(L.usage||"")?`<span class="gradechip" data-key="${L.item_key}"></span>`:""}${/아파트/.test(L.usage||"")?`<span class="demchip" data-key="${L.item_key}"></span>`:""}${L.compete>1?`<span class="mbd blue">경쟁분산 ${L.compete}건</span>`:""}${L.violation?`<span class="mbd red">위반건축물</span>`:""}${L.baedang>0?`<span class="mbd amber">배당요구 ${L.baedang}건</span>`:""}</div><div class="mcap"><div class="mcase">${L.court||""}${L.case_no?" · "+L.case_no:""}${(L.obj_no&&String(L.obj_no)!=="1")?" 물번"+L.obj_no:""}</div><div class="mreg">${L.address||"-"}</div><div class="mtyp">${L.usage_disp||L.usage||""}${L.area_text?" · "+L.area_text:""}${L.zone?" · "+L.zone:""} <span class="kapt" data-key="${L.item_key}"></span></div><div class="mprices"><span>감정 <b>${won(L.appraisal_price)}</b></span><span class="hot">최저 <b>${won(L.min_price)}</b></span>${L.group==="차량외"?`<span class="ecarv" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:(/아파트|오피스텔/.test(L.usage||"")?`<span class="aptest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:(/다세대|연립|빌라|도시형/.test(L.usage||"")?`<span class="villaest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></span>`:""))}</div><div class="mbot"><span class="dday">${dd.date}${dd.label?" "+dd.label:""}</span><span class="mres">${rr.status}${rr.count?" "+rr.count:""}${rr.pct?" "+rr.pct:""}</span><span class="mhit">조회 ${(L.hit_count||0).toLocaleString()}</span></div></div></div></a>`);
+      return isMobile ? "" : `<tr data-idx="${i}"${L.baedang!=null?` data-baedang="${L.baedang}"`:""}${L.trades_3m!=null?` data-t3m="${L.trades_3m}"`:""} onclick="window.open('${href}','_blank')" style="cursor:pointer">
         <td class="cmid"><input type="checkbox" class="rowchk" value="${L.item_key}" onclick="event.stopPropagation()"></td>
         <td class="cmid"><div class="case">${L.court||"-"}</div><div class="casesub">${L.case_no||""}</div>${objno}</td>
         <td><div style="display:flex;gap:9px;">${t}<div style="min-width:0;">
           <div class="addr">${L.address||"-"}</div>
           ${L.area_text?`<div class="area">${L.area_text}</div>`:""}
           ${L.zone?`<div class="zonerow"><span class="zonechip">${L.zone}</span></div>`:""}
-          <div class="kaptrow">${(L.group==="주거용"||L.group==="차량외"||/아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택/.test(L.usage||""))?`<div class="kapt" data-key="${L.item_key}"></div>`:""}${(L.reg&&L.group==="주거용")?`<span class="regchip reg-${L.reg}" data-tip="${({regulated:'규제지역(조정대상·투기과열) = 토지거래허가구역',metro:'수도권(서울·경기·인천)이지만 규제·토허 아님',none:'비규제 지역'})[L.reg]}">${({regulated:'규제·토허',metro:'수도권 비규제',none:'비규제'})[L.reg]}</span>`:""}${/아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|근린/.test(L.usage||"")?`<div class="gradechip" data-key="${L.item_key}"></div>`:""}<span class="t3mchip" data-key="${L.item_key}">${(L.trades_3m!=null)?('실거래 '+L.trades_3m+'건'):''}</span>${/아파트/.test(L.usage||"")?`<span class="kbchip" data-key="${L.item_key}"></span>`:""}${L.violation?`<span class="viochip" data-tip="건축물대장상 위반건축물 — 대출 난항·이행강제금·1주택 비과세가 깨질 수 있음(원상복구 가능 여부·이행강제금 확인 필요)">위반건축물</span>`:""}${L.baedang!=null?(L.baedang<0?`<span class="bdchip bd0" data-tip="매각물건명세서에 조사된 임차인현황이 없음(임차내역 미기재)">임차내역 없음</span>`:`<span class="bdchip ${L.baedang>0?'':'bd0'}" data-tip="매각물건명세서 기준 배당요구한 가구(호실) 수 — 같은 호실 1·2차 계약은 1건">배당요구 ${L.baedang}건</span>`):""}${L.elev_caution?`<span class="elevchip" data-tip="승강기 없음/미상 + 4층 이상 — 고층 비선호로 매수세(환금성) 조사 필요">${L.elev_caution}</span>`:""}${L.dagagu&&L.dagagu.woolyang?`<span class="woolchip" data-tip="임차보증금+근저당이 감정가에 육박/초과 — 임대수요 많다는 반증(강의 우량 판별)">우량</span>`:""}${L.compete>1?`<span class="dgchip" data-tip="같은 매각기일·법원에 같은 유형 ${L.compete}건 동시진행 — 입찰자 분산(저가 낙찰 기회)">경쟁분산 ${L.compete}건</span>`:""}</div>
+          <div class="kaptrow">${(L.group==="주거용"||L.group==="차량외"||/아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택/.test(L.usage||""))?`<div class="kapt" data-key="${L.item_key}"></div>`:""}${(L.reg&&L.group==="주거용")?`<span class="regchip reg-${L.reg}" data-tip="${({regulated:'규제지역(조정대상·투기과열) = 토지거래허가구역',metro:'수도권(서울·경기·인천)이지만 규제·토허 아님',none:'비규제 지역'})[L.reg]}">${({regulated:'규제·토허',metro:'수도권 비규제',none:'비규제'})[L.reg]}</span>`:""}${/아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|근린/.test(L.usage||"")?`<div class="gradechip" data-key="${L.item_key}"></div>`:""}${/아파트/.test(L.usage||"")?`<span class="demchip" data-key="${L.item_key}"></span>`:""}<span class="t3mchip" data-key="${L.item_key}">${(L.trades_3m!=null)?('실거래 '+L.trades_3m+'건'):''}</span>${/아파트/.test(L.usage||"")?`<span class="kbchip" data-key="${L.item_key}"></span>`:""}${L.violation?`<span class="viochip" data-tip="건축물대장상 위반건축물 — 대출 난항·이행강제금·1주택 비과세가 깨질 수 있음(원상복구 가능 여부·이행강제금 확인 필요)">위반건축물</span>`:""}${L.baedang!=null?(L.baedang<0?`<span class="bdchip bd0" data-tip="매각물건명세서에 조사된 임차인현황이 없음(임차내역 미기재)">임차내역 없음</span>`:`<span class="bdchip ${L.baedang>0?'':'bd0'}" data-tip="매각물건명세서 기준 배당요구한 가구(호실) 수 — 같은 호실 1·2차 계약은 1건">배당요구 ${L.baedang}건</span>`):""}${L.elev_caution?`<span class="elevchip" data-tip="승강기 없음/미상 + 4층 이상 — 고층 비선호로 매수세(환금성) 조사 필요">${L.elev_caution}</span>`:""}${L.dagagu&&L.dagagu.woolyang?`<span class="woolchip" data-tip="임차보증금+근저당이 감정가에 육박/초과 — 임대수요 많다는 반증(강의 우량 판별)">우량</span>`:""}${L.compete>1?`<span class="dgchip" data-tip="같은 매각기일·법원에 같은 유형 ${L.compete}건 동시진행 — 입찰자 분산(저가 낙찰 기회)">경쟁분산 ${L.compete}건</span>`:""}</div>
           ${L.tags?`<div class="tags">${L.tags}</div>`:""}</div></div></td>
         <td class="cmid" data-label="용도" style="white-space:normal;word-break:break-all;">${uCell}</td>
         <td class="cnum" data-label="감정가·최저가·시세"><div class="price">${won(L.appraisal_price)}</div><div class="low">${won(L.min_price)}</div>${hasWin?`<div class="won">낙찰 : ${won(L.sale_price)}</div>`:(isSold?`<div class="noinfo">낙찰가 정보 없음</div>`:((!isSold&&L.sale_price)?`<div class="prevwon">이전 낙찰 : ${won(L.sale_price)}</div>`:""))}${(hasWin&&L.sale_2nd_price)?`<div class="kv">2등 ${won(L.sale_2nd_price)}</div>`:""}${L.group==="차량외"?`<div class="ecarv" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:(/아파트|오피스텔/.test(L.usage||"")?`<div class="aptest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:(/다세대|연립|빌라|도시형/.test(L.usage||"")?`<div class="villaest" data-key="${L.item_key}" data-base="${baseAmt}" data-sold="${isSold?1:''}"></div>`:""))}</td>
@@ -1362,9 +1387,11 @@ async function doSearch(){
         <td class="cmid" data-label="결과"><div style="color:${rc};font-weight:600">${rr.status}</div>${rr.count?`<div class="kv" style="color:${rc}">${rr.count}</div>`:""}${rr.pct?`<div class="kv" style="color:${rc}">${rr.pct}</div>`:""}${(hasWin&&salePct!=null)?`<div class="hwin">낙찰 ${salePct}%</div>`:""}</td>
         <td class="cmid" data-label="조회수">${(L.hit_count||0).toLocaleString()}</td></tr>`;
     }).join("");
-    document.getElementById("grid").innerHTML=`<div class="scrollx"><table class="tbl"><thead><tr>
+    document.getElementById("grid").innerHTML = isMobile
+      ? `<div class="cardlist">${cardsAcc.join("")}</div>`
+      : `<div class="scrollx"><table class="tbl"><thead><tr>
       <th style="width:44px">선택</th><th style="width:108px">법원명<br>사건번호</th><th>소재지</th><th style="width:132px">용도</th><th style="width:168px">감정가<br>최저가<br>[낙찰가]</th><th style="width:106px">매각기일<br>[입찰인원]</th><th style="width:92px">결과<br>유찰수 %</th><th style="width:54px">조회</th>
-    </tr></thead><tbody>${rows}</tbody></table></div><div class="cardlist">${cardsAcc.join("")}</div>`;
+    </tr></thead><tbody>${rows}</tbody></table></div>`;
     prefillFromResponse(d.items);  // 서버가 응답에 실어준 캐시값(준공/시세/유사거래/판정)을 첫 페인트에 즉시 채움 — 목록은 이걸로 완성됨
     applyBuyFilter();  // 필터 활성 상태면 재검색 결과에도 즉시 적용(등급 로딩 후 fillAptBriefs가 재적용)
     // ★목록(스피너)을 최우선으로: 미캐시 enrich(브리핑·시세·판정·호가)는 목록 페인트 '후'로 지연 발사.
@@ -1380,7 +1407,8 @@ async function doSearch(){
        fillEstimates,      // 주거용(아파트) 추정시세
        fillVillaEstimates, // 빌라/연립/도시형 추정시세(무거움)
        fillGrades,         // 주거용 매수판정(양호/검토/금지) 배지
-       fillKbCounts        // 아파트 호가 매물(동일평형 KB) 수
+       fillKbCounts,       // 아파트 호가 매물(동일평형 KB) 수
+       fillAptDemand       // 아파트 수요 판정(물건단지 vs 법정동 평균 → 양호/보통/검토)
       ].forEach(function(fn){ try{ fn(); }catch(e){ console.warn('[enrich]', fn.name, e); } });
     }, 300);
   }
