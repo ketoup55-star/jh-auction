@@ -9178,10 +9178,65 @@ def auction_apt_info(item_key: str, months: int = Query(12, le=24)) -> dict:
     return out
 
 
+def _kb_num(v):
+    try:
+        return round(float(str(v).replace(",", "").strip()), 2)
+    except Exception:
+        return None
+
+
+def _kb_int(v):
+    try:
+        return int(float(str(v).replace(",", "").strip()))
+    except Exception:
+        return None
+
+
+def _kb_realtime_listings(cno, prop_type: str = "01") -> dict:
+    """우리 DB(kb_listing)에 매물이 없는 미수집 단지 → KB부동산 실시간 매물 조회.
+    🔴근본: 우리는 전국 KB 중 2,604단지만 수집 → 미수집 단지는 경쟁매물이 0건이던 것.
+    kb_list_complex_all(매매)로 즉석 조회 후 competing 형식으로 매핑. competrt: 캐시(1h)로 KB API 반복 방지."""
+    import time as _time
+    _ck = f"competrt:{cno}"
+    try:
+        _c = auction_db.cache_get_many([_ck]).get(_ck)
+        if isinstance(_c, dict) and (_time.time() - (_c.get("ts") or 0) < 3600):
+            return {"listings": _c.get("listings") or [], "cname": _c.get("cname")}
+    except Exception:
+        pass
+    out, cname = [], None
+    try:
+        from kb_crawler import kb_list_complex_all
+        raw = kb_list_complex_all(cno, "1", max_pages=8, prop_type=prop_type)   # trade_code 1=매매
+        if raw:
+            cname = raw[0].get("단지명")
+        for p in raw:
+            out.append({
+                "listing_id": p.get("매물일련번호"),
+                "area_excl": _kb_num(p.get("순전용면적") or p.get("전용면적")),
+                "price": _kb_int(p.get("매매가") or p.get("최소매매가")),          # 만원 단위(kb_listing.price와 동일 스케일)
+                "floor": p.get("해당층수"),                                        # '저층'·'6층' 등 문자열(_kb_band_min_price와 동일 처리)
+                "dong": p.get("건물동명"), "ho": p.get("건물호명"),
+                "unit_price": _kb_int(p.get("평당단가")),
+                "direction": p.get("방향구분명"),
+                "room_cnt": _kb_int(p.get("방수")), "bath_cnt": _kb_int(p.get("욕실수")),
+                "feature": p.get("특징광고내용"), "agent_name": p.get("중개업소명"),
+                "confirm_date": p.get("매물확인년월일"),
+            })
+    except Exception:
+        out, cname = [], None
+    try:
+        auction_db.cache_save(_ck, {"ts": _time.time(), "listings": out, "cname": cname})
+    except Exception:
+        pass
+    return {"listings": out, "cname": cname}
+
+
 @app.get("/auction/competing_listings")
 def auction_competing_listings(item_key: str) -> dict:
     """경매물건과 동일 평형(전용 ±3㎡)의 KB부동산 매매 매물 — '경쟁매물보기'.
-    items.kb_complex_no 로 KB 단지를 찾아 kb_listing 에서 같은 전용면적대 매매만 추린다."""
+    items.kb_complex_no 로 KB 단지를 찾아 kb_listing 에서 같은 전용면적대 매매만 추린다.
+    우리 DB에 매물이 없는 미수집 단지는 KB 실시간 조회(_kb_realtime_listings)로 폴백."""
     try:
         r = auction_db._get("items", [("select", "kb_complex_no,area_text"),
                                       ("item_key", f"eq.{item_key}"), ("limit", "1")])
@@ -9235,12 +9290,22 @@ def auction_competing_listings(item_key: str) -> dict:
         listings = lr.json() if lr.status_code in (200, 206) else []
     except Exception:
         listings = []
-    cname = None
+    rt_cname = None
+    if not listings:   # 🔴우리 DB에 매물 0건(미수집 단지) → KB 실시간 조회 폴백(강북화성파크드림 등)
+        _rt = _kb_realtime_listings(cno)
+        listings = _rt.get("listings") or []
+        rt_cname = _rt.get("cname")
+        if area:       # 동일 평형 ±3㎡ 필터(실시간은 전 평형 반환 → 여기서 좁힘)
+            listings = [l for l in listings
+                        if l.get("area_excl") and (area - 3) <= l["area_excl"] <= (area + 3)]
+        listings.sort(key=lambda l: (l.get("price") is None, l.get("price") or 0))
+    cname = rt_cname
     try:
         cr = auction_db._get("kb_complex", [("select", "name"),
                                             ("complex_no", f"eq.{cno}"), ("limit", "1")])
         cj = cr.json() if cr.status_code in (200, 206) else []
-        cname = cj[0].get("name") if cj else None
+        if cj and cj[0].get("name"):
+            cname = cj[0].get("name")
     except Exception:
         pass
     # 매물 사진(kb_listing_photo) 일괄조회 → listing_id별 url 목록(현재 미수집이면 빈 채로 정상)
