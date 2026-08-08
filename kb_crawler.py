@@ -833,7 +833,6 @@ def _region_match(our_addr: str, kb_bub: str) -> tuple[bool, bool]:
 def _score(cand: dict, our_addr: str, name_kw: str) -> tuple[float, bool]:
     bub = cand.get("BUBADDR", "") + " " + cand.get("HSCM_NM_EXT", "")
     sgg_ok, emd_ok = _region_match(our_addr, bub)
-    region_ok = sgg_ok and emd_ok
     nk, nm, tag = _canon(name_kw), _canon(cand.get("HSCM_NM", "")), _canon(cand.get("HSCM_TAG", ""))
     if nk and (nk in nm or nm in nk):
         name_score = 0.5
@@ -843,9 +842,15 @@ def _score(cand: dict, our_addr: str, name_kw: str) -> tuple[float, bool]:
         name_score = 0.2
     else:
         name_score = 0.0
+    # 🔴단지가 동 경계에 걸치면 물건주소 동(도로명기준)과 KB등록 동(지번기준)이 다를 수 있음.
+    #  단지명이 정확일치(name_score 0.5)+고유(5자↑)하고 시군구가 같으면 동 불일치여도 허용
+    #  (강북화성파크드림 관음동/태전동 등). 흔한 짧은이름('현대'·'주공')은 len<5로 제외→오매칭 방지.
+    strong_name = name_score >= 0.5 and len(nk) >= 5
+    region_ok = sgg_ok and (emd_ok or strong_name)
     if not region_ok:
         return name_score * 0.2, False
-    return round((0.5 if (sgg_ok and emd_ok) else 0.25) + name_score, 3), True
+    base = 0.5 if emd_ok else 0.4    # 동까지 일치=0.5 / 시군구+고유단지명(동경계)=0.4
+    return round(base + name_score, 3), True
 
 
 def match_address(address: str, n: int = 15) -> dict:
