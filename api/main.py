@@ -9563,7 +9563,7 @@ def _estimate_price(same_area: list, auction_floor) -> Optional[dict]:
     from datetime import date
     band = _floor_band(auction_floor)
     today = date.today()
-    for window in (3,):   # 3개월만(주인님 지정 2026-08-08) — 6개월 폴백 제거. 3개월 거래 없으면 추정시세 없음
+    for window in (3, 6):   # 🔴3개월 우선, 0건이면 6개월로 확장(주인님 지정 2026-08-08). 6개월도 0건이면 _apt_info_compute가 호가(유사층수 최저)-1000만원 적용
         yy, mm = today.year, today.month - (window - 1)
         while mm <= 0:
             mm += 12
@@ -9629,7 +9629,7 @@ def _brief_as_detail(item_key: str, name: str):
             "elevator": b.get("elevator"), "_src": "건축물대장"}
 
 
-APT_VER = 7   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v7: KB floor '저/중/고층' 문자표기 층군매핑=저층 최저호가 놓쳐 추정시세>호가이던 버그 픽스)
+APT_VER = 8   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v8: 3개월 실거래 없으면 호가(유사층수 최저)-1000만원=추정시세, 호가도 없으면 산출불가=주인님 지정)
 
 
 def _apt_info_compute(item_key: str, months: int) -> dict:
@@ -9673,16 +9673,23 @@ def _apt_info_compute(item_key: str, months: int) -> dict:
     fm = re.search(r"(\d+)\s*층", address)
     auction_floor = int(fm.group(1)) if fm else None
     est = _estimate_price(same, auction_floor)
+    _cno = _kb_complex_no_of(item_key, d)
+    _band = _floor_band(auction_floor)                                   # 경매물건 층군(유사층수)
+    _B = _kb_band_min_price(_cno, _band, area) if _cno else None         # 그 층군 최저호가
     if est and est.get("price"):
         # ★KB 층군 최저호가 결합(주인님 지정 2026-08-08): B=경쟁매물 층군(1~6층) 최저호가.
         #  B<A(실거래) → 호가 B 백만원내림 / B≥A → (A+B)/2 백만원내림 / B없음 → A 백만원내림.
         _A = est["price"]
-        _B = _kb_band_min_price(_kb_complex_no_of(item_key, d), est.get("band"), area)
         if _B:
             est = {**est, "price": (_floor100(_B) if _B < _A else _floor100((_A + _B) / 2)),
                    "price_src": ("호가" if _B < _A else "실거래+호가평균"), "kb_ask": _B}
         else:
             est = {**est, "price": _floor100(_A), "price_src": "실거래"}
+    elif _B:
+        # 🔴3개월 실거래 없음 → 호가(유사층수 최저) − 1000만원(주인님 지정 2026-08-08).
+        #  실거래도 호가도 없으면 est=None 유지(산출불가 — 어쩔 수 없음).
+        est = {"price": max(0, _B - 10_000_000), "price_src": "호가-1000만", "kb_ask": _B,
+               "count": 0, "band": _band, "floor": auction_floor, "window": 3, "pool": 0}
     amounts = [t["amount"] for t in same if t.get("amount")]
     summary = None
     if amounts:
