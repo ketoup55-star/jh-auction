@@ -4605,7 +4605,7 @@ def _kakao_do_send(room, payload):
     rooms = [r.strip() for r in (room or "").split(",") if r.strip()]
     is_seq = isinstance(payload, list)
     seq, tmp = (_kakao_materialize(payload) if is_seq else (None, []))
-    sent, failed = [], []
+    sent, failed, aborted = [], [], []
 
     def _reset_kakao_ui():
         """방 하나가 실패해도 다음 방이 오염되지 않게 카톡 상태를 되돌린다.
@@ -4622,7 +4622,7 @@ def _kakao_do_send(room, payload):
             print(f"[kakao]   (정리 실패, 계속 진행) {type(_e).__name__}: {str(_e)[:60]}", flush=True)
 
     try:
-        for rm in rooms:
+        for _i, rm in enumerate(rooms):
             ok = False
             _reset_kakao_ui()                         # ★각 방 시작 전 상태 초기화
             for attempt in range(3):        # 원문 1회 + 재시도 2회 — '전송 前' 실패에만
@@ -4644,13 +4644,21 @@ def _kakao_do_send(room, payload):
                     break
             (sent if ok else failed).append(rm)
             print(f"[kakao]   {'✓' if ok else '✗'} '{rm}'", flush=True)
+            if not ok:
+                # 🔴에러시 중지(주인님 지정 2026-08-08): 한 방이라도 최종 실패하면 남은 방 발송을 즉시 중단.
+                #  좌표 오클릭·친구추가창 오입력 등으로 UI가 깨진 상태에서 계속 발송하면 엉뚱한 방/사람에게
+                #  오발송되는 연쇄사고(2026-07-21) 방지 — 발송실패를 'UI 오염' 신호로 보고 전체 abort.
+                aborted = rooms[_i + 1:]
+                if aborted:
+                    print(f"[kakao] ⛔ '{rm}' 발송실패 → 남은 {len(aborted)}개 방 발송 중단(에러시 중지): {aborted}", flush=True)
+                break
     finally:
         for p in tmp:
             try:
                 os.remove(p)
             except Exception:
                 pass
-    return {"sent": sent, "failed": failed}
+    return {"sent": sent, "failed": failed, "aborted": aborted}
 
 
 def _kakao_materialize(items):
@@ -4718,6 +4726,7 @@ def _kakao_run(kind, force=False):
         return {"ok": False, "msg": f"카카오 전송 실패(방 이름·로그인 확인): {e}"}
     sent_rooms = _res.get("sent", []) if isinstance(_res, dict) else []
     failed_rooms = _res.get("failed", []) if isinstance(_res, dict) else []
+    aborted_rooms = _res.get("aborted", []) if isinstance(_res, dict) else []   # 에러시 중지로 발송 안 한 남은 방
     if not sent_rooms:      # 성공한 방이 하나도 없음 → 이력(sent_links/sent_date) 갱신 안 함(다음 발송에 다시 시도)
         return {"ok": False, "msg": f"전송 실패 — 성공한 방 없음(실패: {', '.join(failed_rooms) or '없음'})"}
     import datetime as _dt
@@ -4732,9 +4741,11 @@ def _kakao_run(kind, force=False):
     kb.save_state(st)
     cnt = len(payload) if isinstance(payload, list) else len(payload)
     unit = "개 항목" if isinstance(payload, list) else "자"
-    _room_msg = f"성공 {len(sent_rooms)}방" + (f" · 실패 {len(failed_rooms)}방({', '.join(failed_rooms)})" if failed_rooms else "")
+    _room_msg = (f"성공 {len(sent_rooms)}방"
+                 + (f" · 실패 {len(failed_rooms)}방({', '.join(failed_rooms)})" if failed_rooms else "")
+                 + (f" · ⛔중단 {len(aborted_rooms)}방({', '.join(aborted_rooms)})" if aborted_rooms else ""))
     return {"ok": True, "msg": f"발송 완료({cnt}{unit}) — {_room_msg}", "date": date,
-            "sent_rooms": sent_rooms, "failed_rooms": failed_rooms}
+            "sent_rooms": sent_rooms, "failed_rooms": failed_rooms, "aborted_rooms": aborted_rooms}
 
 
 _KAKAO_FIRED = {}   # kind -> "YYYY-MM-DD HH:MM"(같은 분 재발화 방지)
