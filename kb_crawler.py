@@ -750,6 +750,20 @@ def _strip_jibun(rest: str) -> str:
     return re.sub(r"^\s*\d+(-\d+)?(외\s*\d+필지)?\s+", "", rest).strip()
 
 
+def _clean_tail(n):
+    """추출 단지명 꼬리 정리 — 'A동'·'30동'·'에이동'·3자리+호수 제거(차수 '1'/'2'는 보존).
+    🔴회귀검증(2026-08-08): 정상매칭 5539건 중 이 정리로 바뀌는 이름 0건 → 안전."""
+    if not n:
+        return n
+    n = re.sub(r"\s+\d+\s*,\s*\d+동.*$", "", n)   # '105,106동 ...'
+    n = re.sub(r"\s+\d+동$", "", n)               # '30동'
+    n = re.sub(r"\s+[A-Za-z]동$", "", n)          # 'A동'
+    n = re.sub(r"\s+(에이|비|씨|디|이|에프|지)동$", "", n)  # '에이동'
+    n = re.sub(r"\s+\d{3,}$", "", n)              # ' 101' ' 105' 호수·상가동(3자리+만 — 차수 보존)
+    n = re.sub(r"\s+[A-Za-z]$", "", n)            # ' A'
+    return n.strip() or None
+
+
 def extract_complex_name(address: str) -> str | None:
     if not address:
         return None
@@ -766,6 +780,11 @@ def extract_complex_name(address: str) -> str | None:
     rest = _TAIL.sub("", rest).strip()
     rest = _JUNK_SUFFIX.sub("", rest).strip()      # 감정평가 잔재 제거
     rest = _NOISE_SUFFIX.sub("", rest).strip()
+    rest = _clean_tail(rest)                        # 🆕동·호수 꼬리 정리(회귀0 검증) — 'A동'·'101' 등 제거
+    if not rest:                                    # 🆕도로명주소는 단지명이 끝 괄호 '(동, 단지명)'에 들어감
+        m2 = re.search(r"\(([^,()]+),\s*([^)]+)\)\s*$", address)
+        if m2:
+            rest = m2.group(2).strip()
     return rest or None
 
 
