@@ -1302,10 +1302,16 @@ def collect_gongmae(limit: int | None = None, only_new: bool = True, skip_proces
     log.info("공매 대상 %d건 (기존 단지 %d개)", len(rows), len(existing))
     if progress is not None:
         progress.update(stat)
+    _addr_cache: dict = {}                        # 🔴같은 주소(같은 아파트가 공매에 여러 manage_no로 등록) 반복 match_address·KB검색·로그 방지
     for manage_no, full_addr, usage in rows:
         item_key = "GM|" + str(manage_no)
         try:
-            m = match_address(full_addr or "")
+            _ak = (full_addr or "").strip()
+            if _ak in _addr_cache:
+                m = _addr_cache[_ak]              # 캐시 재사용(KB검색·매칭실패로그 스킵)
+            else:
+                m = match_address(full_addr or "")
+                _addr_cache[_ak] = m
             _upsert_match(cur, item_key, m)
             cno = m.get("complex_no")
             if not cno:
@@ -1473,6 +1479,28 @@ except ModuleNotFoundError:
 #    python kb_crawler.py --region "대전 서구 도마동" 3017010300 [물건종류 거래유형]
 #    python kb_crawler.py --collect [--limit N] [--dry]
 # ──────────────────────────────────────────────────────────────────────────
+def _kb_lock(max_age_h: float = 8.0) -> bool:
+    """KB 수집(gongmae/refresh-all/collect) 동시 실행 방지 락 — 스케줄 겹침 시 KB API 부하·중복 방지.
+    max_age_h 시간 넘은 락은 죽은 프로세스로 간주해 무시. 반환 True=획득(실행OK), False=이미 실행중(스킵)."""
+    import time as _t
+    lock = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".kb_crawler.lock")
+    try:
+        if os.path.exists(lock):
+            if (_t.time() - os.path.getmtime(lock)) / 3600 < max_age_h:
+                return False                    # 최근 락 = 다른 수집 실행 중
+            os.remove(lock)                     # stale(오래된) 락 제거
+    except Exception:
+        pass
+    try:
+        with open(lock, "w") as f:
+            f.write(str(os.getpid()))
+        import atexit
+        atexit.register(lambda: os.path.exists(lock) and os.remove(lock))
+    except Exception:
+        pass
+    return True
+
+
 def _cli(argv: list[str]) -> int:
     import argparse
     ap = argparse.ArgumentParser(description="KB부동산 수집 (자체완결 단일 파일)")
@@ -1489,6 +1517,11 @@ def _cli(argv: list[str]) -> int:
     ap.add_argument("--limit", type=int, help="처리 건수 제한")
     ap.add_argument("--dry", action="store_true", help="--collect 매칭만(적재 안함)")
     a = ap.parse_args(argv)
+
+    # 🔴KB 수집(gongmae/refresh-all/collect) 동시 실행 방지 — 스케줄 겹침 시 나중 것 스킵(KB API 부하·중복 방지). 스킵분은 다음 스케줄에 재시도됨.
+    if (a.gongmae or getattr(a, "refresh_all", False) or a.collect) and not _kb_lock():
+        log.info("다른 KB 수집이 실행 중 — 종료(중복/겹침 방지)")
+        return 0
 
     if a.selfcheck:
         ok, rpt = selfcheck()
