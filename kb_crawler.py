@@ -1520,7 +1520,7 @@ def _cli(argv: list[str]) -> int:
 
     # 🔴KB 수집(gongmae/refresh-all/collect) 동시 실행 방지 — 스케줄 겹침 시 나중 것 스킵(KB API 부하·중복 방지). 스킵분은 다음 스케줄에 재시도됨.
     if (a.gongmae or getattr(a, "refresh_all", False) or a.collect) and not _kb_lock():
-        log.info("다른 KB 수집이 실행 중 — 종료(중복/겹침 방지)")
+        log.info("다른 KB 수집이 실행 중 - 종료(중복/겹침 방지)")
         return 0
 
     if a.selfcheck:
