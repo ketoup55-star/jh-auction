@@ -8431,28 +8431,40 @@ def auction_sold_cases(item_key: str, mode: str = "bunji") -> dict:
 
     cases = []
     if mode == "nearby":
-        if not is_villa:
-            return {"available": False, "reason": "인근매각물건은 빌라/도생만", "cases": []}
+        if not (is_villa or is_apt):          # 🆕아파트도 인근 매각물건 지원(주인님 지정)
+            return {"available": False, "reason": "인근매각물건은 아파트·빌라/도생만", "cases": []}
         ll = _geocode(eb.geo_addr(cur.get("address")))
         if not ll:
             return {"available": False, "reason": "좌표 없음", "cases": []}
-        region = _villa_region_prefix(cur.get("address"))
-        rows = []
-        if region:
-            try:
-                r = auction_db._get("items", {"select": fields, "or": _VILLA_OR,
-                      "address": f"ilike.*{region}*", "sale_price": "gt.0", "limit": "3000"})
-                rows = r.json() if r.status_code in (200, 206) else []
-            except Exception:
-                rows = []
         clng, clat = ll[0], ll[1]
-        for c in rows:
-            if not _final_sale(c):
+        import math
+        _near_or = _VILLA_OR if is_villa else "(usage_name.ilike.*아파트*)"   # 유형별: 아파트는 아파트끼리
+        # 🆕좌표 반경(sold_coords·좌표인덱스) → address ilike full scan timeout 회피(아파트 매각물건 다수)
+        _dlat = 0.0095                                              # 위도 ~1.05km
+        _dlng = 0.0095 / max(0.3, math.cos(math.radians(clat)))    # 경도 위도보정
+        near = []
+        try:
+            rc = auction_db._get("sold_coords", [("select", "item_key,lng,lat"),
+                  ("lat", f"gte.{clat - _dlat}"), ("lat", f"lte.{clat + _dlat}"),
+                  ("lng", f"gte.{clng - _dlng}"), ("lng", f"lte.{clng + _dlng}"), ("limit", "3000")])
+            near = rc.json() if rc.status_code in (200, 206) else []
+        except Exception:
+            near = []
+        _im = {}
+        if near:
+            _iks = [x["item_key"] for x in near if x.get("item_key")]
+            _inq = "in.(" + ",".join('"' + k + '"' for k in _iks) + ")"
+            try:
+                ri = auction_db._get("items", {"select": fields, "or": _near_or,
+                      "item_key": _inq, "sale_price": "gt.0", "limit": "3000"})
+                _im = {x["item_key"]: x for x in (ri.json() if ri.status_code in (200, 206) else [])}
+            except Exception:
+                _im = {}
+        for x in near:
+            c = _im.get(x.get("item_key"))
+            if not c or not _final_sale(c):
                 continue
-            cl = _geocode(eb.geo_addr(c.get("address")))
-            if not cl:
-                continue
-            d = eb._haversine_m(clng, clat, cl[0], cl[1])
+            d = eb._haversine_m(clng, clat, x["lng"], x["lat"])   # sold_coords 좌표로 정확 반경(재지오코딩 불필요)
             if d <= 1000:
                 c["dist_m"] = round(d)
                 cases.append(c)

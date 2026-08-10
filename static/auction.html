@@ -843,7 +843,7 @@ async function load(){
           const base='/static/cases.html?item_key='+encodeURIComponent(itemKey)+'&mode=';
           let h='<div class="card"><h2>참고자료 (백데이터)</h2>';
           h+='<a class="sidelink" href="'+base+'bunji" target="_blank">'+(isApt?'해당 단지 매각사례':'해당 건물 매각사례')+'<span class="ar">↗</span></a>';
-          if(isVilla) h+='<a class="sidelink" href="'+base+'nearby" target="_blank">인근 매각물건 (반경 1km)<span class="ar">↗</span></a>';
+          if(isApt || isVilla) h+='<a class="sidelink" href="'+base+'nearby" target="_blank">인근 매각물건 (반경 1km)<span class="ar">↗</span></a>';
           return h+'</div>';
         })()}
       </aside>
