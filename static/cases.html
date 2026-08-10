@@ -13,12 +13,12 @@
   .rng{display:none;flex-direction:column;gap:9px;padding:12px 18px;background:#f6f9fd;border-bottom:1px solid #e0e8f3;font-size:12.5px;color:#334;}
   .rng.on{display:flex;}
   .rrow{display:flex;align-items:center;gap:12px;white-space:nowrap;}
-  .rrow label{font-weight:600;color:#46546b;flex:0 0 52px;}
+  .rrow label{font-weight:600;color:#46546b;flex:0 0 60px;}
   .rng input[type=range]{accent-color:#2c5db0;cursor:pointer;}
   .rrow > input[type=range]{flex:1;min-width:120px;max-width:360px;}
   .rng .lbl{flex:0 0 auto;}
   .rng .lbl b{color:#c0392b;}
-  /* 면적 듀얼 슬라이더 */
+  /* 듀얼 슬라이더(전용면적·매각기일) */
   .dual{position:relative;flex:1;min-width:140px;max-width:360px;height:26px;}
   .dual .track{position:absolute;top:11px;left:0;right:0;height:4px;background:#d3deee;border-radius:2px;}
   .dual .fill{position:absolute;top:11px;height:4px;background:#2c5db0;border-radius:2px;}
@@ -48,19 +48,17 @@
 <div class="hd" id="hd">매각사례</div>
 <div class="sub" id="sub">불러오는 중…</div>
 <div class="rng" id="rng">
-  <div class="rrow">
-    <label>거리</label>
+  <div class="rrow"><label>거리</label>
     <input type="range" id="rngbar" min="100" max="1000" step="50" value="1000">
-    <span class="lbl" id="rnglbl"></span>
-  </div>
-  <div class="rrow">
-    <label>전용면적</label>
-    <div class="dual" id="dual">
-      <div class="track"></div><div class="fill" id="afill"></div>
-      <input type="range" id="areaMin"><input type="range" id="areaMax">
-    </div>
-    <span class="lbl" id="arealbl"></span>
-  </div>
+    <span class="lbl" id="rnglbl"></span></div>
+  <div class="rrow" id="arow"><label>전용면적</label>
+    <div class="dual"><div class="track"></div><div class="fill" id="afill"></div>
+      <input type="range" id="areaMin"><input type="range" id="areaMax"></div>
+    <span class="lbl" id="arealbl"></span></div>
+  <div class="rrow" id="mrow"><label>매각기일</label>
+    <div class="dual"><div class="track"></div><div class="fill" id="mfill"></div>
+      <input type="range" id="mMin"><input type="range" id="mMax"></div>
+    <span class="lbl" id="mlbl"></span></div>
 </div>
 <div class="wrap" id="body"></div>
 <script>
@@ -70,6 +68,7 @@ function won(v){ v=+v||0; if(!v) return '-'; const eok=Math.floor(v/100000000), 
 function pct(a,b){ a=+a||0; b=+b||0; return b?Math.round(a/b*100)+'%':'-'; }
 function caseNo(it){ const p=(it.item_key||'').split('|'); let s=(p.length>=3)?(p[1]+'타경'+p[2]):(it.case_no||'-'); if(p[3]&&p[3]!=='1') s+=' 물번'+p[3]; return s; }
 function areaNum(it){ const m=(it.area_text||'').match(/전용\s*([0-9.]+)/); return m?+m[1]:null; }
+function ym(d){ return (d||'').slice(0,7); }                       // "2026-07"
 function area(it){ const n=areaNum(it); const ld=(it.land_area!=null&&+it.land_area>0)?('대지 '+(+it.land_area).toFixed(0)+'㎡ '):''; return ld+(n!=null?('전용 '+n+'㎡'):(it.area_text||'')); }
 function esc(s){ return (s==null?'':(''+s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function thumbHtml(it){
@@ -101,6 +100,17 @@ function render(list){
     tr.style.cursor='pointer'; tr.title='상세 보기 (새 창)';
     tr.onclick=()=>window.open('/static/auction.html?item_key='+encodeURIComponent(tr.dataset.ik),'_blank','noopener'); });
 }
+// 듀얼 슬라이더(최소/최대 두 핸들). 반환: 현재 [min,max] 읽는 함수.
+function setupDual(minEl, maxEl, fillEl, lo, hi, onchange){
+  const denom=Math.max(1, hi-lo);
+  [minEl,maxEl].forEach(s=>{ s.min=lo; s.max=hi; s.step=1; });
+  minEl.value=lo; maxEl.value=hi;
+  const updFill=()=>{ const a=+minEl.value,b=+maxEl.value; const L=(a-lo)/denom*100,R=(b-lo)/denom*100; fillEl.style.left=L+'%'; fillEl.style.width=Math.max(0,R-L)+'%'; };
+  minEl.oninput=()=>{ if(+minEl.value>+maxEl.value) minEl.value=maxEl.value; updFill(); onchange(); };
+  maxEl.oninput=()=>{ if(+maxEl.value<+minEl.value) maxEl.value=minEl.value; updFill(); onchange(); };
+  updFill();
+  return ()=>[+minEl.value, +maxEl.value];
+}
 (async()=>{
   if(!ik){ document.getElementById('sub').textContent=''; document.getElementById('body').innerHTML='<div class=empty>잘못된 접근입니다.</div>'; return; }
   let d; try{ d=await (await fetch('/auction/sold_cases?item_key='+encodeURIComponent(ik)+'&mode='+encodeURIComponent(mode))).json(); }
@@ -112,34 +122,43 @@ function render(list){
     document.getElementById('body').innerHTML='<div class=empty>'+(d.reason||'매각사례가 없습니다.')+'</div>'; return; }
   ALL = d.cases; DCOL = (mode==='nearby');
   if(DCOL){
-    // 거리 + 전용면적 레인지바: 반경1km 내 전량을 받아뒀으므로 클라이언트 필터로 즉시 조절
-    const rng=document.getElementById('rng'), bar=document.getElementById('rngbar');
-    const aMin=document.getElementById('areaMin'), aMax=document.getElementById('areaMax'), aFill=document.getElementById('afill');
-    rng.classList.add('on');
-    // 면적 슬라이더 범위 = 데이터 전용면적 min~max(5㎡ 라운딩)
+    // 거리(단일) + 전용면적·매각기일(듀얼) 레인지바 — 반경1km 전량을 받아뒀으므로 클라이언트 필터로 즉시 조절
+    document.getElementById('rng').classList.add('on');
+    const bar=document.getElementById('rngbar');
+    // ① 전용면적
     const areas=ALL.map(areaNum).filter(v=>v!=null);
-    let lo=0, hi=200;
-    if(areas.length){ lo=Math.floor(Math.min(...areas)/5)*5; hi=Math.ceil(Math.max(...areas)/5)*5; if(lo>=hi) hi=lo+5; }
-    [aMin,aMax].forEach(s=>{ s.min=lo; s.max=hi; s.step=1; });
-    aMin.value=lo; aMax.value=hi;
-    const updFill=()=>{ const a=+aMin.value,b=+aMax.value; const L=(a-lo)/(hi-lo)*100, R=(b-lo)/(hi-lo)*100; aFill.style.left=L+'%'; aFill.style.width=Math.max(0,R-L)+'%'; };
-    const apply=()=>{
-      const dv=+bar.value, a0=+aMin.value, a1=+aMax.value;
+    let getA=()=>[0,0];
+    if(areas.length){
+      let alo=Math.floor(Math.min(...areas)/5)*5, ahi=Math.ceil(Math.max(...areas)/5)*5; if(alo>=ahi) ahi=alo+5;
+      getA=setupDual(document.getElementById('areaMin'),document.getElementById('areaMax'),document.getElementById('afill'),alo,ahi,()=>apply());
+    } else document.getElementById('arow').style.display='none';
+    // ② 매각기일(월) — min~max 사이 전체 월 배열, 슬라이더는 월 인덱스
+    const yms=ALL.map(x=>ym(x.sell_date)).filter(v=>v&&v.length===7);
+    let MONTHS=[], getM=()=>[0,0];
+    if(yms.length){
+      const mn=yms.reduce((a,b)=>a<b?a:b), mx=yms.reduce((a,b)=>a>b?a:b);
+      let Y=+mn.slice(0,4), Mo=+mn.slice(5,7); const eY=+mx.slice(0,4), eM=+mx.slice(5,7);
+      while(Y<eY || (Y===eY&&Mo<=eM)){ MONTHS.push(Y+'-'+String(Mo).padStart(2,'0')); Mo++; if(Mo>12){Mo=1;Y++;} }
+    }
+    if(MONTHS.length>1) getM=setupDual(document.getElementById('mMin'),document.getElementById('mMax'),document.getElementById('mfill'),0,MONTHS.length-1,()=>apply());
+    else document.getElementById('mrow').style.display='none';
+
+    function apply(){
+      const dv=+bar.value, A=getA(), M=getM();
       const list=ALL.filter(x=>{
         if((x.dist_m||0)>dv) return false;
-        const ar=areaNum(x);
-        if(ar!=null && (ar<a0||ar>a1)) return false;   // 면적 미상은 통과(제외 안 함)
+        if(areas.length){ const ar=areaNum(x); if(ar!=null && (ar<A[0]||ar>A[1])) return false; }   // 면적 미상은 통과
+        if(MONTHS.length>1){ const mk=ym(x.sell_date); if(mk && (mk<MONTHS[M[0]]||mk>MONTHS[M[1]])) return false; }
         return true;
       });
       document.getElementById('rnglbl').innerHTML='<b>'+dv.toLocaleString()+'m</b> 이내';
-      document.getElementById('arealbl').innerHTML='전용 <b>'+a0+'~'+a1+'㎡</b> · <b>'+list.length+'</b>건';
+      if(areas.length) document.getElementById('arealbl').innerHTML='전용 <b>'+A[0]+'~'+A[1]+'㎡</b>';
+      if(MONTHS.length>1) document.getElementById('mlbl').innerHTML='<b>'+MONTHS[M[0]]+' ~ '+MONTHS[M[1]]+'</b>';
       document.getElementById('sub').innerHTML = esc(SUBADDR)+' &nbsp;·&nbsp; 총 <b>'+ALL.length+'</b>건 (표시 '+list.length+')';
       render(list);
-    };
+    }
     bar.oninput=apply;
-    aMin.oninput=()=>{ if(+aMin.value>+aMax.value) aMin.value=aMax.value; updFill(); apply(); };
-    aMax.oninput=()=>{ if(+aMax.value<+aMin.value) aMax.value=aMin.value; updFill(); apply(); };
-    updFill(); apply();   // 초기 = 전체
+    apply();   // 초기 = 전체
   } else {
     document.getElementById('sub').innerHTML = esc(SUBADDR)+' &nbsp;·&nbsp; 총 <b>'+(d.count||0)+'</b>건';
     render(ALL);
