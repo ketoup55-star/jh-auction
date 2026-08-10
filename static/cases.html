@@ -9,8 +9,15 @@
   .hd{background:#2c5db0;color:#fff;padding:13px 18px;font-size:15px;font-weight:700;}
   .sub{padding:9px 18px;background:#eef3fa;font-size:13px;color:#334;border-bottom:1px solid #d6e0ef;}
   .sub b{color:#1c4587;}
+  /* 거리 레인지바 (인근 매각물건 전용) */
+  .rng{display:none;align-items:center;gap:12px;padding:11px 18px;background:#f6f9fd;border-bottom:1px solid #e0e8f3;font-size:12.5px;color:#334;white-space:nowrap;}
+  .rng.on{display:flex;}
+  .rng label{font-weight:600;color:#46546b;flex:0 0 auto;}
+  .rng input[type=range]{flex:1;min-width:120px;max-width:360px;accent-color:#2c5db0;cursor:pointer;}
+  .rng .lbl{flex:0 0 auto;}
+  .rng .lbl b{color:#c0392b;}
   .wrap{padding:0 0 40px;overflow-x:auto;}
-  table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:980px;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:1040px;}
   th{background:#f0f4fa;color:#46546b;font-weight:600;padding:9px 7px;border-bottom:2px solid #cdd8ea;position:sticky;top:0;white-space:nowrap;}
   td{padding:10px 7px;border-bottom:1px solid #eee;vertical-align:top;}
   tr:hover td{background:#f8fafd;}
@@ -20,43 +27,86 @@
   .min{color:#1565c0;font-weight:700;}
   .sec{color:#888;font-size:11px;}
   .tags{color:#c0392b;font-size:11px;margin-top:2px;}
+  .bid{color:#c0392b;font-weight:600;font-size:11px;margin-top:2px;}   /* 입찰인원 빨강 */
+  /* 사진 썸네일 */
+  .addrcell{display:flex;gap:9px;align-items:flex-start;}
+  .thumb{width:56px;height:42px;object-fit:cover;border-radius:4px;background:#eef1f5;border:1px solid #e2e8f0;flex:0 0 auto;}
+  .nothumb{width:56px;height:42px;border-radius:4px;background:#eef1f5;border:1px solid #e8edf3;display:flex;align-items:center;justify-content:center;color:#bbb;font-size:10px;flex:0 0 auto;}
+  .addrtxt{min-width:0;}
   .empty{padding:60px 20px;text-align:center;color:#999;font-size:14px;}
 </style></head><body>
 <div class="hd" id="hd">매각사례</div>
 <div class="sub" id="sub">불러오는 중…</div>
+<div class="rng" id="rng">
+  <label>거리</label>
+  <input type="range" id="rngbar" min="100" max="1000" step="50" value="1000">
+  <span class="lbl" id="rnglbl"></span>
+</div>
 <div class="wrap" id="body"></div>
 <script>
 const P=new URLSearchParams(location.search), ik=P.get('item_key'), mode=P.get('mode')||'bunji';
+let ALL=[], DCOL=false, SUBADDR='';
 function won(v){ v=+v||0; if(!v) return '-'; const eok=Math.floor(v/100000000), man=Math.round((v%100000000)/10000); let s=''; if(eok)s+=eok+'억 '; if(man)s+=man.toLocaleString()+'만'; return (s||'0')+'원'; }
 function pct(a,b){ a=+a||0; b=+b||0; return b?Math.round(a/b*100)+'%':'-'; }
 function caseNo(it){ const p=(it.item_key||'').split('|'); let s=(p.length>=3)?(p[1]+'타경'+p[2]):(it.case_no||'-'); if(p[3]&&p[3]!=='1') s+=' 물번'+p[3]; return s; }
 function area(it){ const m=(it.area_text||'').match(/전용\s*([0-9.]+)/); const ld=(it.land_area!=null&&+it.land_area>0)?('대지 '+(+it.land_area).toFixed(0)+'㎡ '):''; return ld+(m?('전용 '+m[1]+'㎡'):(it.area_text||'')); }
-(async()=>{
-  if(!ik){ document.getElementById('sub').textContent=''; document.getElementById('body').innerHTML='<div class=empty>잘못된 접근입니다.</div>'; return; }
-  let d; try{ d=await (await fetch('/auction/sold_cases?item_key='+encodeURIComponent(ik)+'&mode='+encodeURIComponent(mode))).json(); }
-  catch(e){ document.getElementById('body').innerHTML='<div class=empty>불러오기 실패</div>'; return; }
-  document.getElementById('hd').textContent = (mode==='nearby')?'인근 매각물건 (반경 1km)':'해당 번지·건물 매각사례';
-  document.getElementById('sub').innerHTML = (d.subject?d.subject.address:'') + ' &nbsp;·&nbsp; 총 <b>'+(d.count||0)+'</b>건';
-  if(!d.available || !d.cases || !d.cases.length){ document.getElementById('body').innerHTML='<div class=empty>'+(d.reason||'매각사례가 없습니다.')+'</div>'; return; }
-  const dcol = (mode==='nearby');
-  let h='<table><thead><tr><th>사건번호</th><th style="text-align:left">소재지</th>'+(dcol?'<th>거리</th>':'')+'<th>용도</th><th class=num>감정가</th><th class=num>최저가</th><th class=num>매각가</th><th>매각기일<br>입찰인원</th><th>결과<br>최저가율·매각가율</th><th>조회</th></tr></thead><tbody>';
-  d.cases.forEach(it=>{
-    h+='<tr class="crow" data-ik="'+(it.item_key||'')+'"><td class=ctr>'+caseNo(it)+'<div class=sec>'+(it.court_name||'')+'</div></td>'
-     +'<td>'+(it.address||'')+'<div class=sec>'+area(it)+'</div>'+(it.tags?('<div class=tags>'+it.tags+'</div>'):'')+'</td>'
-     +(dcol?('<td class=ctr>'+(it.dist_m!=null?it.dist_m+'m':'-')+'</td>'):'')
-     +'<td class=ctr>'+(it.usage_name||'')+'</td>'
-     +'<td class=num>'+won(it.appraisal_price)+'</td>'
-     +'<td class="num min">'+won(it.min_price)+'</td>'
-     +'<td class="num sale">'+won(it.sale_price)+'</td>'
-     +'<td class=ctr>'+((it.sell_date||'').slice(0,10))+'<div class=sec>'+((it.bid_count!=null&&it.bid_count!=='')?('입찰 '+it.bid_count+'명'):'')+'</div></td>'
-     +'<td class=ctr>'+(it.result||'')+'<div class=sec>'+pct(it.min_price,it.appraisal_price)+' · <b style="color:#c0392b">'+pct(it.sale_price,it.appraisal_price)+'</b></div></td>'
-     +'<td class=ctr>'+(it.hit_count||0)+'</td></tr>';
-  });
+function esc(s){ return (s==null?'':(''+s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function thumbHtml(it){
+  const u=it.thumb_url;
+  if(!u) return '<div class="nothumb">사진<br>없음</div>';
+  return '<img class="thumb" loading="lazy" src="'+esc(u)+'" alt="" onerror="this.outerHTML=\'<div class=&quot;nothumb&quot;>사진<br>없음</div>\'">';
+}
+function rowHtml(it){
+  return '<tr class="crow" data-ik="'+esc(it.item_key||'')+'">'
+    +'<td class=ctr>'+caseNo(it)+'<div class=sec>'+esc(it.court_name||'')+'</div></td>'
+    +'<td><div class=addrcell>'+thumbHtml(it)+'<div class=addrtxt>'+esc(it.address||'')+'<div class=sec>'+esc(area(it))+'</div>'+(it.tags?('<div class=tags>'+esc(it.tags)+'</div>'):'')+'</div></div></td>'
+    +(DCOL?('<td class=ctr>'+(it.dist_m!=null?it.dist_m+'m':'-')+'</td>'):'')
+    +'<td class=ctr>'+esc(it.usage_name||'')+'</td>'
+    +'<td class=num>'+won(it.appraisal_price)+'</td>'
+    +'<td class="num min">'+won(it.min_price)+'</td>'
+    +'<td class="num sale">'+won(it.sale_price)+'</td>'
+    +'<td class=ctr>'+esc((it.sell_date||'').slice(0,10))+((it.bid_count!=null&&it.bid_count!=='')?('<div class=bid>입찰 '+esc(it.bid_count)+'명</div>'):'')+'</td>'
+    +'<td class=ctr>'+esc(it.result||'')+'<div class=sec>'+pct(it.min_price,it.appraisal_price)+' · <b style="color:#c0392b">'+pct(it.sale_price,it.appraisal_price)+'</b></div></td>'
+    +'<td class=ctr>'+(it.hit_count||0)+'</td></tr>';
+}
+function render(list){
+  const ncol = DCOL?10:9;
+  let h='<table><thead><tr><th>사건번호</th><th style="text-align:left">소재지</th>'+(DCOL?'<th>거리</th>':'')+'<th>용도</th><th class=num>감정가</th><th class=num>최저가</th><th class=num>매각가</th><th>매각기일<br>입찰인원</th><th>결과<br>최저가율·매각가율</th><th>조회</th></tr></thead><tbody>';
+  if(!list.length) h+='<tr><td colspan='+ncol+' class=empty style="padding:44px">해당 거리 내 매각물건이 없습니다.</td></tr>';
+  list.forEach(it=>h+=rowHtml(it));
   h+='</tbody></table>';
   document.getElementById('body').innerHTML=h;
   document.querySelectorAll('tr.crow').forEach(tr=>{ if(!tr.dataset.ik) return;   // 행 클릭 → 그 물건 상세 새 창
     tr.style.cursor='pointer'; tr.title='상세 보기 (새 창)';
     tr.onclick=()=>window.open('/static/auction.html?item_key='+encodeURIComponent(tr.dataset.ik),'_blank','noopener'); });
+}
+(async()=>{
+  if(!ik){ document.getElementById('sub').textContent=''; document.getElementById('body').innerHTML='<div class=empty>잘못된 접근입니다.</div>'; return; }
+  let d; try{ d=await (await fetch('/auction/sold_cases?item_key='+encodeURIComponent(ik)+'&mode='+encodeURIComponent(mode))).json(); }
+  catch(e){ document.getElementById('body').innerHTML='<div class=empty>불러오기 실패</div>'; return; }
+  document.getElementById('hd').textContent = (mode==='nearby')?'인근 매각물건 (반경 1km)':'해당 번지·건물 매각사례';
+  SUBADDR = d.subject?d.subject.address:'';
+  if(!d.available || !d.cases || !d.cases.length){
+    document.getElementById('sub').innerHTML = SUBADDR;
+    document.getElementById('body').innerHTML='<div class=empty>'+(d.reason||'매각사례가 없습니다.')+'</div>'; return; }
+  ALL = d.cases; DCOL = (mode==='nearby');
+  if(DCOL){
+    // 거리 레인지바: 이미 반경1km 내 전부 받았으므로 클라이언트 필터로 즉시 조절
+    const rng=document.getElementById('rng'), bar=document.getElementById('rngbar'), lbl=document.getElementById('rnglbl');
+    rng.classList.add('on');
+    const apply=()=>{
+      const v=+bar.value;
+      const list=ALL.filter(x=>(x.dist_m||0)<=v);
+      lbl.innerHTML='<b>'+v.toLocaleString()+'m</b> 이내 · <b>'+list.length+'</b>건';
+      document.getElementById('sub').innerHTML = esc(SUBADDR)+' &nbsp;·&nbsp; 총 <b>'+ALL.length+'</b>건 (표시 '+list.length+')';
+      render(list);
+    };
+    bar.oninput=apply;
+    apply();   // 초기 1000m = 전체
+  } else {
+    document.getElementById('sub').innerHTML = esc(SUBADDR)+' &nbsp;·&nbsp; 총 <b>'+(d.count||0)+'</b>건';
+    render(ALL);
+  }
 })();
 </script>
 </body></html>

@@ -8424,7 +8424,7 @@ def auction_sold_cases(item_key: str, mode: str = "bunji") -> dict:
     is_apt = "아파트" in usage
     is_villa = _is_villa_usage(usage)
     fields = ("item_key,court_name,case_no,obj_no,address,area_text,land_area,usage_name,appraisal_price,"
-              "min_price,sale_price,sale_rate,sell_date,bid_count,result,fail_count,hit_count,tags")
+              "min_price,sale_price,sale_rate,sell_date,bid_count,result,fail_count,hit_count,tags,thumb_url")
 
     def _final_sale(c):                          # 낙찰완료(재매각·재진행=이전 무산분 제외)
         return (eb._to_int(c.get("sale_price")) or 0) > 0 and not (c.get("result") or "").startswith("재")
@@ -8489,6 +8489,9 @@ def auction_sold_cases(item_key: str, mode: str = "bunji") -> dict:
             if _final_sale(c) and eb._norm(eb.building_key(c.get("address"))[0]) == cur_pre:
                 cases.append(c)
     cases.sort(key=lambda c: (c.get("sell_date") or ""), reverse=True)
+    for c in cases:                                    # 썸네일 http→https(앱 cleartext 차단 회피)
+        if c.get("thumb_url"):
+            c["thumb_url"] = c["thumb_url"].replace("http://", "https://")
     return {"available": True, "mode": mode, "count": len(cases), "cases": cases,
             "subject": {"address": cur.get("address"), "usage": usage}}
 
