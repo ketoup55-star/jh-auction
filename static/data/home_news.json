@@ -1,114 +1,96 @@
 {
  "items": [
   {
-   "keyword": "부동산 정책",
-   "title": "\"청년주거 대책으로 폐버스 하우스 제안... 기괴한 해프닝\"",
-   "link": "https://www.wikitree.co.kr/articles/1151286",
-   "image": "https://cdnweb01.wikitree.co.kr/webdata/editor/202608/09/img_20260809092631_0d17ac16.jpg",
-   "source": "위키트리",
-   "published": "2026-08-09T09:26:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "집값 오르자 가족 재산 갈등도 법정으로…상속분쟁 5년째 증가",
-   "link": "https://www.thepublic.kr/news/articleView.html?idxno=314301",
-   "image": "https://cdn.thepublic.kr/news/photo/202608/314301_317458_4053.png",
-   "source": "더퍼블릭",
-   "published": "2026-08-09T08:39:08+09:00",
-   "has_time": true
-  },
-  {
    "keyword": "대출규제",
-   "title": "대통령 주문에 주택공급 '속도전'…대출·규제 안 풀면 '숫자만 공급'",
-   "link": "http://www.inews24.com/view/1993082",
-   "image": "https://image.inews24.com/v1/9289f7472c2aad.jpg",
-   "source": "아이뉴스24",
-   "published": "2026-08-09T08:00:01+09:00",
+   "title": "\"은행 뺑뺑이 돌아도 잔금 마련 막막\"…대출 규제에 아파트 입주 예정자 '비상'",
+   "link": "https://m.news.nate.com/view/20260810n04327?issue_sq=11002",
+   "image": "https://news.nateimg.co.kr/orgImg/mk/2026/08/10/news-p.v1.20260810.297615433c0a4394a30194f05c62eef7_P1.jpg",
+   "source": "모바일 네이트 뉴스",
+   "published": "2026-08-10T08:39:08+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "[정지서의 조곤조곤] 집값은 하나, 정책은 여러 곳",
+   "link": "https://news.einfomax.co.kr/news/articleView.html?idxno=4429306",
+   "image": "https://cdn.news.einfomax.co.kr/news/thumbnail/202608/4429306_335638_572_v150.jpg",
+   "source": "연합인포맥스",
+   "published": "2026-08-10T07:56:02+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "[부동산현장] 규제와 지원 사이, 주택정책의 균형 찾아야",
+   "link": "https://www.yangsanilbo.com/news/articleView.html?idxno=126580",
+   "image": "http://www.yangsanilbo.com/news/thumbnail/202608/126580_97513_718_v150.jpg",
+   "source": "양산신문",
+   "published": "2026-08-10T07:40:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "부동산 민심에 또 표심 흔들?...세제개편에 정치권 '긴장'",
-   "link": "https://www.ytn.co.kr/_ln/0101_202608090704000388",
-   "image": "https://image.ytn.co.kr/general/jpg/2026/0809/202608090704000388_t.jpg",
-   "source": "YTN",
-   "published": "2026-08-09T07:04:00+09:00",
+   "title": "'손주 봐주려 집 옮겼더니 세금 폭탄?'…닷새만에 민원 2500건",
+   "link": "https://biz.sbs.co.kr/article/20000327566",
+   "image": "https://img.biz.sbs.co.kr/upload/2026/07/26/zeA1785027972699-850.jpg",
+   "source": "biz.sbs.co.kr",
+   "published": "2026-08-10T07:24:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "집값",
-   "title": "서울은 관망 중인데...\"이 동네 집값 쭉쭉 오른다\" 어디? - 머니투데이",
-   "link": "https://www.mt.co.kr/estate/2026/08/09/2026080716054477153",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/08/2026080716054477153_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-08-09T07:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "빌라 경매",
-   "title": "목동 준신축 빌라를 3억대에…'HUG 말소확약' 서울 빌라 경매",
-   "link": "https://realty.chosun.com/site/data/html_dir/2026/08/07/2026080702147.html",
-   "image": "https://image.chosun.com/sitedata/image/202608/07/2026080702144_0.jpg",
+   "keyword": "아파트 경매",
+   "title": "준서울 광명 12.5억 대단지를 8.6억부터… 경기남부 아파트 추천 경매",
+   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026081000689",
+   "image": "https://image.chosun.com/sitedata/thumbnail/202608/10/2026081000688_0_thumb.jpg",
    "source": "realty.chosun.com",
-   "published": "2026-08-09T06:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "PF확대·규제완화로 '과감한 공급'…투기적 비거주 선별은 신중",
-   "link": "https://www.yna.co.kr/view/AKR20260808049500002",
-   "image": "https://img4.yna.co.kr/photo/yna/YH/2026/08/07/PYH2026080706120001300_P4.jpg",
-   "source": "연합뉴스",
-   "published": "2026-08-09T05:47:00+09:00",
+   "published": "2026-08-10T07:20:50+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "\"집 팔긴 싫고 세금은 부담\"…서울 공동명의 보유자 3만명 늘었다",
-   "link": "https://www.news1.kr/realestate/general/6252811",
-   "image": "https://i3n.news1.kr/system/photos/2026/8/6/8044164/high.jpg",
+   "title": "[칼럼] 은행 대신 사금융·대부업체 …대출 막고 세금 조이는 부동산 정책 이래도 되나",
+   "link": "https://www.freezinenews.com/news/articleView.html?idxno=28719",
+   "image": "https://cdn.freezinenews.com/news/thumbnail/202608/28719_45216_1821_v150.jpg",
+   "source": "프리진뉴스",
+   "published": "2026-08-10T06:30:14+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "주담대 막혀도 '200억 아파트' 척척…결국 살 사람은 샀다 [시장톡]",
+   "link": "https://www.hankyung.com/article/2026080701416",
+   "image": "https://img.hankyung.com/photo/202608/ZA.45261969.1.jpg",
+   "source": "한국경제",
+   "published": "2026-08-10T06:30:01+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "부동산 세제 '고차방정식' 됐다…\"내 세금 얼마냐\" 문의 쇄도",
+   "link": "https://www.news1.kr/realestate/general/6252705",
+   "image": "https://i3n.news1.kr/system/photos/2026/8/3/8037914/high.jpg",
    "source": "뉴스1",
-   "published": "2026-08-09T05:40:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "똘똘한 아파트의 종언, 하지만…李 대통령 ‘부동산 양도소득’ 저격 後 [주말 Q&A]",
-   "link": "https://www.thescoop.co.kr/news/articleView.html?idxno=311164",
-   "image": "https://cdn.thescoop.co.kr/news/thumbnail/202608/311164_227864_1922_v150.jpg",
-   "source": "더스쿠프",
-   "published": "2026-08-09T05:06:20+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "부동산 공급대책 곧 발표...물량 확대·조기 착공 '중점'",
-   "link": "https://www.ytn.co.kr/_ln/0102_202608090059302496",
-   "image": "https://image.ytn.co.kr/general/jpg/2026/0809/202608090059302496_t.jpg",
-   "source": "YTN",
-   "published": "2026-08-09T00:59:00+09:00",
+   "published": "2026-08-10T05:50:00+09:00",
    "has_time": true
   },
   {
    "keyword": "대출규제",
-   "title": "아파트 잔금대출 규제 완화?…상호금융, 기대감 솔솔",
-   "link": "https://www.metroseoul.co.kr/article/20260809500011",
-   "image": null,
-   "source": "메트로신문",
-   "published": "2026-08-09T00:00:00+09:00",
-   "has_time": false
+   "title": "정비사업 추가 이주비 대출에 공적보증 검토",
+   "link": "https://www.yonhapnewstv.co.kr/news/AKR20260810090422DsG",
+   "image": "https://media.yonhapnewstv.co.kr/article/AKR/20260810/AKR20260810090422DsG_01_i.jpg",
+   "source": "연합뉴스TV",
+   "published": "2026-08-10T00:04:24+09:00",
+   "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "부동산부터 증시까지..여야 '정책 대전' 서막",
-   "link": "https://v.daum.net/v/20260809063130819",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/09/fnnewsi/20260809063130312otoy.jpg",
+   "title": "[머니톡스] ① 세계의 주택정책…투기는 막고 거래는 터주다",
+   "link": "https://v.daum.net/v/20260810090256889",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/10/yonhap/20260810090256294wvom.jpg",
    "source": "Daum",
-   "published": "2026-08-09T00:00:00+09:00",
+   "published": "2026-08-10T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 12,
- "date": "2026-08-09"
+ "count": 10,
+ "date": "2026-08-10"
 }
