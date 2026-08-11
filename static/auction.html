@@ -504,6 +504,22 @@
   /* AI 권리분석 요약 카드 안 — 이 물건 대출·세금·전략 요약 */
   .ai-loan{margin-top:11px;padding:11px 13px;border-radius:8px;
            background:linear-gradient(180deg,#f2f6ff 0%,#eef3fd 100%);border:1px solid #d3ddf2;}
+  /* 접이식 — AI 권리분석 상세(내 조건 맞춤·대출세금전략) / 대출·세금 가이드 카드 */
+  details.ai-fold{margin-top:11px;border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;}
+  details.ai-fold>summary{list-style:none;cursor:pointer;user-select:none;padding:10px 13px;font-weight:700;
+           font-size:13px;color:var(--primary);background:#f4f7fd;display:flex;align-items:center;
+           justify-content:space-between;gap:8px;}
+  details.ai-fold>summary::-webkit-details-marker{display:none;}
+  details.ai-fold[open]>summary{border-bottom:1px solid var(--line);}
+  details.ai-fold .ai-fold-ar{transition:transform .2s;color:var(--muted);font-size:11px;}
+  details.ai-fold[open] .ai-fold-ar{transform:rotate(180deg);}
+  details.ai-fold .ai-fold-bd{padding:2px 13px 8px;}
+  details.lg-fold>summary{list-style:none;cursor:pointer;user-select:none;display:flex;align-items:center;
+           gap:8px;padding:2px 0;flex-wrap:wrap;}
+  details.lg-fold>summary::-webkit-details-marker{display:none;}
+  details.lg-fold>summary::before{content:"▸";color:var(--muted);font-size:15px;transition:transform .2s;flex:0 0 auto;}
+  details.lg-fold[open]>summary::before{transform:rotate(90deg);}
+  details.lg-fold>summary .lg-sum-t{font-size:17px;font-weight:800;color:#1a1a1a;letter-spacing:-0.3px;}
   .ai-loan-hd{font-weight:800;color:#2c4d86;font-size:12.5px;margin-bottom:5px;}
   .ai-loan-body{font-size:12.5px;line-height:1.7;color:#33404f;word-break:keep-all;}
   .ai-loan-body b{color:#1f2a3a;}
@@ -1112,7 +1128,10 @@ function aiExtraHTML(){
   const reg=(DETAIL&&DETAIL.reg), me=window.ME||{};
   const personal=(typeof personalLoanAnalysis==='function') ? personalLoanAnalysis({purpose:me.purpose,houseCount:me.house_count,reg:reg,usage:u}) : "";
   const loan=loanTaxSummaryHTML(reg) ? `<div class="ai-loan"><div class="ai-loan-hd">💰 이 물건 대출·세금·전략</div><div class="ai-loan-body">${loanTaxSummaryHTML(reg)}</div></div>` : "";
-  return personal + loan;
+  const _inner = personal + loan;   // 🧭내 조건 맞춤 + 💰대출·세금·전략 → 요약카드에선 접어둠(요약만 노출)
+  return _inner
+    ? `<details class="ai-fold"><summary><span>🧭 내 조건 맞춤 분석 · 💰 대출·세금·전략</span><span class="ai-fold-ar">▾</span></summary><div class="ai-fold-bd">${_inner}</div></details>`
+    : "";
 }
 function renderLoanGuide(){
   const box=document.getElementById("loanGuideBox"); if(!box) return;
@@ -1183,8 +1202,8 @@ function renderLoanGuide(){
         <p style="margin-top:10px;color:#8b7355;font-size:11.5px;">공통 주의 — 세 방법 모두 법적·세무 리스크를 안고 있습니다. 실제 활용 전 반드시 대출·세무 전문가의 개별 검토를 받으세요.</p>
       </div>
     </details>`;
-  box.innerHTML=`<div class="card lg-card">
-    <h2>🏦 이 물건 대출·세금 가이드 <span class="lg-badge" style="background:${M.bg};color:${M.fg}">${M.label}</span></h2>
+  box.innerHTML=`<details class="card lg-card lg-fold">
+    <summary class="lg-sum"><span class="lg-sum-t">🏦 이 물건 대출·세금 가이드</span> <span class="lg-badge" style="background:${M.bg};color:${M.fg}">${M.label}</span></summary>
     <div class="lg-desc">${esc(M.desc)}</div>
     <div class="lg-tblwrap"><table class="lg-tbl">
       <thead><tr><th>보유 주택 수</th><th>가계 경락잔금대출</th><th>매매사업자 대출</th><th>비교과세(매매업 세금)</th></tr></thead>
@@ -1197,7 +1216,7 @@ function renderLoanGuide(){
     </ul>
     ${metroExtra}
     <div class="lg-foot">※ 2026.7.1 규제 기준 · 정보 제공용이며 대출·세무 자문이 아닙니다. 물건 권리관계(선순위 임차인·유치권 등)에 따라 한도가 달라질 수 있습니다.</div>
-  </div>`;
+  </details>`;
 }
 function renderAptAI(){
   const row=document.querySelector('#aiBox .airow');
