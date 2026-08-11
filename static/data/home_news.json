@@ -1,96 +1,60 @@
 {
  "items": [
   {
-   "keyword": "대출규제",
-   "title": "\"은행 뺑뺑이 돌아도 잔금 마련 막막\"…대출 규제에 아파트 입주 예정자 '비상'",
-   "link": "https://m.news.nate.com/view/20260810n04327?issue_sq=11002",
-   "image": "https://news.nateimg.co.kr/orgImg/mk/2026/08/10/news-p.v1.20260810.297615433c0a4394a30194f05c62eef7_P1.jpg",
-   "source": "모바일 네이트 뉴스",
-   "published": "2026-08-10T08:39:08+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "[정지서의 조곤조곤] 집값은 하나, 정책은 여러 곳",
-   "link": "https://news.einfomax.co.kr/news/articleView.html?idxno=4429306",
-   "image": "https://cdn.news.einfomax.co.kr/news/thumbnail/202608/4429306_335638_572_v150.jpg",
-   "source": "연합인포맥스",
-   "published": "2026-08-10T07:56:02+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "[부동산현장] 규제와 지원 사이, 주택정책의 균형 찾아야",
-   "link": "https://www.yangsanilbo.com/news/articleView.html?idxno=126580",
-   "image": "http://www.yangsanilbo.com/news/thumbnail/202608/126580_97513_718_v150.jpg",
-   "source": "양산신문",
-   "published": "2026-08-10T07:40:00+09:00",
-   "has_time": true
-  },
-  {
    "keyword": "부동산 세금",
-   "title": "'손주 봐주려 집 옮겼더니 세금 폭탄?'…닷새만에 민원 2500건",
-   "link": "https://biz.sbs.co.kr/article/20000327566",
-   "image": "https://img.biz.sbs.co.kr/upload/2026/07/26/zeA1785027972699-850.jpg",
-   "source": "biz.sbs.co.kr",
-   "published": "2026-08-10T07:24:00+09:00",
+   "title": "정부의 부동산세제 개편안, 조세정의 지키고 선의의 피해자 없어야",
+   "link": "https://www.housingtimes.co.kr/news/articleView.html?idxno=2360",
+   "image": "https://cdn.housingtimes.co.kr/news/thumbnail/202608/2360_3001_2736_v150.jpg",
+   "source": "하우징타임즈",
+   "published": "2026-08-11T09:05:00+09:00",
    "has_time": true
   },
   {
    "keyword": "아파트 경매",
-   "title": "준서울 광명 12.5억 대단지를 8.6억부터… 경기남부 아파트 추천 경매",
-   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026081000689",
-   "image": "https://image.chosun.com/sitedata/thumbnail/202608/10/2026081000688_0_thumb.jpg",
-   "source": "realty.chosun.com",
-   "published": "2026-08-10T07:20:50+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "[칼럼] 은행 대신 사금융·대부업체 …대출 막고 세금 조이는 부동산 정책 이래도 되나",
-   "link": "https://www.freezinenews.com/news/articleView.html?idxno=28719",
-   "image": "https://cdn.freezinenews.com/news/thumbnail/202608/28719_45216_1821_v150.jpg",
-   "source": "프리진뉴스",
-   "published": "2026-08-10T06:30:14+09:00",
+   "title": "요이땅, 여러 AI로 교차검증한다… 부동산 경매 권리분석에 '다중 AI' 적용",
+   "link": "http://www.ikld.kr/news/articleView.html?idxno=338756",
+   "image": "http://www.ikld.kr/news/thumbnail/202608/338756_185671_340_v150.jpg",
+   "source": "국토일보",
+   "published": "2026-08-11T08:30:00+09:00",
    "has_time": true
   },
   {
    "keyword": "아파트 경매",
-   "title": "주담대 막혀도 '200억 아파트' 척척…결국 살 사람은 샀다 [시장톡]",
-   "link": "https://www.hankyung.com/article/2026080701416",
-   "image": "https://img.hankyung.com/photo/202608/ZA.45261969.1.jpg",
+   "title": "\"34평 분양가로 25평 받으라니\"…다섯달 만에 벌어진 일 [시장톡]",
+   "link": "https://www.hankyung.com/article/2026081043396",
+   "image": "https://img.hankyung.com/photo/202608/01.45291684.1.jpg",
    "source": "한국경제",
-   "published": "2026-08-10T06:30:01+09:00",
+   "published": "2026-08-11T06:30:05+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "부동산 세제 '고차방정식' 됐다…\"내 세금 얼마냐\" 문의 쇄도",
-   "link": "https://www.news1.kr/realestate/general/6252705",
-   "image": "https://i3n.news1.kr/system/photos/2026/8/3/8037914/high.jpg",
-   "source": "뉴스1",
-   "published": "2026-08-10T05:50:00+09:00",
+   "title": "나오자마자 ‘유예·예외 덕지덕지’ 부동산 세제···“내년에 세금 얼마나 바뀌는 지 예측도 힘들어”",
+   "link": "https://www.khan.co.kr/article/202608110600081",
+   "image": "https://img.khan.co.kr/news/2026/08/11/news-p.v1.20260810.1e11b98ef302479ebcfac33b0cb53ba5_P1.jpeg",
+   "source": "경향신문",
+   "published": "2026-08-11T06:00:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "대출규제",
-   "title": "정비사업 추가 이주비 대출에 공적보증 검토",
-   "link": "https://www.yonhapnewstv.co.kr/news/AKR20260810090422DsG",
-   "image": "https://media.yonhapnewstv.co.kr/article/AKR/20260810/AKR20260810090422DsG_01_i.jpg",
-   "source": "연합뉴스TV",
-   "published": "2026-08-10T00:04:24+09:00",
+   "keyword": "부동산 세금",
+   "title": "집 팔라는 세제안, 누구 위한 정책인가[청계광장/권세호] - 머니투데이",
+   "link": "https://www.mt.co.kr/opinion/2026/08/11/2026081010170875897",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=1676,fit=cover,bg=white,f=auto,quality=high,sharpen=2,g=face/21/2026/08/2026081010170875897_1.jpg",
+   "source": "머니투데이",
+   "published": "2026-08-11T02:00:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "[머니톡스] ① 세계의 주택정책…투기는 막고 거래는 터주다",
-   "link": "https://v.daum.net/v/20260810090256889",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/10/yonhap/20260810090256294wvom.jpg",
-   "source": "Daum",
-   "published": "2026-08-10T00:00:00+09:00",
-   "has_time": false
+   "keyword": "아파트 경매",
+   "title": "투티엠 지역 재정착 아파트 3,790채 경매에 대한 새로운 정보가 공개되었습니다.",
+   "link": "https://www.vietnam.vn/ko/thong-tin-moi-ve-dau-gia-3-790-can-ho-tai-dinh-cu-o-thu-thiem",
+   "image": "https://vstatic.vietnam.vn/vietnam/resource/IMAGE/2026/08/10/1786366399194_1-jpg.webp",
+   "source": "vietnam.vn",
+   "published": "2026-08-11T00:35:19.047000+09:00",
+   "has_time": true
   }
  ],
- "count": 10,
- "date": "2026-08-10"
+ "count": 6,
+ "date": "2026-08-11"
 }
