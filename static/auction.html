@@ -232,13 +232,14 @@
   .acc.open .acc-b{display:block;}
   /* '이 법정동 단지별 실거래' 카드 — PC·폰 공통 기본 접힘(제목 클릭 시 펼침) */
   #aptTblCard>h2{cursor:pointer;position:relative;padding-right:64px;user-select:none;}
-  #aptTblCard>h2::after{content:"▼ 펼치기";position:absolute;right:0;top:3px;font-size:11.5px;color:#1565ff;font-weight:700;}
-  #aptTblCard.acc-open>h2::after{content:"▲ 접기";}
+  #aptTblCard>h2::after{content:"펼치기 ⌄";position:absolute;right:0;top:0;background:#eef4ff;color:#1f5fd0;
+           border:1px solid #cbdcf7;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:700;}
+  #aptTblCard.acc-open>h2::after{content:"접기 ⌃";}
   #aptTblCard:not(.acc-open)>:not(h2){display:none!important;}
   /* 차량/중기현황 표 */
-  .foldbtn{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted,#667);background:var(--label,#eef2f7);border:1px solid var(--line,#dde3ea);border-radius:7px;padding:3px 11px;cursor:pointer;}
-  .foldbtn:hover{background:var(--line,#dde3ea);}
-  .foldbtn.sm{margin-left:8px;padding:1px 8px;font-size:11px;}
+  .foldbtn{margin-left:auto;font-size:12px;font-weight:700;color:#1f5fd0;background:#eef4ff;border:1px solid #cbdcf7;border-radius:999px;padding:5px 13px;cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s;}
+  .foldbtn:hover{background:#dde9ff;border-color:#1f5fd0;box-shadow:0 1px 4px rgba(31,95,208,.18);}
+  .foldbtn.sm{margin-left:8px;padding:3px 10px;font-size:11px;}
   .rhead{display:flex;gap:14px;align-items:flex-start;margin-top:4px;}
   .rpic{width:160px;height:110px;object-fit:cover;border-radius:8px;border:1px solid var(--line);flex:none;}
   .rhinfo{flex:1;min-width:0;}
@@ -306,7 +307,7 @@
   .kb-flash{border-radius:8px;animation:kbFlash 1.3s ease;}
   @keyframes kbFlash{0%{box-shadow:0 0 0 0 rgba(37,99,235,0);}18%{box-shadow:0 0 0 3px rgba(37,99,235,.75);}100%{box-shadow:0 0 0 0 rgba(37,99,235,0);}}
   .kbrow.kbexp{cursor:pointer;}
-  .kbrow .kbmore{color:var(--muted);font-size:10px;display:inline-block;transition:transform .15s;}
+  .kbrow .kbmore{display:inline-flex;vertical-align:-2px;margin-left:3px;color:#1f5fd0;transition:transform .2s;}
   .kbrow.open .kbmore{transform:rotate(180deg);}
   .kbdetail{display:none;}
   .kbdetail.open{display:table-row;}
@@ -488,10 +489,8 @@
   .lg-foot{font-size:11px;color:#9aa3ad;margin-top:6px;line-height:1.4;}
   /* 대출가이드 — 수도권 심화(전입/실거주·우회전략) 접이식 */
   .lg-more{margin-top:12px;border:1px solid var(--line);border-radius:8px;background:#fafbfd;}
-  .lg-more>summary{cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;color:#2c4d86;list-style:none;user-select:none;}
+  .lg-more>summary{cursor:pointer;padding:10px 12px;font-size:13px;font-weight:700;color:#2c4d86;list-style:none;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:10px;}
   .lg-more>summary::-webkit-details-marker{display:none;}
-  .lg-more>summary::before{content:"▸ ";color:#7c93bf;}
-  .lg-more[open]>summary::before{content:"▾ ";}
   .lg-more[open]>summary{border-bottom:1px solid var(--line);}
   .lg-more-body{padding:12px;font-size:12px;color:#3a4250;line-height:1.6;}
   .lg-more-body h4{margin:14px 0 6px;font-size:12.5px;color:#1f2a3a;}
@@ -504,25 +503,27 @@
   /* AI 권리분석 요약 카드 안 — 이 물건 대출·세금·전략 요약 */
   .ai-loan{margin-top:11px;padding:11px 13px;border-radius:8px;
            background:linear-gradient(180deg,#f2f6ff 0%,#eef3fd 100%);border:1px solid #d3ddf2;}
-  /* 접이식 — AI 권리분석 상세(내 조건 맞춤·대출세금전략) / 대출·세금 가이드 카드 */
-  details.ai-fold{margin-top:11px;border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden;}
-  details.ai-fold>summary{list-style:none;cursor:pointer;user-select:none;padding:10px 13px;font-weight:700;
-           font-size:13px;color:var(--primary);background:#f4f7fd;display:flex;align-items:center;
-           justify-content:space-between;gap:8px;}
+  /* ── 공통 세련된 펼치기 cue (pill + SVG chevron) — 물건상세 모든 접이식 통일 ── */
+  .foldcue{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;
+           background:#eef4ff;color:#1f5fd0;font-size:12px;font-weight:700;border:1px solid #cbdcf7;
+           white-space:nowrap;flex:0 0 auto;cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s;}
+  .foldcue:hover{background:#dde9ff;border-color:#1f5fd0;box-shadow:0 1px 4px rgba(31,95,208,.18);}
+  .foldcue .cv{display:inline-flex;transition:transform .25s ease;}
+  .foldcue .lbl::after{content:"펼치기";}
+  details[open] .foldcue .cv,.open .foldcue .cv,.acc-open .foldcue .cv,.acc.open .foldcue .cv{transform:rotate(180deg);}
+  details[open] .foldcue .lbl::after,.open .foldcue .lbl::after,.acc-open .foldcue .lbl::after,.acc.open .foldcue .lbl::after{content:"접기";}
+  /* AI 권리분석 상세 접이식(카드 안, 구분선) */
+  details.ai-fold{margin-top:12px;border-top:1px solid var(--line);padding-top:11px;}
+  details.ai-fold>summary{list-style:none;cursor:pointer;user-select:none;display:flex;align-items:center;
+           justify-content:space-between;gap:10px;}
   details.ai-fold>summary::-webkit-details-marker{display:none;}
-  details.ai-fold[open]>summary{border-bottom:1px solid var(--line);}
-  details.ai-fold .ai-fold-ar{display:inline-flex;align-items:center;justify-content:center;
-           width:27px;height:27px;border-radius:50%;background:var(--primary);color:#fff;
-           font-size:16px;line-height:1;transition:transform .2s;flex:0 0 auto;box-shadow:0 1px 3px rgba(44,93,176,.35);}
-  details.ai-fold[open] .ai-fold-ar{transform:rotate(180deg);}
-  details.ai-fold .ai-fold-bd{padding:2px 13px 8px;}
+  details.ai-fold .ai-fold-t{font-weight:700;font-size:13px;color:#333;}
+  details.ai-fold .ai-fold-bd{padding:11px 0 2px;}
+  /* 대출·세금 가이드 접이식 카드 */
   details.lg-fold>summary{list-style:none;cursor:pointer;user-select:none;display:flex;align-items:center;
-           gap:8px;padding:2px 0;flex-wrap:wrap;}
+           justify-content:space-between;gap:10px;flex-wrap:wrap;}
   details.lg-fold>summary::-webkit-details-marker{display:none;}
-  details.lg-fold>summary::before{content:"▾";display:inline-flex;align-items:center;justify-content:center;
-           width:27px;height:27px;border-radius:50%;background:var(--primary);color:#fff;
-           font-size:16px;line-height:1;transition:transform .2s;flex:0 0 auto;box-shadow:0 1px 3px rgba(44,93,176,.35);}
-  details.lg-fold[open]>summary::before{transform:rotate(180deg);}
+  details.lg-fold>summary .lg-sum-l{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
   details.lg-fold>summary .lg-sum-t{font-size:17px;font-weight:800;color:#1a1a1a;letter-spacing:-0.3px;}
   .ai-loan-hd{font-weight:800;color:#2c4d86;font-size:12.5px;margin-bottom:5px;}
   .ai-loan-body{font-size:12.5px;line-height:1.7;color:#33404f;word-break:keep-all;}
@@ -549,6 +550,7 @@
 
 <script>
 const itemKey=new URLSearchParams(location.search).get("item_key");
+const FOLDCUE='<span class="foldcue"><span class="lbl"></span><svg class="cv" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>';   // 공통 세련된 펼치기 cue(pill+chevron)
 let DETAIL=null;          // load()에서 받은 상세(배당종기일 등 공유용)
 let PHOTOS=[], lbIdx=0;   // 전체 사진 슬라이드용
 let APT_COMPLEX="";       // apt_info에서 받은 정확한 단지명(네이버/KB 링크 정밀화용)
@@ -1134,7 +1136,7 @@ function aiExtraHTML(){
   const loan=loanTaxSummaryHTML(reg) ? `<div class="ai-loan"><div class="ai-loan-hd">💰 이 물건 대출·세금·전략</div><div class="ai-loan-body">${loanTaxSummaryHTML(reg)}</div></div>` : "";
   const _inner = personal + loan;   // 🧭내 조건 맞춤 + 💰대출·세금·전략 → 요약카드에선 접어둠(요약만 노출)
   return _inner
-    ? `<details class="ai-fold"><summary><span>🧭 내 조건 맞춤 분석 · 💰 대출·세금·전략</span><span class="ai-fold-ar">▾</span></summary><div class="ai-fold-bd">${_inner}</div></details>`
+    ? `<details class="ai-fold"><summary><span class="ai-fold-t">🧭 내 조건 맞춤 분석 · 💰 대출·세금·전략</span>${FOLDCUE}</summary><div class="ai-fold-bd">${_inner}</div></details>`
     : "";
 }
 function renderLoanGuide(){
@@ -1155,7 +1157,7 @@ function renderLoanGuide(){
   const isMetro = reg==="regulated" || reg==="metro";
   const metroExtra = !isMetro ? "" : `
     <details class="lg-more">
-      <summary>🏠 전입 의무 vs 실거주 의무 — 자금조달이 임대·절세를 가른다</summary>
+      <summary><span>🏠 전입 의무 vs 실거주 의무 — 자금조달이 임대·절세를 가른다</span>${FOLDCUE}</summary>
       <div class="lg-more-body">
         <p><b>전입 의무 = 대출 조건</b> · 규제지역에서 가계 주담대를 받으면 실행일부터 <b>6개월 내 전입</b>(위반 시 회수). <b>현금 매수면 이 의무 자체가 없음</b>(최소 거주기간도 별도 없음).</p>
         <p><b>실거주 의무 = 부동산 법률</b> · 취득·소유 자체에 붙어 대출과 무관. ①토허 주택 2년 실거주+임대금지, ②분양가상한제 2~5년 실거주. 위반 시 이행강제금·형사처벌. <b>단, 경매는 토허 실거주 의무에서 제외</b>(위 표 참조).</p>
@@ -1187,7 +1189,7 @@ function renderLoanGuide(){
       </div>
     </details>
     <details class="lg-more">
-      <summary>🧭 수도권 단기매도 대출 우회 전략 3가지 (참고 · 리스크 유의)</summary>
+      <summary><span>🧭 수도권 단기매도 대출 우회 전략 3가지 (참고 · 리스크 유의)</span>${FOLDCUE}</summary>
       <div class="lg-more-body">
         <p style="color:#8b96a5;">수도권은 매매·임대 사업자대출이 LTV 0%로 막혀 사실상 가계 주담대만 남고, 그마저 6개월 전입의무로 매매업이 어렵습니다. 아래는 실무에서 거론되는 우회로 — <b>실행 권유가 아니라 '존재한다'는 정보 제공</b>입니다.</p>
         <div class="lg-way"><div class="wt">방법 1. 전자상거래 사업자대출 + 신탁 결합</div>
@@ -1207,7 +1209,7 @@ function renderLoanGuide(){
       </div>
     </details>`;
   box.innerHTML=`<details class="card lg-card lg-fold">
-    <summary class="lg-sum"><span class="lg-sum-t">🏦 이 물건 대출·세금 가이드</span> <span class="lg-badge" style="background:${M.bg};color:${M.fg}">${M.label}</span></summary>
+    <summary class="lg-sum"><span class="lg-sum-l"><span class="lg-sum-t">🏦 이 물건 대출·세금 가이드</span> <span class="lg-badge" style="background:${M.bg};color:${M.fg}">${M.label}</span></span>${FOLDCUE}</summary>
     <div class="lg-desc">${esc(M.desc)}</div>
     <div class="lg-tblwrap"><table class="lg-tbl">
       <thead><tr><th>보유 주택 수</th><th>가계 경락잔금대출</th><th>매매사업자 대출</th><th>비교과세(매매업 세금)</th></tr></thead>
@@ -1290,12 +1292,12 @@ function renderExpBid(){
   if(EXP_BID.cases_used && card && !card.querySelector('.expbid-cases')){   // 관리자 전용(서버가 관리자에게만 cases_used 포함)
     const cs=EXP_BID.cases_used;
     const d=document.createElement('div'); d.className='expbid-cases'; d.style.cssText="margin-top:8px;font-size:12px";
-    let h=`<div class="ebtoggle" style="font-weight:700;color:#666;cursor:pointer">🔒 관리자: 참조 매각사례 ${cs.length}건 ▼</div>`
+    let h=`<div class="ebtoggle" style="font-weight:700;color:#666;cursor:pointer;display:flex;align-items:center;gap:8px">🔒 관리자: 참조 매각사례 ${cs.length}건 ${FOLDCUE}</div>`
       +`<div class="ebtbl" style="display:none;margin-top:5px;overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ebcase-tbl" style="border-collapse:collapse;font-size:11.5px">`
       +`<tr style="color:#999;text-align:left"><th>사건번호</th><th>매각기일</th><th>층</th><th>전용</th><th>감정가</th><th>낙찰가</th><th>낙찰가율</th><th>입찰인원</th><th>2등입찰가</th></tr>`;
     cs.forEach(x=>{ const p=(x.item_key||'').split('|'); const cn=p.length>=3?(p[1]+'타경'+p[2]+(p[3]&&p[3]!=='1'?' 물번'+p[3]:'')):'-'; h+=`<tr style="border-top:1px solid #eee"><td>${cn}</td><td>${x.sell_date}</td><td>${x.floor}층</td><td>${x.area}㎡</td><td>${won(x.appraisal)}</td><td style="color:#c0392b">${won(x.sale_price)}</td><td>${Math.round(x.sale_rate)}%</td><td>${(x.bid_count!=null&&x.bid_count!=='')?x.bid_count+'명':'-'}</td><td>${x.sale_2nd?won(x.sale_2nd):'-'}</td></tr>`; });
     h+=`</table></div>`; d.innerHTML=h;
-    d.querySelector('.ebtoggle').onclick=()=>{ const t=d.querySelector('.ebtbl'); t.style.display=t.style.display==='none'?'block':'none'; };
+    d.querySelector('.ebtoggle').onclick=(e)=>{ const t=d.querySelector('.ebtbl'); const o=t.style.display==='none'; t.style.display=o?'block':'none'; e.currentTarget.classList.toggle('open',o); };
     card.appendChild(d);
   }
 }
@@ -1811,7 +1813,7 @@ function kbUpdateSummary(rows){
 }
 function kbRowHtml(x){
   const hasD=x.feature||(x.photos&&x.photos.length)||x.direction||x.room_cnt;
-  const main=`<tr class="kbrow${hasD?' kbexp':''}"${hasD?` onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')"`:''}><td>${x.area_excl}㎡${hasD?' <span class="kbmore">▾</span>':''}</td><td class="amt">${won((x.price||0)*10000)}</td><td>${x.floor||'-'}</td><td>${x.dong||''}</td></tr>`;
+  const main=`<tr class="kbrow${hasD?' kbexp':''}"${hasD?` onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')"`:''}><td>${x.area_excl}㎡${hasD?' <span class="kbmore"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>':''}</td><td class="amt">${won((x.price||0)*10000)}</td><td>${x.floor||'-'}</td><td>${x.dong||''}</td></tr>`;
   if(!hasD) return main;
   const ph=(x.photos&&x.photos.length)?`<div class="kbphotos">${x.photos.map(p=>`<img src="${p.url}" loading="lazy" alt="">`).join('')}</div>`:'';
   const info=[x.direction&&('방향 '+x.direction),x.room_cnt&&('방 '+x.room_cnt+'개'),x.bath_cnt&&('욕실 '+x.bath_cnt+'개'),x.agent_name].filter(Boolean).join(' · ');
@@ -1854,7 +1856,7 @@ async function loadCompetingListings(){
   if(!d || !d.matched || !d.count){ return; }   // KB 매칭 없음/매물 없음 → 토글 미표시
   KB_LISTINGS=d.listings||[]; kbMeta=d; kbF={band:new Set(),area:new Set(),dong:new Set()};
   wrap.innerHTML=`<div class="kb-compete">
-    <button class="kb-toggle" onclick="this.parentNode.classList.toggle('open')">🏠 경쟁매물보기<span class="kb-sub">동일 평형(전용 ${d.area}㎡) 매매 <b>${d.count}건</b></span><span class="kb-arr">▾</span></button>
+    <button class="kb-toggle" onclick="this.parentNode.classList.toggle('open')">🏠 경쟁매물보기<span class="kb-sub">동일 평형(전용 ${d.area}㎡) 매매 <b>${d.count}건</b></span><span style="margin-left:auto;display:inline-flex">${FOLDCUE}</span></button>
     <div class="kb-body">
       <div class="apt-quote">
         <div class="qbox"><div class="ql">매물</div><div class="qv"><b id="kbCount">${d.count}</b>건</div></div>
@@ -2236,7 +2238,7 @@ async function loadNearbyMap(){
       const rows=sec.rows.slice().sort((a,b)=>(b.deal_date||"").localeCompare(a.deal_date||""));
       html+=`<div class="acc${open?" open":""}"><div class="acc-h" data-k="${sec.key}">
         <div class="acc-hl"><span class="acc-name">${sec.name}</span><span class="acc-cnt">${rows.length}건</span>${sec.badge?`<span class="acc-badge ${sec.badge.c}">${sec.badge.t}</span>`:""}</div>
-        <div class="acc-hr"><span class="acc-avg">평균 ${avgWon(rows)} <span class="acc-yul">| 요율 ${avgYul(rows)}</span></span><span class="acc-chev">▾</span></div></div>
+        <div class="acc-hr"><span class="acc-avg">평균 ${avgWon(rows)} <span class="acc-yul">| 요율 ${avgYul(rows)}</span></span>${FOLDCUE}</div></div>
         <div class="acc-b"><div class="nb-scroll"><table class="nb-tbl"><thead><tr><th>거래일</th><th>지역</th><th>건물명</th><th>주소</th><th>면적</th><th>층</th><th>건축년도</th><th>승강기</th><th>거래가</th><th>공시가격</th><th>요율</th></tr></thead><tbody>`+
         rows.map(t=>{const gp=gpOf(t),yl=yulOf(t);return `<tr><td>${t.deal_date||"-"}</td><td>${esc(t.umd)}</td><td class="bd"><b>${esc(t.name)||"-"}</b></td><td class="adr2">${esc(sgg+" "+t.umd+" "+t.jibun)}</td><td>${t.area?Math.round(t.area*100)/100+"㎡":"-"}</td><td>${t.floor||"-"}</td><td>${t.build_year||"-"}</td><td class="elv">${t._elev===true?"있음":t._elev===false?'<span style="color:#b3611a">없음</span>':'<span style="color:#aab">-</span>'}</td><td class="amt">${won(t.amount)}</td><td class="gp">${gp?won(gp):"—"}</td><td class="yul">${yl?yl.toFixed(4):"—"}</td></tr>`;}).join("")+
         `</tbody></table></div></div></div>`;
