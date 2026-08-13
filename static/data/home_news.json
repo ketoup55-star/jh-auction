@@ -2,86 +2,104 @@
  "items": [
   {
    "keyword": "집값",
-   "title": "‘배보다 배꼽이 더 컸다’…ADU 공사비가 집값 수준",
-   "link": "https://www.koreadaily.com/article/20260811164947969",
-   "image": "https://www.koreadaily.com/resources/usa/thumbnail_image/2026/08/12/e99d604b-5cb9-45e3-b292-dc8567c58727.jpg",
-   "source": "미주중앙일보",
-   "published": "2026-08-12T08:49:40+09:00",
+   "title": "울산 집값·전세값 동반 상승세…합리적 분양가의 자족형 신도시 내 단지형 오피스텔에 주목",
+   "link": "https://www.eroun.net/news/articleView.html?idxno=87492",
+   "image": "https://cdn.eroun.net/news/thumbnail/202608/87492_143950_3531_v150.jpg",
+   "source": "이로운넷",
+   "published": "2026-08-13T09:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "대출 '바늘구멍'에...서울 아파트 계약 해제 23% 급증 [굿모닝경제]",
+   "link": "https://www.ytn.co.kr/_ln/0134_202608130819122874",
+   "image": "https://image.ytn.co.kr/general/jpg/2026/0813/202608130819122874_t.jpg",
+   "source": "YTN",
+   "published": "2026-08-13T08:19:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "\"안유진은 깔끔하게 40억 넣었던데...\" 이창호, 대출 규제에 '27억' 청약 포기",
+   "link": "https://www.fnnews.com/news/202608130724286382",
+   "image": "https://image.fnnews.com/resource/media/image/2026/08/13/202608130727212710_l.jpg",
+   "source": "파이낸셜뉴스",
+   "published": "2026-08-13T07:58:04+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "[국토위 기획 1] 그린벨트 풀면 집값 잡히나",
-   "link": "https://www.itbs1.co.kr/news/articleView.html?idxno=3195",
-   "image": "http://www.itbs1.co.kr/news/thumbnail/202608/3195_3025_4553_v150.jpg",
-   "source": "국토교통신문",
-   "published": "2026-08-12T08:49:32+09:00",
+   "title": "집값·세금 다 잡는다… 與, 오늘 의총서 부동산 대책 총력 논의",
+   "link": "http://www.wikileaks-kr.org/news/articleView.html?idxno=190874",
+   "image": "http://www.wikileaks-kr.org/news/thumbnail/202608/190874_204722_446_v150.jpg",
+   "source": "위키리크스한국",
+   "published": "2026-08-13T06:04:55+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 세금",
-   "title": "[국토위 현안질의] 세금은 먼저, 공급은 나중?",
-   "link": "https://www.itbs1.co.kr/news/articleView.html?idxno=3194",
-   "image": "http://www.itbs1.co.kr/news/thumbnail/202608/3194_3024_2654_v150.jpg",
-   "source": "국토교통신문",
-   "published": "2026-08-12T08:28:36+09:00",
+   "keyword": "아파트 경매",
+   "title": "9.9억 양천 학군 38평이 반값에…서울 아파트 경매 추천 물건",
+   "link": "https://realty.chosun.com/site/data/html_dir/2026/08/12/2026081202599.html",
+   "image": "https://image.chosun.com/sitedata/image/202608/12/2026081202596_0.jpg",
+   "source": "realty.chosun.com",
+   "published": "2026-08-13T06:00:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "대출규제",
-   "title": "현금부자만 살아남은 '6·27규제' 1년…'빚투'는 막았지만 '집값'은 못잡았다",
-   "link": "http://www.inews24.com/v/1993813",
-   "image": "https://image.inews24.com/v1/7a222ed18fb550.jpg",
-   "source": "아이뉴스24",
-   "published": "2026-08-12T08:01:12+09:00",
+   "keyword": "부동산 정책",
+   "title": "野 '부동산 민심' 정조준…정부·여당 공세 강화",
+   "link": "https://www.news1.kr/amp/politics/assembly/6257327",
+   "image": "https://i3n.news1.kr/system/photos/2026/8/7/8045473/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-08-13T06:00:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 세금",
-   "title": "부동산 팔아 연금 넣으면 세금 깎아줬는데···이용자 적어 내년 일몰",
-   "link": "https://www.khan.co.kr/article/202608120717001",
-   "image": "https://img.khan.co.kr/news/2026/08/12/news-p.v1.20260727.3ae33563fc894879ad40f6907e0362bb_P1.jpeg",
-   "source": "경향신문",
-   "published": "2026-08-12T07:17:00+09:00",
+   "keyword": "부동산 정책",
+   "title": "국민의힘, ‘뉴홈 사전청약’ 현장 간담회…부동산 정책 총공세",
+   "link": "https://news.kbs.co.kr/news/pc/view/view.do?ncd=8635727",
+   "image": "http://news.kbs.co.kr/data/news/2026/08/13/20260813_DkM4b9.jpg",
+   "source": "KBS 뉴스",
+   "published": "2026-08-13T01:01:16+09:00",
    "has_time": true
   },
   {
-   "keyword": "대출규제",
-   "title": "[밀려나는 세입자②] 전세대출이 집값 올린 ‘주범’?…비거주 조건도 깐깐",
-   "link": "https://www.dailian.co.kr/news/view/1677320/%EB%B0%80%EB%A0%A4%EB%82%98%EB%8A%94-%EC%84%B8%EC%9E%85%EC%9E%90%E2%91%A1-%EC%A0%84%EC%84%B8%EB%8C%80%EC%B6%9C-%EC%A7%91%EA%B0%92-%EC%98%AC%EB%A6%B0-2026",
-   "image": "https://cdnimage.dailian.co.kr/news/202608/news_1786444830_1677320_m_1.jpg",
-   "source": "데일리안",
-   "published": "2026-08-12T07:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "한국은행, 상반기 직원 150명에 주택자금대출 60억원",
-   "link": "https://www.yna.co.kr/view/AKR20260811149400002",
-   "image": "https://img0.yna.co.kr/photo/cms/2025/06/13/22/PCM20250613000022990_P4.jpg",
-   "source": "연합뉴스",
-   "published": "2026-08-12T05:55:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "부동산 팔고 연금 납입 시 양도세 감면 혜택, 내년 말 종료",
-   "link": "https://www.yna.co.kr/view/AKR20260811158800002",
-   "image": "https://img8.yna.co.kr/photo/yna/YH/2026/04/26/PYH2026042604270001300_P4.jpg",
-   "source": "연합뉴스",
-   "published": "2026-08-12T05:53:01+09:00",
+   "keyword": "아파트 경매",
+   "title": "[챗 APT] 낙찰률 ‘뚝’·낙찰가율 ‘쑥’…아파트 경매 옥석 가리기",
+   "link": "https://www.kado.net/news/articleView.html?idxno=2066397",
+   "image": "https://cdn.kado.net/news/photo/202608/2066397_874627_4430.jpg",
+   "source": "강원도민일보",
+   "published": "2026-08-13T00:02:02+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "모기지 6.69%에 얼어붙은 美 주택시장…집값은 역대 두번째",
-   "link": "https://v.daum.net/v/20260812000241336",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/12/fnnewsi/20260812000241491swvh.jpg",
+   "title": "집값 상승에 세제 개편까지…SH 공공임대 보유세 2028년 600억원 넘나",
+   "link": "https://v.daum.net/v/20260813060310247",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/13/552782-ZYLYaJX/20260813060311340bham.jpg",
    "source": "Daum",
-   "published": "2026-08-12T00:00:00+09:00",
+   "published": "2026-08-13T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "대출규제",
+   "title": "세금 피하려 매물 쏟아지는데…토허제·대출 규제에 거래는 '꽁꽁'[집슐랭]",
+   "link": "https://news.nate.com/view/20260813n05719",
+   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/se/2026/08/13/news-p.v1.20260811.44a19fac3b5744b18cb5a7174df6bb2a_P1.jpg",
+   "source": "네이트 뉴스",
+   "published": "2026-08-13T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "부동산 '세제 개편안' 꼬인 세 가지 이유",
+   "link": "https://v.daum.net/v/20260813065751919",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/13/ohmynews/20260813065752774eawk.jpg",
+   "source": "Daum",
+   "published": "2026-08-13T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 9,
- "date": "2026-08-12"
+ "count": 11,
+ "date": "2026-08-13"
 }
