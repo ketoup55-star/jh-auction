@@ -122,10 +122,15 @@ def next_sale_date():
 
 
 def prev_sale_date():
-    """어제 이전 가장 가까운 매각일(매각 완료 주거)."""
+    """어제 이전 가장 가까운 매각일(매각 완료 주거).
+    🔴result='매각'을 DB WHERE로 + 최근 90일 범위로 — 예전엔 result를 파이썬에서만 걸어, 최근 매각기일
+    진행물건(신건/유찰)이 PostgREST 1000행 상한을 다 채워 과거 매각완료가 밀려났다(2026-08-11 발현).
+    범위(gte.최근90일 + lt.오늘)+result DB필터로 '밀림'과 '풀스캔 지연' 둘 다 방지(14.5s→<1s)."""
     today = datetime.date.today().isoformat()
-    rows = _items({"select": "sell_date_d,result,usage_name",
-                   "sell_date_d": f"lt.{today}", "order": "sell_date_d.desc", "limit": "3000"})
+    since = (datetime.date.today() - datetime.timedelta(days=90)).isoformat()
+    rows = _items([("select", "sell_date_d,result,usage_name"),
+                   ("sell_date_d", f"gte.{since}"), ("sell_date_d", f"lt.{today}"),
+                   ("result", "like.매각*"), ("order", "sell_date_d.desc"), ("limit", "1000")])
     ds = sorted({r["sell_date_d"] for r in rows
                  if r.get("sell_date_d") and r["sell_date_d"] < today
                  and str(r.get("result") or "").startswith("매각")
