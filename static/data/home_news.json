@@ -1,114 +1,69 @@
 {
  "items": [
   {
-   "keyword": "부동산 세금",
-   "title": "\"내 집 세금 오를까, 내릴까?\" 김광석 교수가 직접 풀어주는 부동산 세제개편안 - 영상 | 멀티미디어",
-   "link": "https://korea.kr/multi/mediaNewsView.do?newsId=148970048&pWise=sub&pWiseSub=C1",
-   "image": "https://www.korea.kr/newsWeb/resources/attaches/2026.08/13/e83c5d45697ffbe0bd2abac57121b4ab.jpg",
-   "source": "korea.kr",
-   "published": "2026-08-14T08:46:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "'결혼페널티' 줄었지만…청년들 \"높아진 집값은 여전\"",
-   "link": "http://www.snakorea.com/news/articleView.html?idxno=1042831",
-   "image": "https://cdn.snakorea.com/news/thumbnail/202608/1042831_989182_4346_v150.jpg",
-   "source": "서울뉴스통신",
-   "published": "2026-08-14T08:44:03+09:00",
+   "keyword": "부동산 정책",
+   "title": "‘부동산’ 정책보다 긍정답변 낮은 건 ‘대북정책’",
+   "link": "https://weekly.chosun.com/news/articleView.html?idxno=54313",
+   "image": "https://cdn.weekly.chosun.com/news/thumbnail/202608/54313_84224_3626_v150.jpg",
+   "source": "주간조선",
+   "published": "2026-08-15T08:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "부동산 보유세 논쟁...'좋은 세금'은 원칙에서 시작된다 [칼럼]",
-   "link": "https://m.joseilbo.com/news/view.htm?newsid=573827&class2=&class=1",
-   "image": "https://www.joseilbo.com/gisa_img/17809087581780908758_yjj2001.jpg",
-   "source": "m.joseilbo.com",
-   "published": "2026-08-14T08:00:11+09:00",
+   "title": "“집값 못 잡고 세금 청구서”…野, ‘거주요건 강화’ 총공세",
+   "link": "https://www.etoday.co.kr/news/view/2614904",
+   "image": "https://img.etoday.co.kr/pto_db/2026/08/20260814094313_2373245_1200_674.jpg",
+   "source": "이투데이",
+   "published": "2026-08-15T07:00:00+09:00",
    "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "이언주 의원 “부동산정책, 조세정의보다 주거안정이 먼저…공급정상화 전 세제 변화 유예해야”",
+   "link": "https://www.wbcb.co.kr/news/articleView.html?idxno=105142",
+   "image": "https://cdn.wbcb.co.kr/news/thumbnail/202608/105142_135382_3541_v150.jpg",
+   "source": "복지TV부울경방송",
+   "published": "2026-08-15T06:37:19+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "\"세금 앞 장사 없네\"...세제 개편 여파에 강남·서초 아파트값 3개월 만에 하락세",
+   "link": "https://www.theguru.co.kr/news/article.html?no=105828",
+   "image": "https://www.theguru.co.kr/data/photos/20260833/art_17866703145005_cdfb9d.jpg",
+   "source": "theguru.co.kr",
+   "published": "2026-08-15T00:00:24+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "[서평] 한 권에 담은 ‘부동산 세제 개혁론’",
+   "link": "https://www.lawtimes.co.kr/news/articleViewAmp.html?idxno=224890",
+   "image": "https://cdn.lawtimes.co.kr/news/photo/202608/224890_127736_4531.jpg",
+   "source": "법률신문",
+   "published": "2026-08-15T00:00:00+09:00",
+   "has_time": false
   },
   {
    "keyword": "아파트 경매",
-   "title": "14.8억 용인 펜트하우스가 반값에…경기 아파트 6선",
-   "link": "https://realty.chosun.com/site/data/html_dir/2026/08/13/2026081303063.html",
-   "image": "https://image.chosun.com/sitedata/image/202608/13/2026081303060_0.jpg",
-   "source": "realty.chosun.com",
-   "published": "2026-08-14T06:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "\"제발 대출 좀\" 오픈런 이제 끝?…잔금·이주비 숨통, 30조 더 풀린다 - 머니투데이",
-   "link": "https://www.mt.co.kr/amp/estate/2026/08/14/2026081322215548630",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=690,fit=cover,bg=white,f=auto,quality=high,sharpen=2,g=face/21/2026/08/2026081322215548630_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-08-14T06:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "갭투자 대출은 막고 청년 지원은 늘린다…부동산 금융대책 총정리",
-   "link": "https://homedubu.com/11611/",
-   "image": "https://homedubu.b-cdn.net/wp-content/uploads/2026/08/gap-investment-loan-regulation-youth-housing-finance-2026.jpg",
-   "source": "홈두부",
-   "published": "2026-08-14T05:57:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "\"닥치고 공급\"…23만가구 속도전, 집값 잡을까 자극할까 - 머니투데이",
-   "link": "https://www.mt.co.kr/estate/2026/08/14/2026081322144990631",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=782,fit=cover,bg=white,f=auto,quality=high,sharpen=2,g=face/21/2026/08/2026081322144990631_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-08-14T05:20:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "與의총서도… “세금으로 집값 잡지 않겠다던 신뢰 깨져”",
-   "link": "https://www.donga.com/news/Politics/article/all/20260814/134476021/2",
-   "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/08/14/134476462.1.jpg",
-   "source": "동아일보",
-   "published": "2026-08-14T04:30:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "8.13대책 두고 전문가들 \"내 집 마련 기회 확대\" vs \"집값 자극\"",
-   "link": "https://v.daum.net/v/20260814074704784",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/14/552788-vZw4wcp/20260814074705922mbut.jpg",
-   "source": "Daum",
-   "published": "2026-08-14T00:00:00+09:00",
-   "has_time": false
-  },
-  {
-   "keyword": "대출규제",
-   "title": "가계대출 총량 규제 완화…실수요자 주택자금 숨통 트인다",
-   "link": "https://www.news21tongsin.co.kr/news/303488",
-   "image": "https://www.news21tongsin.co.kr/data/cheditor4/2608/e374a5fe55f4d879310f286a9856aabb946b8767.jpg",
-   "source": "뉴스21 통신",
-   "published": "2026-08-14T00:00:00+09:00",
+   "title": "[주목! 경매] 도림동 아파트 143.6㎡ 1회 유찰 15억400만원",
+   "link": "https://news.nate.com/view/20260815n01752",
+   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/mw/2026/08/15/2026081414260965136_1.jpg",
+   "source": "네이트 뉴스",
+   "published": "2026-08-15T00:00:00+09:00",
    "has_time": false
   },
   {
    "keyword": "부동산 정책",
-   "title": "'지방 외면' 부동산 정책...'공구 분할'로 활성화 모색",
-   "link": "https://www.tbc.co.kr/news/view?pno=20260813173858AE03929&id=209725&c1=code&c2=",
-   "image": "https://www.tbc.co.kr/uploads/news/2026/08/85284be06b8e1065f3a96485ceab26a0.png",
-   "source": "tbc.co.kr",
-   "published": "2026-08-14T00:00:00+09:00",
-   "has_time": false
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "장동혁, 밀양 가뭄 현장 찾는다…오세훈은 국회서 부동산 정책 논의",
-   "link": "https://v.daum.net/v/20260814073927641",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/14/mbn/20260814073929738ryjs.jpg",
+   "title": "국민의힘, ‘부동산 정책 때리기’ 총력전…“재탕 정책 숫자 눈속임”",
+   "link": "https://v.daum.net/v/20260815062521172",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/15/kbs/20260815062523098mnjy.jpg",
    "source": "Daum",
-   "published": "2026-08-14T00:00:00+09:00",
+   "published": "2026-08-15T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 12,
- "date": "2026-08-14"
+ "count": 7,
+ "date": "2026-08-15"
 }
