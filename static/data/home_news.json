@@ -1,114 +1,132 @@
 {
  "items": [
   {
-   "keyword": "아파트 경매",
-   "title": "[기획] 현금 없는 청년들 매매 포기… 경매로 몰렸다",
-   "link": "https://www.m-i.kr/news/articleView.html?idxno=1402529",
-   "image": "https://cdn.m-i.kr/news/thumbnail/202608/1402529_1190449_2051_v150.jpg",
-   "source": "매일일보",
-   "published": "2026-08-17T09:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "서초구, 부동산 세제개편안 구민 의견 듣는다…19일까지 접수",
-   "link": "https://www.munhwa.com/article/11609880",
-   "image": "https://wimg.munhwa.com/news/cms/2026/08/17/news-p.v1.20260817.d2fbfa9f0a0f474e87da3fb7d6895e54_R.jpg",
-   "source": "문화일보",
-   "published": "2026-08-17T08:46:31+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "[절세톡톡] 사원용주택에 대한 세금혜택",
-   "link": "https://www.sejungilbo.com/news/articleView.html?idxno=59576",
-   "image": "https://cdn.sejungilbo.com/news/thumbnail/202608/59576_94515_4547_v150.jpg",
-   "source": "세정일보",
-   "published": "2026-08-17T07:51:51+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "아파트 전세난에 대출 규제 맞물리자…서울 대형 오피스텔 ‘대안’으로",
-   "link": "https://m.dailian.co.kr/news/view/1678467/",
-   "image": "https://cdnimage.dailian.co.kr/news/202604/news_1775180882_1629256_m_1.jpg",
-   "source": "데일리안",
-   "published": "2026-08-17T07:09:00+09:00",
-   "has_time": true
-  },
-  {
    "keyword": "집값",
-   "title": "분양가 폭등·집값 키맞추기…무주택자 '설 땅 없다'",
-   "link": "http://www.inews24.com/view/1995280",
-   "image": "https://image.inews24.com/v1/05259ad0d6b856.jpg",
-   "source": "아이뉴스24",
-   "published": "2026-08-17T07:00:01+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "대출총량 늘린다지만… 시중은행, ‘주담대 빗장’ 그대로",
-   "link": "https://it.chosun.com/news/articleView.html?idxno=2023092168186",
-   "image": "https://cdn.it.chosun.com/news/thumbnail/202608/2023092168186_450202_3653_v150.jpg",
-   "source": "IT조선",
-   "published": "2026-08-17T07:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "30일 살아도 실거주 인정?...전세대출 막힌 '비거주 1주택', 세제·금융 제각각 - 머니투데이",
-   "link": "https://www.mt.co.kr/amp/economy/2026/08/17/2026081520140631889",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/08/2026081520140631889_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-08-17T06:10:00+09:00",
+   "title": "데이터센터 도시의 그늘…집값 2배 뛰고 주민은 밀려났다",
+   "link": "https://www.digitaltoday.co.kr/news/articleView.html?idxno=693566",
+   "image": "https://cdn.digitaltoday.co.kr/news/photo/202608/693566_641438_4515.jpg",
+   "source": "디지털투데이 (DigitalToday)",
+   "published": "2026-08-18T09:17:29+09:00",
    "has_time": true
   },
   {
    "keyword": "아파트 경매",
-   "title": "실거래 8.5억 송도 45평이 6.1억부터…인천 아파트 추천 경매",
-   "link": "https://realty.chosun.com/site/data/html_dir/2026/08/15/2026081500615.html",
-   "image": "https://image.chosun.com/sitedata/image/202608/15/2026081500611_0.jpg",
-   "source": "realty.chosun.com",
-   "published": "2026-08-17T06:00:00+09:00",
+   "title": "\"도봉구 무슨 일?\"…전세권설정등기 한 달 새 136건 급증",
+   "link": "https://www.hankyung.com/article/2026081860436",
+   "image": "https://img.hankyung.com/photo/202608/ZK.35579226.1.jpg",
+   "source": "한국경제",
+   "published": "2026-08-18T08:50:39+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "보금자리론 '규제지역 가산금리 인상' 이유 있었네…집값 상승에 수요 폭증",
-   "link": "https://www.news1.kr/finance/general-finance/6259061",
-   "image": "https://i3n.news1.kr/system/photos/2026/8/9/8047424/high.jpg",
-   "source": "뉴스1",
-   "published": "2026-08-17T05:30:00+09:00",
+   "title": "지방 집값 불안에도 브랜드 대단지 신고가 속출",
+   "link": "https://www.ajunews.com/amp/20260818080656277",
+   "image": "https://image.ajunews.com/content/image/2026/08/18/20260818080758764462.jpg",
+   "source": "아주경제",
+   "published": "2026-08-18T08:08:45+09:00",
    "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "집값 뛰자 ‘영끌’, 증시 뛰자 ‘빚투’… 가계빚 2000조 눈앞",
-   "link": "https://www.kmib.co.kr/article/view_amp.asp?arcid=9000003527",
-   "image": "https://image.kmib.co.kr/online_image/2026/0817/01100201.20260816501712.jpg",
-   "source": "국민일보",
-   "published": "2026-08-17T00:24:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "“세금 폭탄 걱정 덜어드리겠습니다”…김현기 강남·전성수 서초구청장 긴급 주민 소통",
-   "link": "https://v.daum.net/v/20260817080051862",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/17/ned/20260817081050474vylg.jpg",
-   "source": "Daum",
-   "published": "2026-08-17T00:00:00+09:00",
-   "has_time": false
   },
   {
    "keyword": "부동산 정책",
-   "title": "민주당 서울 국회의원과 시의원, 2차 부동산 정책대응 간담회 개최",
-   "link": "https://www.dongbukilbo.com/etnews/?fn=v&no=41772&cid=21020300",
-   "image": "https://www.dongbukilbo.com/data/etnews/202608/20260817_023024_b1d3752_s.jpg",
-   "source": "�����Ϻ�",
-   "published": "2026-08-17T00:00:00+09:00",
+   "title": "전세를 월세로 몰아가는 이재명 정부 부동산정책, 결국 세입자가 운다",
+   "link": "https://www.dailyjn.com/news/articleView.html?idxno=104216",
+   "image": "https://cdn.dailyjn.com/news/photo/202608/104216_87245_3537.jpg",
+   "source": "데일리저널",
+   "published": "2026-08-18T07:36:21+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "‘빌라 대출’ 규제 완화? 속내는 ‘공급’이지만…흥행은 ‘미지수’",
+   "link": "https://www.dailian.co.kr/news/view/1678721/%E2%80%98%EB%B9%8C%EB%9D%BC-%EB%8C%80%EC%B6%9C%E2%80%99-%EA%B7%9C%EC%A0%9C-%EC%99%84%ED%99%94-%EC%86%8D%EB%82%B4%EB%8A%94-%E2%80%98%EA%B3%B5-2026",
+   "image": "https://cdnimage.dailian.co.kr/news/202510/news_1759622135_1556974_m_1.jpg",
+   "source": "데일리안",
+   "published": "2026-08-18T07:34:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "중구 '도시런 스쿨' 재개…25·27일 신당누리센터서 부동산·녹지 강연",
+   "link": "https://www.junggunews.com/news/articleView.html?idxno=42410",
+   "image": "https://cdn.junggunews.com/news/photo/202608/42410_33747_438.png",
+   "source": "중구신문",
+   "published": "2026-08-18T06:44:24+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "\"국민 어디 사는지 GPS로 감시?\"…부동산 '빅브라더 국가' 우려",
+   "link": "https://realty.chosun.com/site/data/html_dir/2026/08/14/2026081402489.html",
+   "image": "https://image.chosun.com/sitedata/image/202608/14/2026081402485_0.jpg",
+   "source": "realty.chosun.com",
+   "published": "2026-08-18T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "실거래 21억 용산 아파트 17.9억부터…서울 아파트 추천 경매",
+   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026081700559",
+   "image": "https://image.chosun.com/sitedata/thumbnail/202608/17/2026081700557_0_thumb.jpg",
+   "source": "realty.chosun.com",
+   "published": "2026-08-18T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "서울에 집 더 짓는다고 집값 잡을 수 없다...'집' 아닌 '서울'이 부족",
+   "link": "https://www.newsverse.kr/news/articleView.html?idxno=11200",
+   "image": "https://cdn.newsverse.kr/news/thumbnail/202608/11200_19261_4052_v150.jpg",
+   "source": "뉴스버스(Newsverse)",
+   "published": "2026-08-18T05:43:27+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "보유세 강화 예고 후 강남3구 매물 6.5%↑…실거래는 '뚝'",
+   "link": "https://www.news1.kr/amp/realestate/general/6261033",
+   "image": "https://i3n.news1.kr/system/photos/2026/8/14/8056477/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-08-18T05:25:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "[조민근의 시시각각] 부동산 정책의 오만과 편견",
+   "link": "https://www.joongang.co.kr/article/25453998",
+   "image": "https://assets.joongang.co.kr/images/share/ja-opengraph-img.png",
+   "source": "중앙일보",
+   "published": "2026-08-18T00:18:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "‘비거주 1주택자’ 괴롭히기, 실패할 수밖에 없는 이유 [손진석의 머니워치]",
+   "link": "https://v.daum.net/v/20260818085647371",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/18/chosun/20260818085714063aqtz.jpg",
+   "source": "Daum",
+   "published": "2026-08-18T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "빌라 경매",
+   "title": "【뉴스AS】 \"청년은 빌라에만 살라는 거냐\" \"주거사다리 기회 될 수 있어\"",
+   "link": "https://news.nate.com/view/20260818n01601?mid=n0100",
+   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/hn/2026/08/18/20260817502258.jpg",
+   "source": "네이트 뉴스",
+   "published": "2026-08-18T00:00:00+09:00",
+   "has_time": false
+  },
+  {
+   "keyword": "대출규제",
+   "title": "“갭투자 막아 실거주 유도”…전세금 반환은 ‘사각지대’",
+   "link": "https://www.ziksir.com/news/articleViewAmp.html?idxno=143230",
+   "image": "https://www.ziksir.com/news/photo/202608/143230_163018_2018.jpeg",
+   "source": "ziksir.com",
+   "published": "2026-08-18T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 12,
- "date": "2026-08-17"
+ "count": 14,
+ "date": "2026-08-18"
 }
