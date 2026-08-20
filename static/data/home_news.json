@@ -2,68 +2,77 @@
  "items": [
   {
    "keyword": "부동산 정책",
-   "title": "국힘·서울시, '8·13 부동산 대책 문제점' 토론회",
-   "link": "http://m.tbs.seoul.kr/news/newsView.do?typ_800=1&idx_800=3537940&seq_800=20530832",
-   "image": "https://news.tbs.seoul.kr/Upload/Image/20260819/00000000000001385487.jpg",
-   "source": "TBS",
-   "published": "2026-08-19T09:11:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "\"집값 비싸서 못 산다?\"…경매로 내 집 마련하는 법",
-   "link": "https://www.hankyung.com/article/2026081986826",
-   "image": "https://img.hankyung.com/photo/202608/01.45379651.1.jpg",
-   "source": "한국경제",
-   "published": "2026-08-19T08:54:58+09:00",
+   "title": "박완수 도지사 “지방 부동산정책, 서울과 확실히 차별화해야”",
+   "link": "https://www.newstown.co.kr/news/articleView.html?idxno=712969",
+   "image": "https://cdn.newstown.co.kr/news/thumbnail/202608/712969_667746_4845_v150.jpg",
+   "source": "뉴스타운",
+   "published": "2026-08-20T09:21:03+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "은행권 대출문턱·집값 상승 우려에 정책대출 풍선효과…상반기 보금자리론 2년 전보다 5배 늘어",
-   "link": "https://www.chosun.com/economy/economy_general/2026/08/19/DZHGOHCLN5D3XC5BYMEYRLU4MM/",
-   "image": "https://www.chosun.com/resizer/v2/ME4GEOJTMQYTON3CGRQTEZBQGA.jpg?auth=8601b5fc4711c27e3d5a7b1f5eec665fdd3b945e8b094708a652fac69ace1343&width=1200&height=630&smart=true",
-   "source": "조선일보",
-   "published": "2026-08-19T08:44:29.578000+09:00",
+   "title": "美 집값 폭등으로 ‘재산세 폭탄’… 州정부는 앞다퉈 “깎아주겠다”[Global Focus]",
+   "link": "https://www.munhwa.com/article/11610607",
+   "image": "https://wimg.munhwa.com/news/cms/2026/08/20/news-p.v1.20260820.0acc2f5e3755474480094b262b89f271_R.jpg",
+   "source": "문화일보",
+   "published": "2026-08-20T09:16:20+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "납세자연맹 “부동산 세제개편안, 복잡성 키우고 조세중립성 훼손 우려”",
-   "link": "https://www.sejungilbo.com/news/articleView.html?idxno=59703",
-   "image": "https://cdn.sejungilbo.com/news/thumbnail/202608/59703_94694_2357_v150.jpg",
-   "source": "세정일보",
-   "published": "2026-08-19T08:24:14+09:00",
+   "title": "장위4구역 조합 58억원 세금 체납···성북구청, 조합 토지 압류",
+   "link": "https://www.smartbizn.com/news/articleView.html?idxno=151613",
+   "image": "https://cdn.smartbizn.com/news/photo/202608/151613_257468_149.jpg",
+   "source": "스마트비즈",
+   "published": "2026-08-20T09:02:30+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "대출 막혀 외곽으로 갔는데...\"침체기엔 집값 하락폭 더 클 수도\" [굿모닝경제]",
-   "link": "https://m.ytn.co.kr/news_view.php?key=202608190819381895&s_mcd=0134",
-   "image": "https://image.ytn.co.kr/general/jpg/2026/0819/202608190819381895_t.jpg",
-   "source": "YTN",
-   "published": "2026-08-19T08:19:00+09:00",
+   "title": "[글로벌 부동산] 집값보다 월세를 보라… 글로벌 자본이 다시 도쿄를 사는 이유",
+   "link": "https://www.newspim.com/news/view/20260818000926",
+   "image": "https://img.newspim.com/news/2026/08/18/2608181413137170_t1.jpg",
+   "source": "뉴스핌",
+   "published": "2026-08-20T07:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "“서울 주택공급 확실한 대안, 재개발ㆍ재건축”",
+   "link": "https://www.sijung.co.kr/news/articleView.html?idxno=435249",
+   "image": "https://cdn.sijung.co.kr/news/thumbnail/202608/435249_241080_06_v150.jpg",
+   "source": "시정일보",
+   "published": "2026-08-20T06:15:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "NH銀 변동형 주담대 재개…가계대출 빗장 풀린다",
+   "link": "https://www.sedaily.com/article/20081053",
+   "image": "https://wimg.sedaily.com/news/cms/2026/08/19/news-p.v1.20260107.36a49a5d6d374c7296d971035cdb66c9_R.jpg",
+   "source": "서울경제",
+   "published": "2026-08-20T05:50:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "\"다들 30억짜리 집 전세 살아?\" 집주인 들어와살까, 전국민이 걱정 왜 [세금전쟁③]",
-   "link": "https://v.daum.net/v/20260819050109409",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/19/fnnewsi/20260819050110157oxft.jpg",
-   "source": "Daum",
-   "published": "2026-08-19T00:00:00+09:00",
+   "title": "[데스크 칼럼] 집값 잡겠다는 세금…세입자에게 돌아올 청구서는",
+   "link": "https://www.pinpointnews.co.kr/news/articleViewAmp.html?idxno=478706",
+   "image": "https://www.pinpointnews.co.kr/news/photo/202608/478706_465557_1045.png",
+   "source": "pinpointnews.co.kr",
+   "published": "2026-08-20T00:00:00+09:00",
    "has_time": false
   },
   {
    "keyword": "부동산 정책",
-   "title": "유의동 \"李정부 1년도 안돼 부동산 정책 다 뒤집어…신뢰 없이 집값 못 잡아\"",
-   "link": "https://v.daum.net/v/20260819060231255",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/19/NEWS1/20260819060233616jxav.jpg",
+   "title": "[조현숙의 시시각각] 부동산 대책 잔혹사",
+   "link": "https://v.daum.net/v/20260820002209256",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/20/joongang/20260820002210918lpkc.jpg",
    "source": "Daum",
-   "published": "2026-08-19T00:00:00+09:00",
+   "published": "2026-08-20T00:00:00+09:00",
    "has_time": false
   }
  ],
- "count": 7,
- "date": "2026-08-19"
+ "count": 8,
+ "date": "2026-08-20"
 }
