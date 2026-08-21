@@ -1,78 +1,51 @@
 {
  "items": [
   {
-   "keyword": "부동산 정책",
-   "title": "박완수 도지사 “지방 부동산정책, 서울과 확실히 차별화해야”",
-   "link": "https://www.newstown.co.kr/news/articleView.html?idxno=712969",
-   "image": "https://cdn.newstown.co.kr/news/thumbnail/202608/712969_667746_4845_v150.jpg",
-   "source": "뉴스타운",
-   "published": "2026-08-20T09:21:03+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "美 집값 폭등으로 ‘재산세 폭탄’… 州정부는 앞다퉈 “깎아주겠다”[Global Focus]",
-   "link": "https://www.munhwa.com/article/11610607",
-   "image": "https://wimg.munhwa.com/news/cms/2026/08/20/news-p.v1.20260820.0acc2f5e3755474480094b262b89f271_R.jpg",
-   "source": "문화일보",
-   "published": "2026-08-20T09:16:20+09:00",
+   "keyword": "대출규제",
+   "title": "서울 아파트값 5년 만에 최대폭 상승...대출규제 여파로 중대형·중저가 수요↑",
+   "link": "https://www.livebiz.today/news/articleView.html?idxno=204299",
+   "image": "https://cdn.livebiz.today/news/photo/202608/204299_205689_5059.jpg",
+   "source": "생생비즈플러스",
+   "published": "2026-08-21T08:52:34+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "장위4구역 조합 58억원 세금 체납···성북구청, 조합 토지 압류",
-   "link": "https://www.smartbizn.com/news/articleView.html?idxno=151613",
-   "image": "https://cdn.smartbizn.com/news/photo/202608/151613_257468_149.jpg",
-   "source": "스마트비즈",
-   "published": "2026-08-20T09:02:30+09:00",
+   "title": "짐 싸는 국내 부동산 자금, 해외 부동산 취득·보유·처분 단계별 세무 핵심 가이드",
+   "link": "https://www.g-enews.com/article/General-News/2026/08/202608210741082632c5557f8da8_1",
+   "image": "https://nimage.g-enews.com/phpwas/restmb_allidxmake.php?idx=5&simg=202602061443430202335e857d01010625224987.jpg",
+   "source": "글로벌이코노믹",
+   "published": "2026-08-21T07:53:48+09:00",
    "has_time": true
   },
   {
-   "keyword": "집값",
-   "title": "[글로벌 부동산] 집값보다 월세를 보라… 글로벌 자본이 다시 도쿄를 사는 이유",
-   "link": "https://www.newspim.com/news/view/20260818000926",
-   "image": "https://img.newspim.com/news/2026/08/18/2608181413137170_t1.jpg",
-   "source": "뉴스핌",
-   "published": "2026-08-20T07:00:00+09:00",
+   "keyword": "부동산 세금",
+   "title": "서초구, 부동산 세제개편안에 2,461명 구민 의견 정부에 전달",
+   "link": "http://www.surprisenews.kr/news/articleView.html?idxno=686696",
+   "image": "http://www.surprisenews.kr/news/thumbnail/202608/686696_640514_0503_v150.jpg",
+   "source": "서프라이즈뉴스",
+   "published": "2026-08-21T06:57:34+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "“서울 주택공급 확실한 대안, 재개발ㆍ재건축”",
-   "link": "https://www.sijung.co.kr/news/articleView.html?idxno=435249",
-   "image": "https://cdn.sijung.co.kr/news/thumbnail/202608/435249_241080_06_v150.jpg",
-   "source": "시정일보",
-   "published": "2026-08-20T06:15:00+09:00",
+   "keyword": "아파트 경매",
+   "title": "송도 신축급 아파트가 4억대부터…수도권 아파트 경매 추천 물건",
+   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026082002057",
+   "image": "https://image.chosun.com/sitedata/thumbnail/202608/20/2026082002049_0_thumb.jpg",
+   "source": "realty.chosun.com",
+   "published": "2026-08-21T06:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "대출규제",
-   "title": "NH銀 변동형 주담대 재개…가계대출 빗장 풀린다",
-   "link": "https://www.sedaily.com/article/20081053",
-   "image": "https://wimg.sedaily.com/news/cms/2026/08/19/news-p.v1.20260107.36a49a5d6d374c7296d971035cdb66c9_R.jpg",
-   "source": "서울경제",
-   "published": "2026-08-20T05:50:00+09:00",
+   "title": "[전문가 기고] 부동산 대책, 대량 공급과 속도가 중요하다",
+   "link": "https://www.ajunews.com/view/20260820093651239",
+   "image": "https://image.ajunews.com/content/image/2026/08/20/20260820093723188534.jpg",
+   "source": "아주경제",
+   "published": "2026-08-21T06:00:00+09:00",
    "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "[데스크 칼럼] 집값 잡겠다는 세금…세입자에게 돌아올 청구서는",
-   "link": "https://www.pinpointnews.co.kr/news/articleViewAmp.html?idxno=478706",
-   "image": "https://www.pinpointnews.co.kr/news/photo/202608/478706_465557_1045.png",
-   "source": "pinpointnews.co.kr",
-   "published": "2026-08-20T00:00:00+09:00",
-   "has_time": false
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "[조현숙의 시시각각] 부동산 대책 잔혹사",
-   "link": "https://v.daum.net/v/20260820002209256",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/20/joongang/20260820002210918lpkc.jpg",
-   "source": "Daum",
-   "published": "2026-08-20T00:00:00+09:00",
-   "has_time": false
   }
  ],
- "count": 8,
- "date": "2026-08-20"
+ "count": 5,
+ "date": "2026-08-21"
 }
