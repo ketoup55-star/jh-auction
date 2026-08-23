@@ -1,105 +1,114 @@
 {
  "items": [
   {
-   "keyword": "집값",
-   "title": "집값 이어 월세까지 뛰는 동탄… 월세 수익 노릴 수 있는 '동탄역 디에트르 퍼스티지' 주목",
-   "link": "https://www.asiae.co.kr/article/2026082115461529675",
-   "image": "https://cphoto.asiae.co.kr/listimglink/1/2026082115444988685_1787294688.jpg",
-   "source": "아시아경제",
-   "published": "2026-08-22T09:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "대출·세제 규제에 갈린 서울 집값···강남 거래절벽",
-   "link": "https://www.jabon.co.kr/news/articleView.html?idxno=6207",
-   "image": null,
-   "source": "자본시장뉴스",
-   "published": "2026-08-22T08:26:11+09:00",
+   "keyword": "부동산 정책",
+   "title": "베트남 국회, 부동산거래법 개정 논의…디지털 연계로 시장 투명성 강화",
+   "link": "https://vietnam.vnanet.vn/korean/tin-van/%E1%84%87%E1%85%A6%E1%84%90%E1%85%B3%E1%84%82%E1%85%A1%E1%86%B7-%E1%84%80%E1%85%AE%E1%86%A8%E1%84%92%E1%85%AC-%E1%84%87%E1%85%AE%E1%84%83%E1%85%A9%E1%86%BC%E1%84%89%E1%85%A1%E1%86%AB%E1%84%80%E1%85%A5%E1%84%85%E1%85%A2%E1%84%87%E1%85%A5%E1%86%B8-%E1%84%80%E1%85%A2%E1%84%8C%E1%85%A5%E1%86%BC-%E1%84%82%E1%85%A9%E1%86%AB%E1%84%8B%E1%85%B4%E1%84%83%E1%85%B5%E1%84%8C%E1%85%B5%E1%84%90%E1%85%A5%E1%86%AF-%E1%84%8B%E1%85%A7%E1%86%AB%E1%84%80%E1%85%A8%E1%84%85%E1%85%A9-%E1%84%89%E1%85%B5%E1%84%8C%E1%85%A1%E1%86%BC-%E1%84%90%E1%85%AE%E1%84%86%E1%85%A7%E1%86%BC%E1%84%89%E1%85%A5%E1%86%BC-%E1%84%80%E1%85%A1%E1%86%BC%E1%84%92%E1%85%AA-463286.html",
+   "image": "https://imagevietnam.vnanet.vn//MediaUpload/Org/2026/08/22/vna-potal-quoc-hoi-thao-luan-ve-dinh-huong-chinh-sach-sua-doi-luat-kinh-doanh-bat-dong-san-897272922-11-6-32.jpg",
+   "source": "vietnam.vnanet.vn",
+   "published": "2026-08-23T14:36:10+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "비거주 주택 소유자 중과세, 정말 부자에게 불리한 정책일까",
-   "link": "https://www.donga.com/news/Economy/article/all/20260822/134523198/1",
-   "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/08/22/134523194.1.png",
-   "source": "동아일보",
-   "published": "2026-08-22T08:05:00+09:00",
+   "title": "與 김민석, 고위당정 '데뷔'로 입법·정책 본격 추진",
+   "link": "http://www.chungnamilbo.co.kr/news/articleView.html?idxno=905266",
+   "image": "https://cdn.chungnamilbo.co.kr/news/thumbnail/202608/905266_483477_1641_v150.jpg",
+   "source": "충남일보",
+   "published": "2026-08-23T09:20:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "'세금 앞에 장사 없네' 강남·서초 '흔들'",
-   "link": "https://news.bizwatch.co.kr/article/real_estate/2026/08/21/0040",
-   "image": "https://cdn.bizwatch.co.kr/news/photo/2026/08/21/9740957e7b779e299b380d4cdf274146.jpg",
-   "source": "비즈니스워치",
-   "published": "2026-08-22T08:00:03+09:00",
+   "title": "\"당첨됐다고 장땡 아닙니다\"…8월 4만가구 분양, 세금 따라 확 달라진 청약 셈법",
+   "link": "https://m.news.nate.com/view/20260823n03336?mid=m02&list=recent&cpcd=",
+   "image": "https://news.nateimg.co.kr/orgImg/mk/2026/08/23/news-p.v1.20260819.bea4e67f6754406397e6b936e821113f_P1.png",
+   "source": "모바일 네이트 뉴스",
+   "published": "2026-08-23T09:01:23+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "9월 부동산 대책, 핀셋 대출 완화·비아파트 지원도 검토",
+   "link": "https://www.gukjenews.com/news/articleView.html?idxno=3671683",
+   "image": "https://cdn.gukjenews.com/news/thumbnail/202608/3671683_3839802_187_v150.jpg",
+   "source": "국제뉴스",
+   "published": "2026-08-23T08:38:55+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "[통계로보는부동산]서울 집값 오르는데 강남은 뚝…30대 매수세는 강북으로",
-   "link": "https://www.ajunews.com/amp/20260821113357883",
-   "image": "https://image.ajunews.com/content/image/2026/08/21/20260821113536274620.jpeg",
-   "source": "아주경제",
-   "published": "2026-08-22T08:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "\"8·13 부동산 정책으로 초우량채 발행 늘어날 것\"",
-   "link": "https://news.einfomax.co.kr/news/articleView.html?idxno=4431312",
-   "image": "https://cdn.news.einfomax.co.kr/news/thumbnail/202608/4431312_338590_412_v150.jpg",
-   "source": "연합인포맥스",
-   "published": "2026-08-22T07:40:08+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "서울 경매도 중저가에 몰렸다…용두동 아파트 낙찰가율 132% - 머니투데이",
-   "link": "https://www.mt.co.kr/amp/estate/2026/08/22/2026082117524777366",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=649,fit=cover,bg=white,f=auto,quality=high,sharpen=2,g=face/21/2026/08/2026082117524777366_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-08-22T06:05:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "\"집 샀다는 이유만으로 30억 벌었는데, 세금 당연 내야죠\"…이 말 나오도록, 디테일에 승부 걸어야 [세금전쟁 ⑥·끝]",
-   "link": "https://www.fnnews.com/news/202608200318444598",
-   "image": "https://image.fnnews.com/resource/media/image/2026/08/11/202608111052082391_l.jpg",
+   "title": "8월 금리 '백투백 인상' 촉각…성장·집값 vs 환율·물가",
+   "link": "https://www.fnnews.com/news/202608221925491257",
+   "image": "https://image.fnnews.com/resource/media/image/2026/08/04/202608041736438529_l.jpg",
    "source": "파이낸셜뉴스",
-   "published": "2026-08-22T05:00:00+09:00",
+   "published": "2026-08-23T08:20:59+09:00",
    "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "서울 아파트 경매, 고가는 주춤·중저가는 여전히 강세[집슐랭]",
-   "link": "https://news.nate.com/view/20260822n02679",
-   "image": "https://thumbnews.nateimg.co.kr/view610///news.nateimg.co.kr/orgImg/se/2026/08/22/news-p.v1.20260821.91c26b75f68c4b528c1b7fe356eaa2e8_P1.jpg",
-   "source": "네이트 뉴스",
-   "published": "2026-08-22T00:00:00+09:00",
-   "has_time": false
-  },
-  {
-   "keyword": "빌라 경매",
-   "title": "“빌라에 갇히란 말이냐” vs “월세 탈출 기회”… 4억 이하 非아파트 지원에 엇갈린 청년 민심",
-   "link": "https://v.daum.net/v/20260822070246823",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/22/weeklydonga/20260822070247632nyku.jpg",
-   "source": "Daum",
-   "published": "2026-08-22T00:00:00+09:00",
-   "has_time": false
   },
   {
    "keyword": "부동산 정책",
-   "title": "\"부동산 세제 조정에 치우쳐…중장기적 조세정책 방향 제시를\"",
-   "link": "https://www.junggi.co.kr/news/articleView.html?idxno=37515",
-   "image": "https://cdn.junggi.co.kr/news/photo/202608/37515_43964_2631.jpg",
-   "source": "중기이코노미",
-   "published": "2026-08-22T00:00:00+09:00",
+   "title": "부동산 정책 비판, '용산'으로 환기? 팽팽한 여야, 양보 힘든 정부·서울시 [뉴스모아]",
+   "link": "https://www.ytn.co.kr/_ln/0522_202608230800018213",
+   "image": "https://image.ytn.co.kr/special/jpg/0522/2026/202608230800018213_h.jpg",
+   "source": "YTN",
+   "published": "2026-08-23T08:00:00+09:00",
    "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "대전 중구 유천동 ‘서대전 상떼빌 시그니처’, 10년 장기일반민간임대 안정성에 주목",
+   "link": "http://www.skypress.co.kr/news/articleView.html?idxno=129323",
+   "image": "http://www.skypress.co.kr/news/thumbnail/202608/129323_131643_4029_v150.jpg",
+   "source": "대한뉴스방송",
+   "published": "2026-08-23T07:46:10+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "정부, 집값 급등지 '핀셋 규제'…국토부 장관에 지정권 부여(Gov't to Speed Up 'Pinpoint' Curbs on Surging Real Estate)",
+   "link": "https://www.globalhumantimes.kr/news/articleView.html?idxno=5641",
+   "image": "https://cdn.globalhumantimes.kr/news/photo/202608/5641_4252_2842.jpg",
+   "source": "글로벌휴먼타임즈(GlobalHumanTimes)",
+   "published": "2026-08-23T07:30:28+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "‘금리인상 이제 시작인데?’ 2030 모인 은평구, 집값 60%가 ‘빚’ [부동산360]",
+   "link": "https://biz.heraldcorp.com/article/10848904",
+   "image": "https://wimg.heraldcorp.com/news/cms/2026/08/23/rcv.YNA.20260814.PYH2026081408120001300_T1.jpg",
+   "source": "헤럴드경제",
+   "published": "2026-08-23T07:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "세금 부담 커진 '트로피' 강남 아파트…고령층 팔고, 고소득층 살까",
+   "link": "https://www.newspim.com/news/view/20260821000813",
+   "image": "https://img.newspim.com/news/2026/02/09/260209143646524_982_tc.jpg",
+   "source": "뉴스핌",
+   "published": "2026-08-23T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "서울 주택대출 규제 '풍선효과'…경기 비규제지역 주담대 급증",
+   "link": "https://www.g-enews.com/article/Finance/2026/08/202608201516034147cd0bfacc1c_1",
+   "image": "https://nimage.g-enews.com/phpwas/restmb_allidxmake.php?idx=5&simg=2026082015165201888cd0bfacc1c595103236.jpg",
+   "source": "글로벌이코노믹",
+   "published": "2026-08-23T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "아이 넷 30대 직장인이 겪은 李 부동산정책의 현실",
+   "link": "https://shindonga.donga.com/List/article/all/13/6355996/1",
+   "image": "https://dimg.donga.com/ugc/CDB/SHINDONGA/Article/6a/87/db/d4/6a87dbd4139da0a0a0a.jpg",
+   "source": "신동아",
+   "published": "2026-08-23T00:00:00+09:00",
+   "has_time": false
   }
  ],
- "count": 11,
- "date": "2026-08-22"
+ "count": 12,
+ "date": "2026-08-23"
 }
