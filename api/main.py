@@ -3493,6 +3493,12 @@ def _compute_brief(item_key: str) -> dict:
             if not by and d.get("build_year"):
                 by = str(d.get("build_year"))
                 _from_items = True
+            # 세대수 items 폴백 — 건축물대장 문서·API에 세대수가 없어도 items.households(크롤러 수집·64%)로 표시.
+            #   집합건물이라도 items.households는 '건물 전체 세대수'(전유부 '호'와 무관)라 폴백에 안전.
+            if not un and d.get("households"):
+                un = str(d.get("households"))
+                ul = ul or "세대"
+                _from_items = True
             # ② 건축물대장 API 폴백 — 세대수·승강기·층수·주용도 보완용(이것들은 API에만 있음).
             #    ★준공년도는 위(doc → items)에서 확보됐으면 API 값을 쓰지 않는다: API는 지번 조회라
             #      같은 땅의 '다른 신축 건물'을 읽어 최대 65년 틀림(실제 1955 → API 2020). doc·items가
@@ -5508,6 +5514,18 @@ def auction_apt_brief(item_key: str) -> dict:
     """단건(상세페이지용). 모든 주거용 준공·세대·승강기."""
     r = _get_brief(item_key)
     _save_brief_cache()
+    # 캐시된 brief에 세대수가 비어있으면 items.households(크롤러 수집·64%)로 보강 — 기존 캐시(세대 없이
+    #   저장된 것)도 클리어 없이 즉시 반영. 보강분은 DB 캐시에 재저장해 다음부턴 캐시에서 바로 나오게(재발방지).
+    if isinstance(r, dict) and r.get("available") and not r.get("households"):
+        try:
+            _d = auction_db.get_auction(item_key)
+            _hh = _d.get("households") if _d else None
+            if _hh:
+                r = {**r, "households": str(_hh), "unit_label": r.get("unit_label") or "세대"}
+                _brief_cache[item_key] = r
+                auction_db.cache_save("brief:" + item_key, r)
+        except Exception:
+            pass
     return r
 
 
