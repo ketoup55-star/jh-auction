@@ -1,78 +1,60 @@
 {
  "items": [
   {
-   "keyword": "아파트 경매",
-   "title": "\"강남 전세 숨통 트일까\"…디에이치방배 3064가구 입주 앞둬",
-   "link": "https://www.hankyung.com/article/2026082477616",
-   "image": "https://img.hankyung.com/photo/202608/AD.43412941.1.jpg",
-   "source": "한국경제",
-   "published": "2026-08-24T09:03:25+09:00",
+   "keyword": "부동산 세금",
+   "title": "“진심 뛰어넘는 ‘전심행정’… 1주택자 억울한 세금폭탄 울분 이해”[서울인사이드]",
+   "link": "https://www.munhwa.com/article/11611764",
+   "image": "https://wimg.munhwa.com/news/cms/2026/08/25/news-p.v1.20260825.647478b6578e442d9bece29f0f654747_R.jpg",
+   "source": "문화일보",
+   "published": "2026-08-25T09:17:40+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "세금 피하니 대출 문턱… 노도강·금관구로 몰린 '반짝 온기', 다음 규제 부메랑 되나",
+   "link": "https://www.betanews.net/article/view/beta202608240053",
+   "image": "https://www.betanews.net/data/beta/image/2026/08/24/beta20260824000050.jpg",
+   "source": "베타뉴스",
+   "published": "2026-08-25T08:05:03+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "외환위기가 바꾼 부동산 세제…‘집값 잡기’에서 ‘시장 살리기’로",
-   "link": "https://www.thedailyeconomy.kr/news/articleView.html?idxno=6129",
-   "image": "https://cdn.thedailyeconomy.kr/news/thumbnail/202608/6129_9591_2818_v150.jpg",
-   "source": "The Daily Economy",
-   "published": "2026-08-24T09:01:51+09:00",
+   "title": "쿡카운티 재산세 또 오른다… 최대 27.8% 급등",
+   "link": "https://www.koreadaily.com/article/20260824143506870",
+   "image": "https://www.koreadaily.com/resources/usa/thumbnail_image/2026/08/25/5290f441-e476-4bed-a96f-08600a93d797.jpg",
+   "source": "미주중앙일보",
+   "published": "2026-08-25T06:34:57+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "이복현 “단일종목 레버리지, 증시 호황 아닌 침체기에 허용했어야\"",
+   "link": "https://www.edaily.co.kr/News/Read?newsId=01826966645550928&mediaCodeNo=257",
+   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/08/PS26082500078.jpg",
+   "source": "이데일리",
+   "published": "2026-08-25T06:20:03+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "김민석 민주당 대표의 부동산 세금을 많이 내는 시민보호 정책 환영!",
-   "link": "http://www.breaknews.com/1230837",
-   "image": "https://www.breaknews.com/imgdata/breaknews_com/202608/202608244040420.jpg",
-   "source": "브레이크뉴스",
-   "published": "2026-08-24T08:35:00+09:00",
+   "title": "\"팔아도 세금, 안 팔아도 세금\"…'얼마'에서 '어떻게'로 넘어간 부동산 세금 딜레마",
+   "link": "https://www.fnnews.com/news/202608241339585854",
+   "image": "https://image.fnnews.com/resource/media/image/2026/08/04/202608041712482845_l.jpg",
+   "source": "파이낸셜뉴스",
+   "published": "2026-08-25T06:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "아파트 경매",
-   "title": "강남 다음은 여의도…시범 156㎡ 호가 40억까지 내려왔다[집슐랭]",
-   "link": "https://www.sedaily.com/article/20082323",
-   "image": "https://wimg.sedaily.com/news/cms/2026/08/23/news-g.v1.20260823.922fcfc777554e1b8499d90d9bef8bd0_R.jpg",
-   "source": "서울경제",
-   "published": "2026-08-24T07:08:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "난수표 세제개편의 역설…한강벨트·외곽 집값 불 지를라",
-   "link": "https://weekly.khan.co.kr/article/202608240600011",
-   "image": "https://img.khan.co.kr/weekly/2026/08/24/news-p.v1.20260820.29d6cbb9006d41c3b0d1c58ac52a198f_P1.jpg",
-   "source": "주간경향",
-   "published": "2026-08-24T06:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "'집값 폭락' 부른 좌파 정권의 비참한 몰락…총리도, 청년도 국외 대탈출",
-   "link": "https://realty.chosun.com/site/data/html_dir/2026/08/21/2026082101868.html",
-   "image": "https://image.chosun.com/sitedata/image/202608/21/2026082101866_0.jpg",
+   "title": "감정가 4억 '시흥 참이슬아파트' 낙찰가는…땅집고옥션 낙찰가 맞추기 이벤트",
+   "link": "https://realty.chosun.com/site/data/html_dir/2026/08/24/2026082402976.html",
+   "image": "https://image.chosun.com/sitedata/image/202608/24/2026082402975_0.jpg",
    "source": "realty.chosun.com",
-   "published": "2026-08-24T06:00:00+09:00",
+   "published": "2026-08-25T06:00:00+09:00",
    "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "땅값, 세금으로 잡아라…토지공개념 거쳐 종부세 탄생 [정권별 부동산 세제 변천사 上]",
-   "link": "https://www.etoday.co.kr/news/view/2615711",
-   "image": "https://img.etoday.co.kr/pto_db/2026/08/20260823212218_2376842_1057_216.jpg",
-   "source": "이투데이",
-   "published": "2026-08-24T05:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "삼전이 만든 경기도판 대치동 ‘동탄’…집값에 학원비까지 ‘부글’",
-   "link": "https://v.daum.net/v/20260824060209883",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202608/24/dt/20260824060211061ivfg.jpg",
-   "source": "Daum",
-   "published": "2026-08-24T00:00:00+09:00",
-   "has_time": false
   }
  ],
- "count": 8,
- "date": "2026-08-24"
+ "count": 6,
+ "date": "2026-08-25"
 }
