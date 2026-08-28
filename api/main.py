@@ -2146,7 +2146,10 @@ _zone_bucket_cache: dict = {"ts": 0.0, "buckets": None, "building": False}
 
 
 _ZONE_APPL_OR = ("(usage_name.ilike.*단독*,usage_name.ilike.*다가구*,"
-                 "usage_name.ilike.*근린주택*,usage_name.eq.주택,usage_name.ilike.*농가*)")
+                 "usage_name.ilike.*근린주택*,usage_name.eq.주택,usage_name.ilike.*농가*,"
+                 "usage_name.ilike.*아파트*,usage_name.ilike.*다세대*,usage_name.ilike.*연립*,"
+                 "usage_name.ilike.*빌라*,usage_name.ilike.*도시형*,usage_name.ilike.*오피스텔*,"
+                 "usage_name.ilike.*근린*,usage_name.ilike.*상가*)")   # 용도지역 표시 전 유형 확대(2026-08-29): detail_text에 73~96% 존재하나 대상이 단독·다가구류만이라 아파트/다세대/상가/오피 zone 0%였음. 토지/차량은 detail_text에 용도지역 없어 자동 제외
 _zone_build_lock = threading.Lock()
 
 
