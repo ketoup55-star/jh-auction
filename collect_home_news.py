@@ -419,6 +419,43 @@ def is_dupe(title, kept_titles):
     return False
 
 
+def search_news_rss(keyword, limit):
+    """구글 뉴스 RSS(공개 피드, 봇차단 없음)로 기사 목록. 실제 기사 URL은 구글이 protobuf로
+    난독화해 링크는 구글 경유(클릭 시 실제 기사로)·썸네일 불가 → 제목/출처/발행일만 사용."""
+    import html as _htmlmod
+    url = "https://news.google.com/rss/search?q=" + quote_plus(keyword) + "&hl=ko&gl=KR&ceid=KR:ko"
+    try:
+        r = httpx.get(url, timeout=15, follow_redirects=True,
+                      headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
+    except Exception:
+        return []
+    out = []
+    for blk in re.findall(r"<item>(.*?)</item>", r.text, re.S)[:limit]:
+        t = re.search(r"<title>(.*?)</title>", blk, re.S)
+        l = re.search(r"<link>(.*?)</link>", blk, re.S)
+        p = re.search(r"<pubDate>(.*?)</pubDate>", blk, re.S)
+        s = re.search(r"<source[^>]*>(.*?)</source>", blk, re.S)
+        d = re.search(r"<description>(.*?)</description>", blk, re.S)
+        if not (t and l):
+            continue
+        title = _htmlmod.unescape(t.group(1)).strip()
+        dt, has_time = (None, False)
+        if p:
+            try:  # RSS pubDate는 RFC822("Thu, 27 Aug 2026 21:00:13 GMT") — _parse_dt이 못 읽어 email.utils로 파싱 후 GMT→로컬(KST) 변환해 today 비교
+                from email.utils import parsedate_to_datetime
+                _d = parsedate_to_datetime(p.group(1).strip())
+                if _d is not None:
+                    dt = _d.astimezone()
+                    has_time = True
+            except Exception:
+                dt = None
+        desc = re.sub(r"<[^>]+>", " ", _htmlmod.unescape(d.group(1))).strip() if d else ""
+        src = _htmlmod.unescape(s.group(1)).strip() if s else ""
+        out.append({"keyword": keyword, "title": title, "link": l.group(1).strip(),
+                    "source": src, "dt": dt, "has_time": has_time, "desc": desc})
+    return out
+
+
 def main():
     svc = RecentNewsService()
     cl = httpx.Client(
@@ -430,9 +467,9 @@ def main():
     n_cand = n_today = n_ad = n_off = n_dup = 0
     for kw in KEYWORDS:
         try:
-            items = svc.search_news(kw, CAND_PER_KW, headless=True)   # 크롬 창 숨김(헤드리스)
+            items = search_news_rss(kw, CAND_PER_KW)   # 구글 뉴스 RSS(봇차단 없음). headless 검색은 구글이 sorry(CAPTCHA)로 봇차단해 폐기(2026-08-29).
         except Exception as e:
-            print(f"{kw}: 검색 오류 {type(e).__name__} {e}")
+            print(f"{kw}: RSS 오류 {type(e).__name__} {e}")
             items = []
         kept = 0
         for it in items:
@@ -444,15 +481,14 @@ def main():
                 continue
             seen_links.add(link)
             n_cand += 1
-            if is_ad(link, title):                 # 광고: fetch 전 컷
+            if is_ad(link, title):                 # 광고: 컷
                 n_ad += 1
                 continue
-            img, site, pub_raw, desc = article_meta(link, cl)
-            dt, has_time = _parse_dt(pub_raw)
+            dt, has_time = it.get("dt"), it.get("has_time", False)   # RSS pubDate(구글 링크가 protobuf 난독화라 실제 URL/썸네일 fetch 불가)
             if dt is None or dt.date() != today:   # ★ 반드시 오늘 날짜
                 continue
             n_today += 1
-            if not is_relevant(title, desc):       # ★ 부동산 투자 무관 기사 제외
+            if not is_relevant(title, it.get("desc") or ""):   # ★ 부동산 투자 무관 기사 제외
                 n_off += 1
                 continue
             if is_dupe(title, kept_titles):        # 같은 사건 중복
@@ -463,8 +499,8 @@ def main():
                 "keyword": kw,
                 "title": title,
                 "link": link,
-                "image": img,
-                "source": clean_source(site, link),
+                "image": "",                        # 구글 RSS 링크 난독화로 썸네일 불가(주인님 승인 2026-08-29: 썸네일 없이 복구)
+                "source": it.get("source") or "",
                 "published": dt.isoformat(),
                 "has_time": has_time,
                 "ts": dt.timestamp(),
