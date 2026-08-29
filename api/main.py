@@ -5287,6 +5287,30 @@ async def board_upload_media(request: Request, admin: dict = Depends(require_adm
     return {"result": results}
 
 
+@app.post("/board/upload_url")
+async def board_upload_url(body: dict = Body(...), admin: dict = Depends(require_admin)) -> dict:
+    """대용량 영상/파일용 presigned PUT URL 발급 — 브라우저가 R2에 직접 업로드(서버 미경유, 대용량 안정)."""
+    cli, bucket, pub = _r2_media_client()
+    if not cli:
+        raise HTTPException(503, "영상 저장소(R2)가 아직 설정되지 않았습니다. 관리자에게 문의하세요.")
+    import secrets as _s
+    filename = str(body.get("filename") or "")
+    ctype = str(body.get("contentType") or "application/octet-stream")
+    ext = os.path.splitext(filename)[1].lower()
+    is_video = ext in _MEDIA_VIDEO_EXT
+    if not (is_video or ext in _MEDIA_FILE_EXT):
+        raise HTTPException(400, "영상 또는 문서 파일만 업로드할 수 있습니다.")
+    key = ("videos/" if is_video else "files/") + _s.token_hex(12) + ext
+    try:
+        put_url = cli.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": bucket, "Key": key, "ContentType": ctype},
+            ExpiresIn=3600)                                  # 1시간 유효
+    except Exception as e:                                    # noqa: BLE001
+        raise HTTPException(500, f"presigned 발급 실패: {e}")
+    return {"put_url": put_url, "public_url": f"{pub}/{key}", "name": filename}
+
+
 class PostIn(BaseModel):
     title: str
     content: str = ""
