@@ -905,14 +905,16 @@ class UserStore:
         """restrict_user 지정 시 target_user_id=restrict_user 글만(개인 전용 게시판·회원 열람용).
         None이면 해당 게시판 전체(일반 게시판·관리자 열람)."""
         page = max(1, int(page)); size = max(1, min(int(size), 100))
-        where = "board=%s"; params: list = [board]
+        where = "p.board=%s"; params: list = [board]
         if restrict_user is not None:
-            where += " AND target_user_id=%s"; params.append(int(restrict_user))
+            where += " AND p.target_user_id=%s"; params.append(int(restrict_user))
         tot = self._ex(
-            f"SELECT COUNT(*) AS c FROM posts WHERE {where}", tuple(params), fetch="val")
-        rows = self._ex(
-            f"SELECT id,board,title,author_name,views,created_at,target_user_id FROM posts "
-            f"WHERE {where} ORDER BY id DESC LIMIT %s OFFSET %s",
+            f"SELECT COUNT(*) AS c FROM posts p WHERE {where}", tuple(params), fetch="val")
+        rows = self._ex(   # 내 전용: 열람 대상 회원 이름/이메일도 함께(관리자 목록 표시용)
+            f"SELECT p.id,p.board,p.title,p.author_name,p.views,p.created_at,p.target_user_id,"
+            f" u.name AS target_name, u.email AS target_email "
+            f"FROM posts p LEFT JOIN users u ON u.id=p.target_user_id "
+            f"WHERE {where} ORDER BY p.id DESC LIMIT %s OFFSET %s",
             tuple(params) + (size, (page - 1) * size), fetch="all")
         return {"total": tot, "page": page, "size": size,
                 "items": [dict(r) for r in rows]}
