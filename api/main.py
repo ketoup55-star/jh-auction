@@ -5267,7 +5267,7 @@ async def board_upload_media(request: Request, admin: dict = Depends(require_adm
     if not cli:
         raise HTTPException(503, "영상 저장소(R2)가 아직 설정되지 않았습니다. 관리자에게 문의하세요.")
     form = await request.form()
-    files = [v for v in form.values() if hasattr(v, "filename") and hasattr(v, "read")]
+    files = [v for v in form.getlist("file") if hasattr(v, "filename") and hasattr(v, "read")]
     results = []
     for f in files:
         ext = os.path.splitext(f.filename or "")[1].lower()
