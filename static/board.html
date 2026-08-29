@@ -199,6 +199,18 @@ async function loadHeader(){
       `<a href="/static/mypage.html">마이페이지</a>`+
       `<a href="/static/payment.html" class="pay">요금결제</a>`+
       (u.role==="admin"?`<a href="/static/admin.html" style="color:#fff;background:#e23b3b;padding:2px 9px;border-radius:6px;font-weight:700;text-decoration:none">🔧 관리자</a>`:``);
+    // 로그인한 회원에게만 '내 전용' 메뉴 노출(비회원엔 숨김). 관리자=작성, 회원=자기 지정 글만 열람
+    try{
+      if(!document.querySelector('.nav a[data-b="mylecture"]')){
+        const nav=document.querySelector('.nav .navin');
+        const vid=document.querySelector('.nav a[data-b="video"]');
+        const a=document.createElement('a');
+        a.href='/static/board.html?b=mylecture'; a.dataset.b='mylecture';
+        a.innerHTML='내 전용<span class="nav-badge nb-new">NEW</span>';
+        if(B==='mylecture') a.classList.add('on');
+        if(vid) vid.insertAdjacentElement('afterend', a); else if(nav) nav.appendChild(a);
+      }
+    }catch(e){}
   } }catch(e){}
 }
 function logout(){ fetch("/auth/logout",{method:"POST"}).then(()=>location.reload()); }
@@ -318,8 +330,15 @@ async function renderWrite(){
     const who = d.write==='grade' ? '등급 회원' : (d.write==='admin' ? '관리자' : '로그인 회원');
     document.getElementById("view").innerHTML=
     `<div class="card"><div class="loginbox">이 게시판은 <b>${who}</b>만 글을 등록할 수 있습니다.<br><br><a class="btn g" href="/static/board.html?b=${B}">목록으로</a></div></div>`; return; }
+  const targetUI = (B==='mylecture') ? `
+      <div class="frow"><label>열람 회원</label><div style="flex:1;min-width:0">
+        <input id="f_target_q" placeholder="이 글을 볼 회원을 이름/이메일로 검색" oninput="searchTarget()" autocomplete="off" style="width:100%">
+        <div id="targetResults" style="margin-top:4px"></div>
+        <div id="targetChosen" style="margin-top:6px;font-weight:700;color:#1f4fa3"></div>
+      </div></div>` : '';
   document.getElementById("view").innerHTML=`
     <div class="card edcard"><div class="form">
+      ${targetUI}
       <div class="frow"><label>제목</label><input id="f_title" maxlength="200" placeholder="제목을 입력하세요"></div>
       <div class="frow"><label>내용</label><textarea id="f_content" placeholder="내용을 입력하세요"></textarea></div>
       <div class="fbtns">
@@ -353,11 +372,33 @@ function initEditor(){
     ]
   });
 }
+let TARGET_UID=null;
+async function searchTarget(){   // 내 전용 게시판: 관리자가 열람 대상 회원 검색(/admin/users)
+  const q=document.getElementById("f_target_q").value.trim();
+  const box=document.getElementById("targetResults");
+  if(q.length<1){ box.innerHTML=""; return; }
+  try{
+    const d=await (await fetch(`/admin/users?q=${encodeURIComponent(q)}`)).json();
+    const us=(d.users||[]).slice(0,8);
+    box.innerHTML = us.length ? us.map(u=>{
+      const label=(u.name||u.email||'').replace(/'/g,'');
+      return `<div class="tgtItem" onclick="selectTarget(${u.id},'${label}')">${u.name||''} <span style="color:#888">${u.email||''}</span></div>`;
+    }).join('') : '<div style="color:#888;padding:4px">검색 결과 없음</div>';
+  }catch(e){ box.innerHTML='<div style="color:#c0392b;padding:4px">회원 검색 실패(관리자만 가능)</div>'; }
+}
+function selectTarget(id,label){
+  TARGET_UID=id;
+  document.getElementById("targetChosen").textContent="✓ 열람 회원: "+label;
+  document.getElementById("targetResults").innerHTML="";
+  document.getElementById("f_target_q").value=label;
+}
 async function submitPost(){
   const title=document.getElementById("f_title").value.trim();
   const content=SE ? SE.getContents(true) : document.getElementById("f_content").value;
   if(!title){ alert("제목을 입력하세요."); return; }
-  const r=await fetch(`/board/${B}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,content})});
+  if(B==='mylecture' && !TARGET_UID){ alert("이 글을 볼 회원을 검색해서 선택하세요."); return; }
+  const payload={title,content}; if(B==='mylecture') payload.target_user_id=TARGET_UID;
+  const r=await fetch(`/board/${B}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
   if(r.status===401){ location.href=`/static/login.html?next=/static/board.html?b=${B}`; return; }
   const d=await r.json();
   if(d.ok){ go({id:d.id}); }

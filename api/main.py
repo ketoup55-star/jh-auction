@@ -5169,6 +5169,8 @@ _BOARDS: dict = {
                   "read": "all",   "write": "admin", "comment": "user"},
     "support":   {"title": "고객센터", "desc": "문의·건의 사항을 남겨주세요(회원 작성).",
                   "read": "all",   "write": "user",  "comment": "user"},
+    "mylecture": {"title": "내 전용 강의", "desc": "회원 개인 전용 강의·자료입니다(지정된 회원만 열람).",
+                  "read": "user",  "write": "admin", "comment": "user"},   # 회원은 로그인 후 자기 target 글만(board_list에서 restrict), 작성은 관리자만
 }
 _PERM_LABEL = {"all": "전체공개", "user": "로그인 회원", "grade": "등급 회원",
                "admin": "관리자", "off": "사용 안 함"}
@@ -5230,6 +5232,7 @@ async def board_upload(request: Request, user: dict = Depends(require_user)) -> 
 class PostIn(BaseModel):
     title: str
     content: str = ""
+    target_user_id: Optional[int] = None   # 'mylecture' 전용: 관리자가 지정한 열람 대상 회원(None=일반 글)
 
 
 class CommentIn(BaseModel):
@@ -5317,7 +5320,8 @@ def board_list(b: str, page: int = 1, user: Optional[dict] = Depends(current_use
     if not _perm_read_ok(cfg, user):
         return {**base, "locked": True, "can_write": False, "items": [], "total": 0,
                 "page": 1, "size": 15, "reason": _read_reason(cfg, user)}
-    data = user_store.list_posts(b, page)
+    restrict = user["id"] if (b == "mylecture" and user and not _is_admin(user)) else None   # 내 전용: 비관리자는 자기 target 글만(관리자는 전체)
+    data = user_store.list_posts(b, page, restrict_user=restrict)
     return {**base, "locked": False, "can_write": _perm_write_ok(cfg, user), **data}
 
 
@@ -5330,6 +5334,8 @@ def board_view(b: str, pid: int, user: Optional[dict] = Depends(current_user)) -
     p = user_store.get_post(pid)
     if not p or p["board"] != b:
         raise HTTPException(404, "게시글을 찾을 수 없습니다.")
+    if b == "mylecture" and not _is_admin(user) and p.get("target_user_id") != (user["id"] if user else None):
+        raise HTTPException(403, "이 글의 열람 권한이 없습니다.")   # 내 전용: 지정된 회원만(URL 직접접근 차단)
     can_edit = bool(user) and (_is_admin(user) or user["id"] == p.get("author_id"))
     return {**p, "can_edit": can_edit,
             "comments": user_store.list_comments(pid),
@@ -5344,9 +5350,13 @@ def board_create(b: str, body: PostIn, user: dict = Depends(require_user)) -> di
     if not _perm_write_ok(cfg, user):
         raise HTTPException(403, f"이 게시판은 '{_PERM_LABEL.get(cfg['write'], cfg['write'])}'만 글을 등록할 수 있습니다.")
     content = _sanitize_html(body.content)        # 에디터 HTML → XSS 제거 후 저장
+    tgt = body.target_user_id if b == "mylecture" else None   # 내 전용: 관리자가 지정한 열람 대상 회원
+    if b == "mylecture" and not tgt:
+        raise HTTPException(400, "내 전용 강의는 열람 대상 회원을 지정해야 합니다.")
     try:
         p = user_store.create_post(b, body.title, content, user["id"],
-                                   user.get("name") or user.get("email") or "회원")
+                                   user.get("name") or user.get("email") or "회원",
+                                   target_user_id=tgt)
     except ValueError as e:
         raise HTTPException(400, str(e))
     return {"ok": True, "id": p["id"]}

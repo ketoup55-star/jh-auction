@@ -263,7 +263,8 @@ class UserStore:
                 author_id BIGINT,
                 author_name TEXT DEFAULT '',
                 views INTEGER DEFAULT 0,
-                created_at TEXT
+                created_at TEXT,
+                target_user_id BIGINT
             )""",
             """CREATE TABLE IF NOT EXISTS comments(
                 id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -899,14 +900,20 @@ class UserStore:
         return [dict(r) for r in rows]
 
     # ---- 게시판 ----
-    def list_posts(self, board: str, page: int = 1, size: int = 15) -> dict:
+    def list_posts(self, board: str, page: int = 1, size: int = 15,
+                   restrict_user: Optional[int] = None) -> dict:
+        """restrict_user 지정 시 target_user_id=restrict_user 글만(개인 전용 게시판·회원 열람용).
+        None이면 해당 게시판 전체(일반 게시판·관리자 열람)."""
         page = max(1, int(page)); size = max(1, min(int(size), 100))
+        where = "board=%s"; params: list = [board]
+        if restrict_user is not None:
+            where += " AND target_user_id=%s"; params.append(int(restrict_user))
         tot = self._ex(
-            "SELECT COUNT(*) AS c FROM posts WHERE board=%s", (board,), fetch="val")
+            f"SELECT COUNT(*) AS c FROM posts WHERE {where}", tuple(params), fetch="val")
         rows = self._ex(
-            "SELECT id,board,title,author_name,views,created_at FROM posts "
-            "WHERE board=%s ORDER BY id DESC LIMIT %s OFFSET %s",
-            (board, size, (page - 1) * size), fetch="all")
+            f"SELECT id,board,title,author_name,views,created_at,target_user_id FROM posts "
+            f"WHERE {where} ORDER BY id DESC LIMIT %s OFFSET %s",
+            tuple(params) + (size, (page - 1) * size), fetch="all")
         return {"total": tot, "page": page, "size": size,
                 "items": [dict(r) for r in rows]}
 
@@ -917,14 +924,16 @@ class UserStore:
         return dict(r) if r else None
 
     def create_post(self, board: str, title: str, content: str,
-                    author_id: int, author_name: str = "") -> dict:
+                    author_id: int, author_name: str = "",
+                    target_user_id: Optional[int] = None) -> dict:
         title = (title or "").strip()
         if not title:
             raise ValueError("제목을 입력하세요.")
         new_id = self._ex(
-            "INSERT INTO posts(board,title,content,author_id,author_name,created_at) "
-            "VALUES(%s,%s,%s,%s,%s,%s) RETURNING id",
-            (board, title[:200], content or "", author_id, author_name, _now()), fetch="id")
+            "INSERT INTO posts(board,title,content,author_id,author_name,created_at,target_user_id) "
+            "VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING id",
+            (board, title[:200], content or "", author_id, author_name, _now(),
+             (int(target_user_id) if target_user_id else None)), fetch="id")
         return self.get_post(new_id, bump=False)
 
     def delete_post(self, post_id: int) -> bool:
