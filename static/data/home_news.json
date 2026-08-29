@@ -1,5 +1,51 @@
 {
- "items": [],
- "count": 0,
+ "items": [
+  {
+   "keyword": "집값",
+   "title": "서울 집값 통제불능…강남 꺾이자 외곽 폭등 - 아이뉴스24",
+   "link": "https://news.google.com/rss/articles/CBMiS0FVX3lxTE5Nd0FUaWwwUEZXNXMwZlc3U3c1UEpudThBSnQ4eFZTSklxM2V5bWYyVkEzTUZoMmY0WUxnb3NQLUZSWmpCZHNqM3hxOA?oc=5",
+   "image": "",
+   "source": "아이뉴스24",
+   "published": "2026-08-29T09:00:01+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "[윤준의 부동산수첩] “실거주 아니면 팔아라” 2027년 세금의 경고 - NBN미디어",
+   "link": "https://news.google.com/rss/articles/CBMiZkFVX3lxTFBNQ2c3WFV6Z3N3RXJqek1IbjJpY3FJa01vdG1NNW5hVjVfa25uUDNZdXUxUEh1dmc5X2F0T2xGeV9heWFWU25xR1ZoelFZOXMtcFRmazlzRnhPMF91Tk5ZQXRoU1VUd9IBakFVX3lxTFBOTUVabEFLa192TG1WaThQcFNqQnJRSnNNM29VZmV1Wm5UbXFHbnUxSWxZbTNXR0FfV1hHOEZ4Z1YxTlZkQ0pFdHE0MVJyX0dUUVljcHBfRHZSamF6Y1N1eTlEVFdtd091RUE?oc=5",
+   "image": "",
+   "source": "NBN미디어",
+   "published": "2026-08-29T09:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "빌라 경매",
+   "title": "\"종로구 빌라가 3억대부터\"…서울 빌라·도시형생활주택 추천 경매 - 땅집고",
+   "link": "https://news.google.com/rss/articles/CBMif0FVX3lxTE9hV09wekx2RzR5eE5JUEprNFR4cVpJRWZweXNKTUxOVmp0SXd6TjZLMkVIcDRRVXpMRE5tY2pVTlFha2lnZEctTVA0WGVITG5YRFlKcms3WTdQRjdfMk1rTk5EeEc3TWpZdlRCdXFRcFVkMi1TNTNUbERxeFVUZmPSAXNBVV95cUxPdHVvQXhFV0JENGdxcHdqZzVtRHN5aFVHaG5MQ3RMamFOb2REdTdqZHR2SFYxUTYwU1FaWldPa0VRWk1lZldmZGlORkExQW9EUDdwajhLYUxuUkprbXA5bXk5TG5STVlsZnJnS19BYWNZYVNN?oc=5",
+   "image": "",
+   "source": "땅집고",
+   "published": "2026-08-29T08:40:37+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "대출규제의 역설…금리 올려도 서울 집값 안 잡힌다 - 땅집고",
+   "link": "https://news.google.com/rss/articles/CBMif0FVX3lxTE5mb3NYTkMzazVQcEJHZnQ1MnUwdjl3Wkk3aXAwLWFhQ29fSENEZ1ktQjFDdWRLQXR3M2ZnQ0h3R29KaGMwSUVTTWx4RnQxZnFGaElXcjJTQmZ3SlU0c0RGSUNpMGhHeXdUQU1qOEdVaEJMSFd4eHg1bzVianM4SGPSAXNBVV95cUxPNFhxSGl3elZmSzBzS2VicEJIbjZ0T0FVa2J3UUNDOXlKLTNhRTA3MUxqdnZjVU9PQ3ZtamVId3ZfVkc4LXQ2SExVTXZrc3BqVXVCN2lWcG9zcGE2bTdPQXA1bzVIU0pJZzdzUjdWRlNLUENJ?oc=5",
+   "image": "",
+   "source": "땅집고",
+   "published": "2026-08-29T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "'2030 부동산 민심'이라는 '헛소리' 붙들고 있는 이상한 나라 - 프레시안",
+   "link": "https://news.google.com/rss/articles/CBMia0FVX3lxTFBIYzVoTHBxbDFNaVJfQldvVFNnX1RNenhCRnRjU0hwV0VNREVfUUdQbXNOZnNlQUxweFY4M0h5Nm9ETjdXamFEZFNIMjNuSnFJY1pYenVaSW5NaEhfZ2xsak1mQThaM3VMVEhJ?oc=5",
+   "image": "",
+   "source": "프레시안",
+   "published": "2026-08-29T04:30:58+09:00",
+   "has_time": true
+  }
+ ],
+ "count": 5,
  "date": "2026-08-29"
 }
