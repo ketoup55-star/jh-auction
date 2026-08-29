@@ -357,7 +357,7 @@ async function renderWrite(){
       <div class="frow"><label>제목</label><input id="f_title" maxlength="200" placeholder="제목을 입력하세요"></div>
       <div class="frow"><label>내용</label><textarea id="f_content" placeholder="내용을 입력하세요"></textarea></div>
       <div class="frow"><label>파일 첨부</label><div style="flex:1;min-width:0">
-        <input type="file" id="f_file" accept=".pdf,.zip,.hwp,.hwpx,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" style="display:none" onchange="uploadFile()">
+        <input type="file" id="f_file" multiple accept=".pdf,.zip,.hwp,.hwpx,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" style="display:none" onchange="uploadFile()">
         <button type="button" class="btn g" onclick="document.getElementById('f_file').click()">📎 파일 선택·업로드</button>
         <span id="fileStatus" style="margin-left:8px;color:#888;font-size:13px"></span>
         <div style="color:#999;font-size:12px;margin-top:4px">업로드하면 본문에 첨부 링크가 삽입됩니다(영상은 툴바의 🎬 비디오 버튼).</div>
@@ -417,18 +417,18 @@ function selectTarget(id,label){
   document.getElementById("targetResults").innerHTML="";
   document.getElementById("f_target_q").value=label;
 }
-async function uploadFile(){   // 문서 파일 첨부 → R2 → 본문에 첨부 링크 삽입(관리자만)
-  const inp=document.getElementById('f_file'); const f=inp.files&&inp.files[0]; if(!f) return;
-  const st=document.getElementById('fileStatus'); st.textContent='업로드 중…';
-  const fd=new FormData(); fd.append('file', f);
+async function uploadFile(){   // 문서 파일 첨부(복수 선택) → R2 → 본문에 첨부 링크들 삽입(관리자만)
+  const inp=document.getElementById('f_file'); const fs=inp.files; if(!fs||!fs.length) return;
+  const st=document.getElementById('fileStatus'); st.textContent=`업로드 중… (${fs.length}개)`;
+  const fd=new FormData(); for(const f of fs) fd.append('file', f);
   try{
     const r=await fetch('/board/upload_media',{method:'POST',body:fd});
     const d=await r.json().catch(()=>({}));
     if(!r.ok){ st.textContent='실패: '+(d.detail||r.status); return; }
-    const u=d.result[0];
-    const html=`<p><a class="filechip" href="${u.url}" target="_blank" rel="noopener">📎 ${u.name}</a></p>`;
+    let html='';
+    for(const u of (d.result||[])) html+=`<p><a class="filechip" href="${u.url}" target="_blank" rel="noopener">📎 ${u.name}</a></p>`;
     if(SE){ SE.insertHTML(html, true); } else { const ta=document.getElementById('f_content'); ta.value+=html; }
-    st.textContent='첨부됨: '+u.name; inp.value='';
+    st.textContent=`첨부됨: ${(d.result||[]).length}개`; inp.value='';
   }catch(e){ st.textContent='업로드 실패'; }
 }
 async function submitPost(){
