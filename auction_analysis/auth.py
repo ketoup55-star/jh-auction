@@ -936,6 +936,17 @@ class UserStore:
              (int(target_user_id) if target_user_id else None)), fetch="id")
         return self.get_post(new_id, bump=False)
 
+    def update_post(self, post_id: int, title: str, content: str,
+                    target_user_id: Optional[int] = None) -> Optional[dict]:
+        title = (title or "").strip()
+        if not title:
+            raise ValueError("제목을 입력하세요.")
+        self._ex(
+            "UPDATE posts SET title=%s, content=%s, target_user_id=%s WHERE id=%s",
+            (title[:200], content or "",
+             (int(target_user_id) if target_user_id else None), int(post_id)))
+        return self.get_post(post_id, bump=False)
+
     def delete_post(self, post_id: int) -> bool:
         def _do(ex):
             n = ex("DELETE FROM posts WHERE id=%s", (int(post_id),), fetch="rowcount")

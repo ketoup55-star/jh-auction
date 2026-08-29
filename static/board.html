@@ -177,7 +177,9 @@
 
 <script>
 const P=new URLSearchParams(location.search);
-let B=P.get("b")||"community", MODE=P.get("write")?"write":(P.get("id")?"view":"list");
+let B=P.get("b")||"community";
+let EDIT_ID=(P.get("write")&&P.get("id"))?P.get("id"):null;   // write+id → 수정 모드
+let MODE=P.get("write")?"write":(P.get("id")?"view":"list");
 let PAGE=+(P.get("page")||1), META={};
 
 const esc=s=>(s||"").toString().replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -269,7 +271,7 @@ async function renderView(){
       <div class="vbody">${r.content||'<span style="color:var(--muted)">내용이 없습니다.</span>'}</div>
       <div class="vfoot">
         <a class="btn g" href="/static/board.html?b=${B}">목록</a>
-        ${r.can_edit?`<button class="btn r" onclick="del(${id})">삭제</button>`:`<span></span>`}
+        ${r.can_edit?`<a class="btn g" href="/static/board.html?b=${B}&id=${id}&write=1">✏ 수정</a> <button class="btn r" onclick="del(${id})">삭제</button>`:`<span></span>`}
       </div>
     </div>
     ${r.comment_off?"":commentsHtml(id, r.comments||[], r.can_comment)}`;
@@ -338,10 +340,15 @@ async function del(id){
 
 async function renderWrite(){
   const d=await (await fetch(`/board/${B}?page=1`)).json();
-  META=d; setHead(d.title,d.desc);
+  META=d; setHead(d.title,d.desc); VIEW_UID=d.uid;
   if(!d.uid){ document.getElementById("view").innerHTML=
     `<div class="card"><div class="loginbox">글쓰기는 로그인이 필요합니다.<br><br><a href="/static/login.html?next=/static/board.html?b=${B}%26write=1">로그인하러 가기 ›</a></div></div>`; return; }
-  if(!d.can_write){
+  let EDITP=null;
+  if(EDIT_ID){   // 수정 모드: 기존 글 로드 + 수정 권한(작성자/관리자)
+    const pr=await fetch(`/board/${B}/post/${EDIT_ID}`); EDITP=await pr.json().catch(()=>({}));
+    if(pr.status!==200 || !EDITP.can_edit){
+      document.getElementById("view").innerHTML=`<div class="card"><div class="loginbox">이 글을 수정할 권한이 없습니다.<br><br><a class="btn g" href="/static/board.html?b=${B}&id=${EDIT_ID}">글로 돌아가기</a></div></div>`; return; }
+  } else if(!d.can_write){
     const who = d.write==='grade' ? '등급 회원' : (d.write==='admin' ? '관리자' : '로그인 회원');
     document.getElementById("view").innerHTML=
     `<div class="card"><div class="loginbox">이 게시판은 <b>${who}</b>만 글을 등록할 수 있습니다.<br><br><a class="btn g" href="/static/board.html?b=${B}">목록으로</a></div></div>`; return; }
@@ -369,11 +376,16 @@ async function renderWrite(){
         <div style="color:#999;font-size:12px;margin-top:4px">여러 개 선택 가능. 업로드하면 본문에 첨부 링크가 삽입됩니다.</div>
       </div></div>
       <div class="fbtns">
-        <a class="btn g" href="/static/board.html?b=${B}">취소</a>
-        <button class="btn b" onclick="submitPost()">등록</button>
+        <a class="btn g" href="/static/board.html?b=${B}${EDIT_ID?('&id='+EDIT_ID):''}">취소</a>
+        <button class="btn b" onclick="submitPost()">${EDIT_ID?'수정 완료':'등록'}</button>
       </div>
     </div></div>`;
   initEditor();
+  if(EDITP){   // 수정: 기존 값 채움
+    document.getElementById("f_title").value=EDITP.title||"";
+    if(SE){ SE.setContents(EDITP.content||""); } else { document.getElementById("f_content").value=EDITP.content||""; }
+    if(B==='mylecture' && EDITP.target_user_id){ TARGET_UID=EDITP.target_user_id; const tc=document.getElementById("targetChosen"); if(tc) tc.textContent="✓ 기존 열람 회원 유지(변경하려면 다시 검색)"; }
+  }
 }
 let SE=null;
 function initEditor(){
@@ -460,11 +472,12 @@ async function submitPost(){
   if(!title){ alert("제목을 입력하세요."); return; }
   if(B==='mylecture' && !TARGET_UID){ alert("이 글을 볼 회원을 검색해서 선택하세요."); return; }
   const payload={title,content}; if(B==='mylecture') payload.target_user_id=TARGET_UID;
-  const r=await fetch(`/board/${B}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  const url=EDIT_ID?`/board/${B}/post/${EDIT_ID}`:`/board/${B}`;
+  const r=await fetch(url,{method:EDIT_ID?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
   if(r.status===401){ location.href=`/static/login.html?next=/static/board.html?b=${B}`; return; }
   const d=await r.json();
-  if(d.ok){ go({id:d.id}); }
-  else alert(d.detail||"등록 실패");
+  if(d.ok){ go({id:EDIT_ID||d.id}); }
+  else alert(d.detail||(EDIT_ID?"수정 실패":"등록 실패"));
 }
 
 function setHead(title,desc){

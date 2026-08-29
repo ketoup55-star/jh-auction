@@ -5444,6 +5444,28 @@ def board_create(b: str, body: PostIn, user: dict = Depends(require_user)) -> di
     return {"ok": True, "id": p["id"]}
 
 
+@app.put("/board/{b}/post/{pid}")
+def board_update(b: str, pid: int, body: PostIn, user: dict = Depends(require_user)) -> dict:
+    """글수정(작성자 본인 또는 관리자)."""
+    _board_cfg_or_404(b)
+    p = user_store.get_post(pid, bump=False)
+    if not p or p["board"] != b:
+        raise HTTPException(404, "게시글을 찾을 수 없습니다.")
+    if not _is_admin(user) and user["id"] != p.get("author_id"):
+        raise HTTPException(403, "본인 글만 수정할 수 있습니다.")
+    content = _sanitize_html(body.content)
+    tgt = None
+    if b == "mylecture":                                  # 내 전용: 대상 유지 or 재지정(둘 다 없으면 400)
+        tgt = body.target_user_id or p.get("target_user_id")
+        if not tgt:
+            raise HTTPException(400, "내 전용 강의는 열람 대상 회원을 지정해야 합니다.")
+    try:
+        user_store.update_post(pid, body.title, content, target_user_id=tgt)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "id": pid}
+
+
 @app.delete("/board/{b}/post/{pid}")
 def board_delete(b: str, pid: int, user: dict = Depends(require_user)) -> dict:
     """글삭제(작성자 본인 또는 관리자)."""
