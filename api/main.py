@@ -5393,8 +5393,9 @@ def _read_reason(cfg: dict, user: Optional[dict]) -> str:
 
 
 @app.get("/board/{b}")
-def board_list(b: str, page: int = 1, user: Optional[dict] = Depends(current_user)) -> dict:
-    """게시판 글목록 + 메타. 읽기 권한 미달 시 locked 응답."""
+def board_list(b: str, page: int = 1, target: Optional[int] = None,
+               user: Optional[dict] = Depends(current_user)) -> dict:
+    """게시판 글목록 + 메타. 읽기 권한 미달 시 locked 응답. target=관리자용 열람회원 필터."""
     cfg = _board_cfg_or_404(b)
     base = {"board": b, "title": cfg["title"], "desc": cfg["desc"],
             "read": cfg["read"], "write": cfg["write"], "comment": cfg["comment"],
@@ -5402,7 +5403,12 @@ def board_list(b: str, page: int = 1, user: Optional[dict] = Depends(current_use
     if not _perm_read_ok(cfg, user):
         return {**base, "locked": True, "can_write": False, "items": [], "total": 0,
                 "page": 1, "size": 15, "reason": _read_reason(cfg, user)}
-    restrict = user["id"] if (b == "mylecture" and user and not _is_admin(user)) else None   # 내 전용: 비관리자는 자기 target 글만(관리자는 전체)
+    if b == "mylecture" and user and not _is_admin(user):
+        restrict = user["id"]                          # 내 전용: 비관리자는 자기 target 글만
+    elif b == "mylecture" and _is_admin(user) and target:
+        restrict = int(target)                         # 관리자: 선택한 열람회원으로 필터
+    else:
+        restrict = None                                # 관리자 전체 / 일반 게시판
     data = user_store.list_posts(b, page, restrict_user=restrict)
     return {**base, "locked": False, "can_write": _perm_write_ok(cfg, user), **data}
 

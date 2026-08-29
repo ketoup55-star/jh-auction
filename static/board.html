@@ -180,6 +180,7 @@ const P=new URLSearchParams(location.search);
 let B=P.get("b")||"community";
 let EDIT_ID=(P.get("write")&&P.get("id"))?P.get("id"):null;   // write+id → 수정 모드
 let MODE=P.get("write")?"write":(P.get("id")?"view":"list");
+let TARGET_FILTER=P.get("target")||"";   // 내 전용 관리자: 열람회원 필터
 let PAGE=+(P.get("page")||1), META={};
 
 const esc=s=>(s||"").toString().replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
@@ -221,7 +222,7 @@ function lockHtml(reason,loggedIn){
   </div></div>`;
 }
 async function renderList(){
-  const d=await (await fetch(`/board/${B}?page=${PAGE}`)).json();
+  const d=await (await fetch(`/board/${B}?page=${PAGE}${TARGET_FILTER?('&target='+encodeURIComponent(TARGET_FILTER)):''}`)).json();
   if(d.detail){ document.getElementById("view").innerHTML=`<div class="card"><div class="btbl"><div class="empty">${esc(d.detail)}</div></div></div>`; return; }
   META=d; setHead(d.title,d.desc);
   if(d.locked){ document.getElementById("view").innerHTML=lockHtml(d.reason, !!d.uid); return; }
@@ -244,6 +245,7 @@ async function renderList(){
     pager+=`<button ${d.page>=pages?'disabled':''} onclick="go({page:${d.page+1}})">›</button></div>`;
   }
   document.getElementById("view").innerHTML=`
+    ${(B==='mylecture'&&d.is_admin)?`<div class="card fltbar"><label>🔒 열람 회원 필터</label><input id="flt_q" placeholder="회원 이름/이메일로 검색해 선택" oninput="fltSearch()" autocomplete="off"><div id="fltResults"></div>${TARGET_FILTER?`<div class="fltnow">현재: <b>${esc((rows[0]&&(rows[0].target_name||rows[0].target_email))||('회원#'+TARGET_FILTER))}</b> 전용만 보는 중 · <a href="/static/board.html?b=${B}">전체 보기</a></div>`:''}</div>`:''}
     <div class="card"><table class="btbl">
       <thead><tr><th style="width:70px">번호</th><th>제목</th><th class="hideM" style="width:120px">작성자</th><th class="hideM" style="width:110px">작성일</th><th style="width:70px">조회</th></tr></thead>
       <tbody>${body}</tbody></table></div>
@@ -254,6 +256,19 @@ async function renderList(){
 }
 
 let VIEW_UID=null;
+async function fltSearch(){   // 내 전용 관리자: 열람회원으로 목록 필터
+  const q=document.getElementById("flt_q").value.trim();
+  const box=document.getElementById("fltResults");
+  if(q.length<1){ box.innerHTML=""; return; }
+  try{
+    const d=await (await fetch(`/admin/users?q=${encodeURIComponent(q)}`)).json();
+    const us=(d.users||[]).slice(0,8);
+    box.innerHTML = us.length ? us.map(u=>{
+      const label=(u.name||u.email||'').replace(/'/g,'');
+      return `<div class="tgtItem" onclick="go({target:${u.id}})">${u.name||''} <span style="color:#888">${u.email||''}</span></div>`;
+    }).join('') : '<div style="color:#888;padding:4px">검색 결과 없음</div>';
+  }catch(e){ box.innerHTML='<div style="color:#c0392b;padding:4px">회원 검색 실패(관리자만 가능)</div>'; }
+}
 async function renderView(){
   const id=P.get("id");
   const meta=await (await fetch(`/board/${B}?page=1`)).json();   // 메타+로그인 상태
@@ -530,6 +545,12 @@ render();
 .filechip{display:inline-flex;align-items:center;gap:6px;background:#eef2f8;border:1px solid #d6deea;border-radius:8px;padding:6px 10px;margin:3px 6px 3px 0;font-size:13px;color:#1f4fa3;text-decoration:none;font-weight:600}
 .filechip:hover{background:#e2e9f5}
 .tgtbadge{display:inline-block;font-size:11px;font-weight:700;background:#fdeaea;color:#c0392b;border:1px solid #f3c6c6;border-radius:6px;padding:1px 7px;margin-left:6px;white-space:nowrap;vertical-align:middle;}
+.fltbar{padding:12px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;}
+.fltbar label{font-weight:700;color:#1f4fa3;white-space:nowrap;}
+.fltbar input{flex:1;min-width:220px;padding:7px 10px;border:1px solid #d6deea;border-radius:8px;font-size:14px;}
+.fltbar #fltResults{flex:1 1 100%;}
+.fltnow{flex:1 1 100%;font-size:13px;color:#444;background:#eef2f8;border-radius:8px;padding:7px 10px;}
+.fltnow a{color:#1f4fa3;font-weight:700;margin-left:4px;}
 </style>
 <button id="aibot-btn" onclick="aibotToggle()" title="챗봇">챗봇</button>
 <div id="aibot-panel">
