@@ -159,7 +159,7 @@
     <a href="/static/auctions.html">경매검색</a>
     
     <a href="/static/gongmae.html">공매</a><a href="/static/gonggmae_map.html">경공매 지도<span class="nav-badge nb-new">NEW</span></a>
-    <a href="/static/board.html?b=video" data-b="video">강의</a>
+    <a href="/static/board.html?b=mylecture" data-b="mylecture">내 전용<span class="nav-badge nb-new">NEW</span></a>
     <a href="/static/board.html?b=community" data-b="community">커뮤니티</a>
     <a href="/static/board.html?b=data" data-b="data">경매자료실</a><a href="/static/shortsale.html">단타 수익률<span class="nav-badge nb-new">NEW</span></a><a class="natllink" href="/static/kbdb.html">부동산DB<span class="nav-badge nb-natl">전국</span></a>
     <a href="/static/board.html?b=support" data-b="support">고객센터</a>
@@ -199,18 +199,6 @@ async function loadHeader(){
       `<a href="/static/mypage.html">마이페이지</a>`+
       `<a href="/static/payment.html" class="pay">요금결제</a>`+
       (u.role==="admin"?`<a href="/static/admin.html" style="color:#fff;background:#e23b3b;padding:2px 9px;border-radius:6px;font-weight:700;text-decoration:none">🔧 관리자</a>`:``);
-    // 로그인한 회원에게만 '내 전용' 메뉴 노출(비회원엔 숨김). 관리자=작성, 회원=자기 지정 글만 열람
-    try{
-      if(!document.querySelector('.nav a[data-b="mylecture"]')){
-        const nav=document.querySelector('.nav .navin');
-        const vid=document.querySelector('.nav a[data-b="video"]');
-        const a=document.createElement('a');
-        a.href='/static/board.html?b=mylecture'; a.dataset.b='mylecture';
-        a.innerHTML='내 전용<span class="nav-badge nb-new">NEW</span>';
-        if(B==='mylecture') a.classList.add('on');
-        if(vid) vid.insertAdjacentElement('afterend', a); else if(nav) nav.appendChild(a);
-      }
-    }catch(e){}
   } }catch(e){}
 }
 function logout(){ fetch("/auth/logout",{method:"POST"}).then(()=>location.reload()); }
