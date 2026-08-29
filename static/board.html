@@ -380,7 +380,7 @@ function initEditor(){
     imageUploadSizeLimit: 8*1024*1024,
     imageAccept: '.jpg,.jpeg,.png,.gif,.webp,.bmp',
     videoUploadUrl: '/board/upload_media',          // 영상 → R2 스트리밍 업로드
-    videoUploadSizeLimit: 1024*1024*1024,           // 1GB
+    videoUploadSizeLimit: 5*1024*1024*1024,         // 5GB (강의 영상 대용량)
     videoResizing: true, videoFileInput: true, videoUrlInput: false,  // URL(유튜브 iframe)은 sanitize가 막으므로 파일 업로드만
     videoAccept: '.mp4,.webm,.mov,.m4v,.ogv',
     defaultStyle: 'font-size:14px; line-height:1.7;',
