@@ -13,3 +13,4 @@ nh3==0.3.6
 shapely==2.1.2
 python-multipart==0.0.20
 orjson==3.11.9
+boto3==1.43.30  # R2(S3 호환) 강의 영상·문서 업로드

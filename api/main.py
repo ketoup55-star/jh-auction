@@ -5180,12 +5180,18 @@ import nh3                                                        # noqa: E402
 _HTML_TAGS = {"p", "br", "span", "div", "b", "strong", "i", "em", "u", "s", "strike",
               "del", "sub", "sup", "h1", "h2", "h3", "h4", "h5", "h6", "blockquote",
               "pre", "code", "hr", "mark", "ul", "ol", "li", "a", "img",
-              "table", "thead", "tbody", "tfoot", "tr", "th", "td", "figure", "figcaption"}
+              "table", "thead", "tbody", "tfoot", "tr", "th", "td", "figure", "figcaption",
+              "video", "source"}   # 강의 영상(내 전용) — src는 R2 업로드 URL
 _HTML_ATTRS = {
     "*": {"style", "class", "title"},
     "a": {"href", "target", "name"},      # rel은 link_rel이 자동 관리(중복 지정 금지)
     "img": {"src", "alt", "width", "height", "data-align", "data-proportion",
             "data-size", "data-rotate", "data-file-name", "data-file-size", "data-origin"},
+    "video": {"src", "controls", "controlslist", "disablepictureinpicture", "width",
+              "height", "preload", "poster", "playsinline", "muted", "loop",
+              "data-align", "data-proportion", "data-size", "data-rotate",
+              "data-file-name", "data-file-size", "data-origin"},   # 다운로드 차단 등은 프론트에서 부여
+    "source": {"src", "type"},
     "td": {"colspan", "rowspan"}, "th": {"colspan", "rowspan"},
 }
 
@@ -5226,6 +5232,58 @@ async def board_upload(request: Request, user: dict = Depends(require_user)) -> 
                         "name": f.filename, "size": len(data)})
     if not results:
         raise HTTPException(400, "이미지 파일만 업로드할 수 있습니다.")
+    return {"result": results}
+
+
+# ── R2(S3 호환) 미디어 업로드 — 영상·문서(강의 자료). 관리자만(내 전용 강의) ──
+_MEDIA_VIDEO_EXT = {".mp4", ".webm", ".mov", ".m4v", ".ogv"}
+_MEDIA_FILE_EXT = {".pdf", ".zip", ".hwp", ".hwpx", ".doc", ".docx",
+                   ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv"}
+
+
+def _r2_media_client():
+    """R2(S3 호환) 클라이언트+버킷+public URL. 자격증명 미설정이면 (None,None,None)."""
+    ak = os.environ.get("R2_ACCESS_KEY_ID")
+    sk = os.environ.get("R2_SECRET_ACCESS_KEY")
+    acct = os.environ.get("R2_ACCOUNT_ID")
+    bucket = os.environ.get("R2_MEDIA_BUCKET")
+    pub = (os.environ.get("R2_MEDIA_PUBLIC_URL") or "").rstrip("/")
+    if not (ak and sk and acct and bucket and pub):
+        return None, None, None
+    import boto3                                                  # noqa: E402
+    cli = boto3.client("s3",
+                       endpoint_url=f"https://{acct}.r2.cloudflarestorage.com",
+                       aws_access_key_id=ak, aws_secret_access_key=sk,
+                       region_name="auto")
+    return cli, bucket, pub
+
+
+@app.post("/board/upload_media")
+async def board_upload_media(request: Request, admin: dict = Depends(require_admin)) -> dict:
+    """에디터 영상/문서 업로드 → R2(관리자만). SunEditor 응답형식 {result:[{url,name,size}]}."""
+    from starlette.concurrency import run_in_threadpool
+    import secrets as _s
+    cli, bucket, pub = _r2_media_client()
+    if not cli:
+        raise HTTPException(503, "영상 저장소(R2)가 아직 설정되지 않았습니다. 관리자에게 문의하세요.")
+    form = await request.form()
+    files = [v for v in form.values() if hasattr(v, "filename") and hasattr(v, "read")]
+    results = []
+    for f in files:
+        ext = os.path.splitext(f.filename or "")[1].lower()
+        is_video = ext in _MEDIA_VIDEO_EXT
+        if not (is_video or ext in _MEDIA_FILE_EXT):
+            continue
+        key = ("videos/" if is_video else "files/") + _s.token_hex(12) + ext
+        ctype = f.content_type or ("video/mp4" if is_video else "application/octet-stream")
+        try:                                    # 스트리밍 업로드(메모리 절약)+threadpool(이벤트루프 비블로킹)
+            await run_in_threadpool(cli.upload_fileobj, f.file, bucket, key,
+                                    ExtraArgs={"ContentType": ctype})
+        except Exception as e:                                    # noqa: BLE001
+            raise HTTPException(500, f"업로드 실패: {e}")
+        results.append({"url": f"{pub}/{key}", "name": f.filename, "size": 0})
+    if not results:
+        raise HTTPException(400, "영상(mp4·webm·mov) 또는 문서(pdf·hwp·docx 등)만 업로드할 수 있습니다.")
     return {"result": results}
 
 

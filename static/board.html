@@ -193,6 +193,7 @@ document.querySelectorAll('.nav a[data-b]').forEach(a=>{ if(a.dataset.b===B) a.c
 
 async function loadHeader(){
   try{ const me=await fetch("/auth/me"); if(me.ok){ const u=await me.json();
+    window.ME_NAME = u.name || u.email || '회원';   // 영상 워터마크에 표시
     document.getElementById("util").innerHTML=
       `<span style="color:var(--primary);font-weight:600">${esc(u.name||u.email)}님</span>`+
       `<a href="#" onclick="logout();return false;">로그아웃</a>`+
@@ -272,6 +273,32 @@ async function renderView(){
       </div>
     </div>
     ${r.comment_off?"":commentsHtml(id, r.comments||[], r.can_comment)}`;
+  _protectVideos();   // 영상: 워터마크·우클릭/다운로드 차단·창 벗어나면 정지
+}
+function _wmText(){
+  const n = window.ME_NAME || (VIEW_UID?('회원'+VIEW_UID):'회원');
+  return n + ' · 무단복제 금지';
+}
+function _protectVideos(){
+  const vids = document.querySelectorAll('.vbody video');
+  vids.forEach(v=>{
+    v.setAttribute('controlsList','nodownload noplaybackrate noremoteplayback');
+    v.setAttribute('disablePictureInPicture','');
+    v.setAttribute('playsinline','');
+    v.removeAttribute('download');
+    v.addEventListener('contextmenu', e=>{ e.preventDefault(); return false; });
+    if(!v.parentNode.classList || !v.parentNode.classList.contains('vwm-wrap')){
+      const wrap=document.createElement('div'); wrap.className='vwm-wrap';
+      v.parentNode.insertBefore(wrap, v); wrap.appendChild(v);
+      const wm=document.createElement('div'); wm.className='vwm'; wm.textContent=_wmText();
+      wrap.appendChild(wm);
+    }
+  });
+  if(vids.length){
+    const pauseAll=()=>document.querySelectorAll('.vbody video').forEach(v=>{ try{v.pause();}catch(e){} });
+    document.addEventListener('visibilitychange', ()=>{ if(document.hidden) pauseAll(); });
+    window.addEventListener('blur', pauseAll);
+  }
 }
 function commentsHtml(pid, list, canComment){
   const items = list.length ? list.map(c=>{
@@ -329,6 +356,12 @@ async function renderWrite(){
       ${targetUI}
       <div class="frow"><label>제목</label><input id="f_title" maxlength="200" placeholder="제목을 입력하세요"></div>
       <div class="frow"><label>내용</label><textarea id="f_content" placeholder="내용을 입력하세요"></textarea></div>
+      <div class="frow"><label>파일 첨부</label><div style="flex:1;min-width:0">
+        <input type="file" id="f_file" accept=".pdf,.zip,.hwp,.hwpx,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" style="display:none" onchange="uploadFile()">
+        <button type="button" class="btn g" onclick="document.getElementById('f_file').click()">📎 파일 선택·업로드</button>
+        <span id="fileStatus" style="margin-left:8px;color:#888;font-size:13px"></span>
+        <div style="color:#999;font-size:12px;margin-top:4px">업로드하면 본문에 첨부 링크가 삽입됩니다(영상은 툴바의 🎬 비디오 버튼).</div>
+      </div></div>
       <div class="fbtns">
         <a class="btn g" href="/static/board.html?b=${B}">취소</a>
         <button class="btn b" onclick="submitPost()">등록</button>
@@ -346,6 +379,10 @@ function initEditor(){
     imageUploadUrl: '/board/upload',
     imageUploadSizeLimit: 8*1024*1024,
     imageAccept: '.jpg,.jpeg,.png,.gif,.webp,.bmp',
+    videoUploadUrl: '/board/upload_media',          // 영상 → R2 스트리밍 업로드
+    videoUploadSizeLimit: 1024*1024*1024,           // 1GB
+    videoResizing: true, videoFileInput: true, videoUrlInput: false,  // URL(유튜브 iframe)은 sanitize가 막으므로 파일 업로드만
+    videoAccept: '.mp4,.webm,.mov,.m4v,.ogv',
     defaultStyle: 'font-size:14px; line-height:1.7;',
     buttonList: [
       ['undo','redo'],
@@ -354,7 +391,7 @@ function initEditor(){
       ['bold','underline','italic','strike','subscript','superscript','removeFormat'],
       ['align','list','lineHeight'],
       ['outdent','indent'],
-      ['table','link','image'],
+      ['table','link','image','video'],
       ['horizontalRule'],
       ['showBlocks','codeView','preview','fullScreen']
     ]
@@ -379,6 +416,20 @@ function selectTarget(id,label){
   document.getElementById("targetChosen").textContent="✓ 열람 회원: "+label;
   document.getElementById("targetResults").innerHTML="";
   document.getElementById("f_target_q").value=label;
+}
+async function uploadFile(){   // 문서 파일 첨부 → R2 → 본문에 첨부 링크 삽입(관리자만)
+  const inp=document.getElementById('f_file'); const f=inp.files&&inp.files[0]; if(!f) return;
+  const st=document.getElementById('fileStatus'); st.textContent='업로드 중…';
+  const fd=new FormData(); fd.append('file', f);
+  try{
+    const r=await fetch('/board/upload_media',{method:'POST',body:fd});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok){ st.textContent='실패: '+(d.detail||r.status); return; }
+    const u=d.result[0];
+    const html=`<p><a class="filechip" href="${u.url}" target="_blank" rel="noopener">📎 ${u.name}</a></p>`;
+    if(SE){ SE.insertHTML(html, true); } else { const ta=document.getElementById('f_content'); ta.value+=html; }
+    st.textContent='첨부됨: '+u.name; inp.value='';
+  }catch(e){ st.textContent='업로드 실패'; }
 }
 async function submitPost(){
   const title=document.getElementById("f_title").value.trim();
@@ -434,6 +485,14 @@ render();
 .aibot-card-prices .k{color:#6b6a64;font-weight:400;font-size:11px;margin-right:1px;}
 .aibot-card-grade{font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;}
 .aibot-card-grade.g-ok{background:#e7f6ec;color:#1f7a3d;}.aibot-card-grade.g-mid{background:#fff4e0;color:#9a6b0b;}.aibot-card-grade.g-no{background:#fdeaea;color:#c0392b;}
+/* 강의 영상 보호: 이동 워터마크·검은배경·비다운로드 */
+.vwm-wrap{position:relative;display:block;max-width:100%;line-height:0;background:#000}
+.vwm-wrap>video{display:block;max-width:100%;height:auto}
+.vwm{position:absolute;pointer-events:none;user-select:none;z-index:5;color:rgba(255,255,255,.4);font-weight:800;font-size:15px;letter-spacing:.3px;transform:rotate(-20deg);text-shadow:0 1px 3px rgba(0,0,0,.7);white-space:nowrap;animation:vwmMove 19s linear infinite}
+@keyframes vwmMove{0%{top:8%;left:5%}20%{top:66%;left:58%}40%{top:34%;left:16%}60%{top:78%;left:24%}80%{top:18%;left:62%}100%{top:8%;left:5%}}
+.vbody video{max-width:100%}
+.filechip{display:inline-flex;align-items:center;gap:6px;background:#eef2f8;border:1px solid #d6deea;border-radius:8px;padding:6px 10px;margin:3px 6px 3px 0;font-size:13px;color:#1f4fa3;text-decoration:none;font-weight:600}
+.filechip:hover{background:#e2e9f5}
 </style>
 <button id="aibot-btn" onclick="aibotToggle()" title="챗봇">챗봇</button>
 <div id="aibot-panel">
