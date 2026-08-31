@@ -309,6 +309,15 @@ function _protectVideos(){
       v.parentNode.insertBefore(wrap, v); wrap.appendChild(v);
       const wm=document.createElement('div'); wm.className='vwm'; wm.textContent=_wmText();
       wrap.appendChild(wm);
+      const sp=document.createElement('div'); sp.className='vspeed';   // 배속 컨트롤(우클릭/기본배속 차단 대체)
+      const lab=document.createElement('span'); lab.className='vspeed-lab'; lab.textContent='⏩ 배속'; sp.appendChild(lab);
+      [0.75,1,1.25,1.5,2].forEach(r=>{
+        const b=document.createElement('button'); b.type='button'; b.textContent=(r===1?'1x(기본)':r+'x');
+        if(r===1) b.className='on';
+        b.onclick=()=>{ v.playbackRate=r; sp.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); };
+        sp.appendChild(b);
+      });
+      wrap.appendChild(sp);
     }
   });
   if(vids.length){
@@ -551,6 +560,13 @@ render();
 .fltbar #fltResults{flex:1 1 100%;}
 .fltnow{flex:1 1 100%;font-size:13px;color:#444;background:#eef2f8;border-radius:8px;padding:7px 10px;}
 .fltnow a{color:#1f4fa3;font-weight:700;margin-left:4px;}
+.vwm-wrap>.vspeed{position:static;}
+.vspeed{display:flex;align-items:center;gap:6px;padding:8px 2px 2px;flex-wrap:wrap;}
+.vspeed-lab{font-size:12px;color:#666;font-weight:700;margin-right:2px;}
+.vspeed button{font-size:12px;font-weight:700;padding:4px 10px;border:1px solid #d6deea;background:#fff;color:#444;border-radius:6px;cursor:pointer;line-height:1.2;}
+.vspeed button.on{background:#1f4fa3;color:#fff;border-color:#1f4fa3;}
+.vspeed button:hover{background:#eef2f8;}
+.vspeed button.on:hover{background:#1f4fa3;}
 </style>
 <button id="aibot-btn" onclick="aibotToggle()" title="챗봇">챗봇</button>
 <div id="aibot-panel">
