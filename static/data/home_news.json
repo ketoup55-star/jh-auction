@@ -1,78 +1,87 @@
 {
  "items": [
   {
-   "keyword": "대출규제",
-   "title": "서울집값 잡는다고 망국적 부동산정책.. ‘지방건설사만 줄도산’ - 경북 탑 뉴스",
-   "link": "https://news.google.com/rss/articles/CBMiY0FVX3lxTE13NG9nNDRrMkFlMUxxWlN6S1ItR25lbVZncnBBRk43YUQ5SXVERElDVkNqcmVjRkY3WDFxNTdmNzR5Y3ZPa01sZHhfamdCa1V1Tm1FNVpCeE81d2tjaFJGTko5bw?oc=5",
+   "keyword": "부동산 세금",
+   "title": "[세리포트] 李대통령, 부동산 세금 ‘특혜 회수→보유세 정상화→조세정의’로 확대됐다 - 세정일보",
+   "link": "https://news.google.com/rss/articles/CBMibEFVX3lxTE84NUpSZHNNOXdNWUhmQjNJdlBBRmxMSkVrNWZJd2VXMDUyc0s0LU56M3hqNWdhQ2M0N2k3V19Hb0x1WElFQkVid2pnVExFWHNNQ01STndZWjZreTB4NDAteXYwd0hMVldnQTJzQg?oc=5",
    "image": "",
-   "source": "경북 탑 뉴스",
-   "published": "2026-08-31T08:36:43+09:00",
+   "source": "세정일보",
+   "published": "2026-09-01T07:53:59+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "“집값 폭락 대비” 이 대통령에…오세훈 “어안이 벙벙” - 더스쿠프",
+   "link": "https://news.google.com/rss/articles/CBMibkFVX3lxTE8tRjZSU3FtU2t5VmoxMVFvTDFQQndDWndxUmp6Ukp3eV9RTXFOWVlwM0FDTFB3a043VWtlUG9sN2hVSHpkTnIyNlB3XzZ5c29zMThuOG9xWC1zZDZQR2libHV4dUJBMGxfR3BxWklB?oc=5",
+   "image": "",
+   "source": "더스쿠프",
+   "published": "2026-09-01T06:02:25+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "'매' 들어도 말 안 들었다...\"부동산 침체\" 우려 비웃듯 우상향한 서울 집값 - 머니투데이 - 머니투데이",
-   "link": "https://news.google.com/rss/articles/CBMiakFVX3lxTFB6aV82WXMtZWludV84VjNpbEQyZUl1aTExd0dmOTBlWFpnVk9SLXViYmtqSEM1S2pRdDFYa1dLdkprN0QzWnNvcjQ5U0dsRG9rZmtfWVAzdUdLZmVCZ1g1Nkd6aVJZU1NWUVHSAW9BVV95cUxQZXNmTGJnU2gzbnpMVi05SE5DTGtxdldESHd3aDJxTzVDRjA1ck9rNnJyLU1nMEJCam9qaW9TRWtrMWE0bDBZekFBcS1iR3liTFRPLVQ2N2ZjSG1jNDZfTldDTHFmV2k1ZngxZVpLaW8?oc=5",
+   "title": "“8·3 부동산 세제 개편 고령층 특수성 반영하지 않았다” - 이투데이",
+   "link": "https://news.google.com/rss/articles/CBMiWkFVX3lxTE44dEs4QzZZOV9McjlJeFVlc05jN0VRcjZBLTJNSHI4X1dqaEt6bEZjRTMzcEg1b0hmTmJEN2RDcjdfZzNGX01EUGY1WnhLYWthYTFhcXlzOGRZUQ?oc=5",
+   "image": "",
+   "source": "이투데이",
+   "published": "2026-09-01T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "세제개편안 한달새 갈린 집값, 강남 매물 쌓이고 강북 오름세 - 동아일보",
+   "link": "https://news.google.com/rss/articles/CBMidkFVX3lxTFB1WlV0N3ZCazZPelhWTmFjYWxoNHE2THF3dGxkMVdTRkd3Q0Yxa0QwZ2xhZ0FDeW1RR01UR2NwSUNfWDUtZHpOa3k5a2RlbEF5VW5ycEFDaV85SGl0czZLVzZnUlE4US1ZVUJNYURiclBqLXVkMkHSAWZBVV95cUxPN3hkSTZxck96R2VxdENoeE5vaml4WnRKVDFlYVZha0VjWDcySEs4YUlXS0EwVVJIdnl1WnR5U1R2YlI4TnlJYlpRM21ab0tUNmotbV90ZThINV9DRmxpRjA4QzB0LXc?oc=5",
+   "image": "",
+   "source": "동아일보",
+   "published": "2026-09-01T04:30:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "집값 폭락하면 정부가 산다?…“대량 매입이 낙찰가 끌어올릴 수도” - edaily.co.kr",
+   "link": "https://news.google.com/rss/articles/CBMigAFBVV95cUxQSlhjRTRkRXVwbV9FQkgzNmRtdHVna0RSenNEMFB3eDYzWTN4UzhweUthR2NLdHl5ZUZXNGZpWTRMSkx3NW5mSWF6X2MyMl9KXzBSbnFwN3hfNFk2QTVkOVZleWJXN2lGME9WR2hSdmZTNHJJUWg0bkI4NXF3TXhOQQ?oc=5",
+   "image": "",
+   "source": "edaily.co.kr",
+   "published": "2026-09-01T04:00:03+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "강남 집값은 떨어지는데 … 경희궁자이 월세 500만원 된 이유 - 매일경제",
+   "link": "https://news.google.com/rss/articles/CBMiWEFVX3lxTE5CQkRIRUl4dGY3TnEwYnBJOHNzZHJoWFVMSzdwQzRKQ29WeVBjZ3VBS3pBWkp0OGM2dnB2bTRyUThLUF9uamZlYldHX3dfTzBTcm5lNTRGeVk?oc=5",
+   "image": "",
+   "source": "매일경제",
+   "published": "2026-09-01T04:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "\"집값 폭락\" 李 발언에… 경매시장선 '글쎄' - 머니투데이 - 머니투데이",
+   "link": "https://news.google.com/rss/articles/CBMiakFVX3lxTE9oaVVjSHZCTUZLX2h6OWZ6M21BUE1YQ0Nna3plVEVJZ213UFhmNDFUSkg3Vllubzhpb2J0NGxKa1N2SURIUF9RQWROVWw4eWdXTmQyOVRocWxTeVlPRjhkNWJCNVpRYVFERkHSAW9BVV95cUxOU1NQWUYyNEFKVmtsOW9LVWQwZlZmU3hKVl93VU1qN0tMSlZFYVNROVRfTko1Qks3eURjVDItZXF4c1dxdERMaE1xTTVjbFNsREZjTjBOdDF0RHNkWWhpRDVxSWJaMy1vR1JaaXhSS0k?oc=5",
    "image": "",
    "source": "머니투데이",
-   "published": "2026-08-31T08:00:00+09:00",
+   "published": "2026-09-01T03:20:00+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "'신발 끈 고쳐 맨' 李정부…부동산·세제 수장 교체로 민심 정면돌파 - KB Think",
-   "link": "https://news.google.com/rss/articles/CBMickFVX3lxTE5Va21YS3dsRDFPR1pDM3dXZzlpSlhMeXFDSmItOFkwelM5RmpYTDN4WkxIOGNOTUdHT0tpalRVV21LRmpSTTlTVDlFMTEtakRiaEd4SEdLam0yWFNzY3VwZm90T1F1eG5Xb0RLZjQwcHhvZw?oc=5",
-   "image": "",
-   "source": "KB Think",
-   "published": "2026-08-31T07:05:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "\"사자니 취득세, 살자니 종부세, 주자니 증여세, 죽자니 상속세\" [돈앤톡] - 한국경제",
-   "link": "https://news.google.com/rss/articles/CBMiWkFVX3lxTE4xNncyTmJVQWdVT2xycy05dGV0eEhMNjVxbVdORzdkd0d0NXFjNm55MFRhOXA0dWRpR25vZ0FNN3VVOHMyU0xLX2pXcFVteFRwbnZsd2RQWUNidw?oc=5",
-   "image": "",
-   "source": "한국경제",
-   "published": "2026-08-31T06:30:07+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "주담대 절벽에 실수요자 '비명'...금리는 연일 올라 - YTN",
-   "link": "https://news.google.com/rss/articles/CBMiXkFVX3lxTE1zQnJKN29SRzh1SDJ3RngtbHlMano0bGN1TTVPVGdtMjBzdWUyWkJOS1RRcnRhWmtIS1NGendPczFJYkhTUGtVUm5mVkFleUhsZ0lnbWNEU01yZm92U1E?oc=5",
-   "image": "",
-   "source": "YTN",
-   "published": "2026-08-31T05:21:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "李대통령 \"내년 1분기 한은 금리 3.5% 예상…집값 폭락 대비\" - 프레시안",
-   "link": "https://news.google.com/rss/articles/CBMia0FVX3lxTE1URnZiUjdQSzNaekxKU056V2hJOXVvSHlQS0k0RVNCTWdTZF9HUklSYXhFaXdJNEh6R2hPd3pqZWdvYVZwNVZNVzRDU01Ja0JDWlVrakR6bl9uT3ZJbk1oZ3VNaERZVTZCZ2xr?oc=5",
-   "image": "",
-   "source": "프레시안",
-   "published": "2026-08-31T04:41:44+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "세금-부동산 장관 교체… 李, 6개 부처 개각 - 동아일보",
-   "link": "https://news.google.com/rss/articles/CBMid0FVX3lxTE4wbDVQc04zc1dqN0s1VW9mWVVOTUtzT3UzUWpOLU40TU1oWl9JSXdBcU9uSUx6SGMzbWdSQ2E5UG9VYm1mdmRDLV9YaWx4WnBZTEVlWWJjRGhIRVNfaG5yOXctMF9lS0xDeGxQRGhPYldTUFFpRDFZ0gFmQVVfeXFMUDJKY1hEWTBrdnQ5cXdRYXU5X0FPaTRsdV8tSmFCc0phaTJDWFV2eW45UFZMUjJndTNQVG5JaEVzc2QtUTZraUE0cXVTTWhLRVZJS1Z3OFVwQ1YzOE1WVE9fbmxoNDhR?oc=5",
-   "image": "",
-   "source": "동아일보",
-   "published": "2026-08-31T04:30:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "선진국 집값 식는데 한국만 ‘역주행’… 서울부터 다시 뜨겁다 - v.daum.net",
-   "link": "https://news.google.com/rss/articles/CBMiT0FVX3lxTE1hVHE5eGIzRUkyVjFFeFo4cnotWjkwS2VOUElLelBuLWhqUVdhX3BjM1JGamNPcWtJMUtyQ0ptdV80TTJxd3h6YVQ5WEtjanc?oc=5",
+   "title": "[사설] 새 경제팀 민심 떠난 부동산 정책 방향 확 바꿔야 - v.daum.net",
+   "link": "https://news.google.com/rss/articles/CBMiT0FVX3lxTE5NS2lnVmxqWUJDZm9hSERpa0p6RjlJalJPSGJzX0I3STJjelQyOUpvY3FGZkV1RHNKUUFKMkVwNlF2WnNtYnJrV2htcUptWjQ?oc=5",
    "image": "",
    "source": "v.daum.net",
-   "published": "2026-08-31T00:45:50+09:00",
+   "published": "2026-09-01T01:01:13+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "고금리·전세사기 후폭풍에 서울 빌라 경매 1만건 넘었다 - 국민일보",
+   "link": "https://news.google.com/rss/articles/CBMihgFBVV95cUxORDk1MzR2eUNZM296SjRDLWE3U0JzWU51bm1KNmNYYkhIbS1qT2pyRDZidGRyV1FCbTlOelUtN0hmUHl5dDRQZGdNWkVNQXZPbWNBS0pzNUs5aU9HUnJEb1VaclVLY0MwcnN6NFFhQ2Y4YUlkVXBzbWtxbmFBSmJzVzhwN2lLd9IBbEFVX3lxTE9obHp6bkZQN3FoTkZnd0x0Y21qQkE4Uk94SkRLMmhaR0NEeGFYWHR0U1p6aFcyZU13Rm9DMElDbjJFNVBVeDVBMXdaVmE4MF9BazNUTDZXSnlxaUFxMHlaMEUwT0pLdnd3MWVWOA?oc=5",
+   "image": "",
+   "source": "국민일보",
+   "published": "2026-09-01T00:25:00+09:00",
    "has_time": true
   }
  ],
- "count": 8,
- "date": "2026-08-31"
+ "count": 9,
+ "date": "2026-09-01"
 }
