@@ -320,10 +320,24 @@ function _protectVideos(){
       wrap.appendChild(sp);
     }
   });
-  if(vids.length){
-    const pauseAll=()=>document.querySelectorAll('.vbody video').forEach(v=>{ try{v.pause();}catch(e){} });
-    document.addEventListener('visibilitychange', ()=>{ if(document.hidden) pauseAll(); });
-    window.addEventListener('blur', pauseAll);
+  if(vids.length && !window.__vseek){
+    window.__vseek = true;
+    // ⚠️ 이전의 visibilitychange/blur 자동정지는 제거 — 이용자가 강의 들으며 메모 등 다른 창/프로그램을
+    //    써도 영상이 계속 재생되게(이용자 컴플레인 2026-09-02).
+    // 좌우 화살표 = 정확히 10초 seek. 네이티브 기본(슬라이더 포커스 시 영상 길이 비례로 크게 점프해
+    //    2분씩 튀던 것)을 capture 단계에서 먼저 가로채 교정.
+    document.addEventListener('keydown', e=>{
+      if(e.key!=='ArrowRight' && e.key!=='ArrowLeft') return;
+      const t=e.target;
+      if(t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable)) return;
+      let v=null;
+      if(t && t.closest){ const w=t.closest('.vwm-wrap'); if(w) v=w.querySelector('video'); }
+      if(!v){ const vs=[...document.querySelectorAll('.vbody video')]; v = vs.find(x=>!x.paused) || vs[0]; }
+      if(!v) return;
+      e.preventDefault();
+      const step = e.key==='ArrowRight' ? 10 : -10;
+      v.currentTime = Math.max(0, Math.min(v.duration||1e9, (v.currentTime||0)+step));
+    }, true);
   }
 }
 function commentsHtml(pid, list, canComment){
