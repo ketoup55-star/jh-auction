@@ -561,10 +561,11 @@ render();
 .aibot-card-grade.g-ok{background:#e7f6ec;color:#1f7a3d;}.aibot-card-grade.g-mid{background:#fff4e0;color:#9a6b0b;}.aibot-card-grade.g-no{background:#fdeaea;color:#c0392b;}
 /* 강의 영상 보호: 이동 워터마크·검은배경·비다운로드 */
 .vwm-wrap{position:relative;display:block;max-width:100%;line-height:0;background:#000}
-.vwm-wrap>video{display:block;max-width:100%;height:auto}
+.vwm-wrap>video{display:block;max-width:100%!important;width:auto!important;height:auto!important}   /* 업로드 영상 인라인 style="width:100%;height:100%"가 우측 넘침·컨트롤 잘림 유발 → 비율유지·컨테이너내로 강제 */
 .vwm{position:absolute;pointer-events:none;user-select:none;z-index:5;color:rgba(255,255,255,.4);font-weight:800;font-size:15px;letter-spacing:.3px;transform:rotate(-20deg);text-shadow:0 1px 3px rgba(0,0,0,.7);white-space:nowrap;animation:vwmMove 19s linear infinite}
 @keyframes vwmMove{0%{top:8%;left:5%}20%{top:66%;left:58%}40%{top:34%;left:16%}60%{top:78%;left:24%}80%{top:18%;left:62%}100%{top:8%;left:5%}}
 .vbody video{max-width:100%}
+.vbody figure{margin:0}   /* 🔴브라우저 기본 <figure> margin(좌우 40px)이 업로드 영상을 우측으로 밀어 컨트롤(전체화면 등) 잘림 유발 → 제거 */
 .filechip{display:inline-flex;align-items:center;gap:6px;background:#eef2f8;border:1px solid #d6deea;border-radius:8px;padding:6px 10px;margin:3px 6px 3px 0;font-size:13px;color:#1f4fa3;text-decoration:none;font-weight:600}
 .filechip:hover{background:#e2e9f5}
 .tgtbadge{display:inline-block;font-size:11px;font-weight:700;background:#fdeaea;color:#c0392b;border:1px solid #f3c6c6;border-radius:6px;padding:1px 7px;margin-left:6px;white-space:nowrap;vertical-align:middle;}
