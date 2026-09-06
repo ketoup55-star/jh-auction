@@ -2446,6 +2446,7 @@ def auctions(
               region=region, regions=regions, sido=sido, year=year, caseno=caseno, court=court, court_code=court_code,
               result_prefix=status, special=special, item_keys=item_keys,
               buy_grade=(grade if _use_col else None), reg=(reg if _reg_use_col else None),
+              exclude_grade=("매수금지" if type_filter else None),   # 유형별 필터 검색엔 매수금지 제외(주인님 지시)
               appraisal_min=appraisal_min, appraisal_max=appraisal_max,
               price_min=price_min, price_max=price_max,
               fail_min=fail_min, fail_max=fail_max,
@@ -3104,10 +3105,12 @@ def _apt_trades(lawd: str, months: int = 12) -> list:
         return db
     try:
         from auction_analysis.molit_source import MolitSource
-        tr = (MolitSource().apt_recent_trades(lawd, months=months) or {}).get("trades") or []
+        _rr = MolitSource().apt_recent_trades(lawd, months=months) or {}
+        tr = _rr.get("trades") or []
+        _incomplete = bool(_rr.get("incomplete"))   # 일부 월이 쿼터로 실패한 부분수집 → 저장 금지
     except Exception:
-        tr = []
-    if tr:                                     # 빈 결과(할당량 등)는 캐시 안 함
+        tr = []; _incomplete = False
+    if tr and not _incomplete:                 # 완전 수집만 캐시(쿼터로 일부 월 누락된 부분결과는 저장 안 함 → 쿼터 회복 후 재수집). 빈결과·부분결과는 이번 요청엔 반환만.
         _apt_trades_cache[lawd] = tr
         _pool_to_db("aptpool:", lawd, tr)
     return tr

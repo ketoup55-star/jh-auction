@@ -179,7 +179,9 @@ class MolitSource:
                     trades.extend(rows)
         if not trades and errs:
             return {"error": errs[0], "trades": []}
-        return {"trades": trades, "count": len(trades), "months": months}
+        # ⚠️일부 월이 쿼터(QUOTA)/오류로 실패하면 trades가 부분수집이다 → incomplete 표시(호출측이 캐시 저장을 막아 부분결과 고착 방지)
+        return {"trades": trades, "count": len(trades), "months": months,
+                "errors": errs, "incomplete": bool(errs)}
 
 
 def _norm(s: str) -> str:
