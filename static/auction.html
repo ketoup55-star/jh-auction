@@ -2820,8 +2820,15 @@ async function _loadAptMap(band){   // band 미지정=경매물건 전용면적.
   const q="/auction/apt_radius_map?defer=1&item_key="+encodeURIComponent(itemKey)+(band?("&band="+band):"");
   let r=null;
   try{ r=await (await fetch(q)).json(); }catch(e){}
-  for(let t=0;r&&r.pending&&t<8;t++){ await new Promise(rs=>setTimeout(rs,3000)); try{ r=await (await fetch(q)).json(); }catch(e){break;} }
-  if(!r||!r.available||!r.center){ if(note)note.innerHTML='<b style="color:#9a8f00">인근 실거래 없음</b> — 반경 1km 내 이 면적 거래가 없습니다.'; _renderAptMapAreas((r&&r.bands)||[]); return; }
+  for(let t=0;r&&r.pending&&t<3;t++){ await new Promise(rs=>setTimeout(rs,3000)); try{ r=await (await fetch(q)).json(); }catch(e){break;} }
+  // ★유사거래가 아직(pending)이거나 unavailable이어도 '물건 위치 지도'는 항상 그린다 — center 없으면 /geocode로 물건 좌표 보충
+  if(!r||typeof r!=="object") r={};
+  if(!r.center){
+    try{ const g=await (await fetch("/geocode?item_key="+encodeURIComponent(itemKey))).json();
+         if(g&&g.available){ r.center={lat:g.lat,lng:g.lng}; if(!("available" in r))r.available=true; } }catch(e){}
+  }
+  if(!r.center){ if(note)note.innerHTML='<b style="color:#9a8f00">위치 정보 없음</b> — 물건 좌표를 찾지 못했습니다.'; _renderAptMapAreas((r&&r.bands)||[]); return; }
+  if(!r.complexes) r.complexes=[];
   _aptMapData=r; _aptMapArea=(r.cur_area||0);
   _renderAptMapAreas(r.bands||[]);
   try{ await loadKakaoSDK(); }catch(e){ if(note)note.textContent="지도 로드 실패 — 카카오 도메인 등록을 확인하세요."; return; }
@@ -2846,9 +2853,31 @@ async function _loadAptMap(band){   // band 미지정=경매물건 전용면적.
   const _cx=(r.complexes||[]).filter(c=>c.lat&&c.lng);   // 단지 분포에 맞춰 지도 범위 자동조정(밀집 시 확대해 겹침 완화)
   if(_cx.length>=2){ const bb=new kakao.maps.LatLngBounds(); bb.extend(center); _cx.forEach(c=>bb.extend(new kakao.maps.LatLng(c.lat,c.lng))); try{ _aptMap.setBounds(bb,36,36,36,36); }catch(e){} }
   else { try{ _aptMap.setLevel(6); _aptMap.setCenter(center); }catch(e){} }
-  if(note) note.innerHTML=(r.complexes||[]).length?"":"반경 1km 내 이 면적(전용 ±5㎡) 매매 거래가 없습니다 — 위 <b>면적</b> 탭에서 다른 평형대를 선택하거나 아래 <b>법정동 표</b>를 확인하세요.";
+  // 안내문: 유사거래 계산이 아직이면(pending) 지도는 띄운 채 백그라운드로 채운다 / 끝났는데 0건이면 '없음'
+  if(r.pending){ if(note)note.innerHTML='물건 위치를 표시했습니다 · <span style="color:var(--muted)">반경 1km 유사거래 불러오는 중…</span>'; _pollAptComplexes(q); }
+  else if(note) note.innerHTML=(r.complexes||[]).length?"":"반경 1km 내 이 면적(전용 ±5㎡) 매매 거래가 없습니다 — 위 <b>면적</b> 탭에서 다른 평형대를 선택하거나 아래 <b>법정동 표</b>를 확인하세요.";
   _aptSubjName=(_aptHub>=0 && (_aptMapData.complexes||[])[_aptHub])?_aptMapData.complexes[_aptHub].name:"";  // 경매물건 소재 단지명 → 법정동 표 빨강 강조
   if(_aptTbl && _aptSubjName) _drawAptTbl();   // 지도 hub 확정 후 표 재렌더(경매물건 단지 빨강)
+}
+// 유사거래(반경1km 단지) 계산이 오래 걸리는 물건 — 지도는 이미 띄운 채 백그라운드로 완료까지 폴링해 단지 핀을 채운다(과거·미예열 물건이 24초 타임아웃으로 '없음'이던 것 해결)
+async function _pollAptComplexes(q){
+  const note=document.getElementById("aptMapNote");
+  for(let t=0;t<24;t++){
+    await new Promise(rs=>setTimeout(rs,4000));
+    let r2=null; try{ r2=await (await fetch(q)).json(); }catch(e){ continue; }
+    if(!r2||r2.pending) continue;
+    if(r2.available&&r2.center){
+      _aptMapData=r2; _aptMapArea=(r2.cur_area||0); _renderAptMapAreas(r2.bands||[]);
+      _aptHub=-1; let hd=1e9; (r2.complexes||[]).forEach((c,i)=>{ const d=_hav(r2.center.lat,r2.center.lng,c.lat,c.lng); if(d<hd){hd=d;_aptHub=(d<150?i:-1);} });
+      _drawAptPins();
+      const _cx=(r2.complexes||[]).filter(c=>c.lat&&c.lng);
+      if(_cx.length>=2&&_aptMap){ const bb=new kakao.maps.LatLngBounds(); bb.extend(new kakao.maps.LatLng(r2.center.lat,r2.center.lng)); _cx.forEach(c=>bb.extend(new kakao.maps.LatLng(c.lat,c.lng))); try{ _aptMap.setBounds(bb,36,36,36,36); }catch(e){} }
+      if(note) note.innerHTML=(r2.complexes||[]).length?"":"반경 1km 내 이 면적(전용 ±5㎡) 매매 거래가 없습니다 — 위 <b>면적</b> 탭에서 다른 평형대를 선택하거나 아래 <b>법정동 표</b>를 확인하세요.";
+      _aptSubjName=(_aptHub>=0 && (_aptMapData.complexes||[])[_aptHub])?_aptMapData.complexes[_aptHub].name:"";
+      if(_aptTbl && _aptSubjName) _drawAptTbl();
+    }
+    return;
+  }
 }
 function _renderAptMapAreas(bands){   // 지도 면적대 선택 탭(표와 동일 스타일). 선택 시 band 재요청
   const box=document.getElementById("aptMapAreas"); if(!box) return;
