@@ -19,6 +19,7 @@ import httpx
 from .bjd_codes import resolve_bjd
 
 _URL = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
+_URL_RECAP = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo"  # 총괄표제부 = 집합건물 단지 총세대수(표제부는 동별/0이라 소규모 아파트 세대수 누락)
 _UA = {"User-Agent": "Mozilla/5.0"}
 
 
@@ -91,6 +92,21 @@ class BuildingSource:
             units, label = ho, "호"
         else:
             units, label = 0, "세대"
+        # 🔴집합건물 단지 총세대수는 총괄표제부(getBrRecapTitleInfo)에 있다 — 표제부는 동별/0이라 소규모·나홀로
+        #   아파트 세대수가 누락됐다(광우무지개맨션 표제부0 vs 총괄312, 명지한신휴 표제부10 vs 총괄841). kapt 미등록도 커버.
+        #   표제부 세대수가 총괄보다 작으면 총괄표제부 총세대수로 교체(단독·다가구는 총괄에 없어 그대로 유지).
+        try:
+            _rc = httpx.get(_URL_RECAP, params={"serviceKey": self.key, "sigunguCd": sgg,
+                                                "bjdongCd": bjd, "bun": bun, "ji": ji,
+                                                "numOfRows": "30", "_type": "xml"},
+                            headers=_UA, timeout=20)
+            _rec = 0
+            for _it in ET.fromstring(_rc.text).findall(".//item"):
+                _rec = max(_rec, _num(g(_it, "hhldCnt")), _num(g(_it, "fmlyCnt")))
+            if _rec > units:
+                units, label = _rec, "세대"
+        except Exception:
+            pass
         # 숙박 세부용도(여관·생활숙박 등): 생숙은 주용도(mainPurpsCdNm)가 아니라 기타용도(etcPurps)에만 기재되는
         #  경우가 많아, 전체 동(item)의 주용도+기타용도를 합쳐 스캔(가장 우선순위 높은 라벨).
         from .building_doc_parser import sukbak_subtype
