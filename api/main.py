@@ -4742,13 +4742,18 @@ def _kakao_run(kind, force=False):
     if not sent_rooms:      # 성공한 방이 하나도 없음 → 이력(sent_links/sent_date) 갱신 안 함(다음 발송에 다시 시도)
         return {"ok": False, "msg": f"전송 실패 — 성공한 방 없음(실패: {', '.join(failed_rooms) or '없음'})"}
     import datetime as _dt
-    now = _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
+    _nowdt = _dt.datetime.now()
+    now = _nowdt.strftime("%Y-%m-%d %H:%M")
     if kind == "news":
         merged = list(c.get("sent_links", [])) + new_links
         c["sent_links"] = list(dict.fromkeys(merged))[-800:]   # 중복 제거 + 최근 800개만 유지
     else:
-        c["sent_date"] = date   # upcoming/sold: 매각기일(내용 중복방지용) — 달력날짜 아님(스케줄러는 auto_date 사용)
+        c["sent_date"] = date   # upcoming/sold: 매각기일(내용 중복방지용)
     c["last"] = now
+    # 🔴수동 '지금 발송'(force=True)이든 자동이든, 발송 성공하면 오늘 '달력날짜'를 auto_date에 남긴다 →
+    #   스케줄러(_kakao_scheduler_loop의 `auto_date==today` 가드)가 오늘 정기발송을 건너뛴다.
+    #   이전엔 auto_date를 스케줄러만 기록해서, 수동으로 먼저 보내도 그날 자동발송이 또 나갔다(주인님 지시 2026-09-08).
+    c["auto_date"] = _nowdt.strftime("%Y-%m-%d")
     st[kind] = c
     kb.save_state(st)
     cnt = len(payload) if isinstance(payload, list) else len(payload)
