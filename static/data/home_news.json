@@ -1,69 +1,123 @@
 {
  "items": [
   {
+   "keyword": "아파트 경매",
+   "title": "서울 아파트 경매 식었다는데…중랑·노원은 ‘불장’ - v.daum.net",
+   "link": "https://v.daum.net/v/20260908113356520",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/08/ned/20260908113356682oebs.jpg",
+   "source": "v.daum.net",
+   "published": "2026-09-08T11:33:00+09:00",
+   "has_time": true
+  },
+  {
    "keyword": "대출규제",
-   "title": "\"9억 이하 찾아요\"…서울 외곽 아파트로 눈 돌린 실수요자 - hankyung.com",
-   "link": "https://www.hankyung.com/article/2026090776116",
-   "image": "https://img.hankyung.com/photo/202609/ZA.45422306.1.jpg",
-   "source": "hankyung.com",
-   "published": "2026-09-07T09:14:49+09:00",
+   "title": "'비거주 1주택자' 규제 논란, 세제는 시끌 대출은 잠잠…왜? - 아시아경제",
+   "link": "https://www.asiae.co.kr/article/2026090810151373055",
+   "image": "https://cphoto.asiae.co.kr/listimglink/1/2026082518155892412_1787649358.jpg",
+   "source": "아시아경제",
+   "published": "2026-09-08T11:18:20+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "李정부 경제정책 '잘못함' 61.1%…부동산정책 부정평가 65.7% - v.daum.net",
-   "link": "https://v.daum.net/v/20260907083729266",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/07/NEWS1/20260907083729523pdst.jpg",
-   "source": "v.daum.net",
-   "published": "2026-09-07T08:37:29+09:00",
+   "title": "여야 7개 정당, 9일 부동산 정책토론…공급대책 등 논의 - 뉴시스",
+   "link": "https://www.newsis.com/view/NISX20260908_0003780612",
+   "image": "https://img1.newsis.com/2026/08/07/NISI20260807_0021391712_web.jpg",
+   "source": "뉴시스",
+   "published": "2026-09-08T11:11:11+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "“반포 대장 ‘88억’ 아파트도 못 버텼나”…래미안 원베일리, 첫 경매 등장 - 매일경제",
+   "link": "https://www.mk.co.kr/news/realestate/12146842",
+   "image": "",
+   "source": "매일경제",
+   "published": "2026-09-08T11:01:09+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "종합부동산세 내년부터 어떻게 달라지나? - 소셜포커스",
-   "link": "https://www.socialfocus.co.kr/news/articleView.html?idxno=23978",
-   "image": "https://cdn.socialfocus.co.kr/news/photo/202609/23978_31746_4553.jpg",
-   "source": "소셜포커스",
-   "published": "2026-09-07T07:55:31+09:00",
+   "title": "\"내 돈 뺏으면 절대 용서 못 해\"…김용남, 징벌적 양도세 비판 - 평화나무",
+   "link": "https://www.logosian.com/news/articleView.html?idxno=13330",
+   "image": "https://cdn.logosian.com/news/thumbnail/202609/13330_24221_3435_v150.jpg",
+   "source": "평화나무",
+   "published": "2026-09-08T10:44:58+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "또 부동산 잡음...내로남불? 정책 기조 문제? [앵커리포트] - YTN",
-   "link": "https://www.ytn.co.kr/_ln/0101_202609070623386408",
-   "image": "https://image.ytn.co.kr/general/jpg/2026/0907/202609070623386408_t.jpg",
-   "source": "YTN",
-   "published": "2026-09-07T06:23:00+09:00",
+   "title": "[속보] 정점식 \"국민 삶 약탈하는 부동산 정책, 전면 폐기해야\" - newdaily.co.kr",
+   "link": "http://www.newdaily.co.kr/site/data/html/2026/09/08/2026090800088.html",
+   "image": "https://image.newdaily.co.kr/site/data/img/2026/09/08/2026090800088_0.png",
+   "source": "newdaily.co.kr",
+   "published": "2026-09-08T10:17:20+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "9월 대구 아파트 분양 전망 반등···전국은 대출 규제·금리에 위축 - 대구MBC",
+   "link": "https://dgmbc.com/NewsArticle/861067",
+   "image": "https://dgmbc.com/main/images/news/dg1.jpg",
+   "source": "대구MBC",
+   "published": "2026-09-08T10:07:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "권칠승 野, 부동산 정책 정부·여당 공격 소재로 활용하지 말라 - 아주경제",
+   "link": "https://www.ajunews.com/view/20260908090147557",
+   "image": "https://image.ajunews.com/content/image/2026/09/08/20260908090257914550.jpg",
+   "source": "아주경제",
+   "published": "2026-09-08T09:33:03+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "울산 아파트 경매 ‘꿈틀’… 낙찰가율 한 달 새 5.7%p 뛰었다 - 울산종합일보",
+   "link": "https://ujnews.co.kr/news/newsview.php?ncode=1065574735804346",
+   "image": "https://ujnews.co.kr/images/oglogo.jpg",
+   "source": "울산종합일보",
+   "published": "2026-09-08T09:00:10+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "[데스크리포트 9월] 민주당이 부동산 보유세 올리면 선거 망칠까 - businesspost.co.kr",
+   "link": "https://www.businesspost.co.kr/BP?command=article_view&num=446607",
+   "image": "https://www.businesspost.co.kr/news/photo/202608/20260804164628_198094.jpg",
+   "source": "businesspost.co.kr",
+   "published": "2026-09-08T08:32:30+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "서울 인구 줄어드는데 집값은 왜 오를까 - 매일경제",
-   "link": "https://www.mk.co.kr/news/realestate/12145439",
+   "title": "집값 폭등이 결혼시켰다?…2030 '자산 동맹' 맺는 이유 - 한국경제",
+   "link": "https://www.hankyung.com/article/2026090793661",
+   "image": "https://img.hankyung.com/photo/202609/99.42383993.1.jpg",
+   "source": "한국경제",
+   "published": "2026-09-08T07:00:03+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "평촌도 17억 넘었다… 경기 남부 집값 ‘키 맞추기’ - 조선비즈 - Chosunbiz",
+   "link": "https://biz.chosun.com/real_estate/real_estate_general/2026/09/08/6ZNDTWGJJJCDZEJGKTIBUCZUBU/",
+   "image": "https://biz.chosun.com/resizer/v2/BAUIKONHYJGSHE2RTFY5HKMAHY.jpg?auth=bbb3560a6706060d885662f0ba54b504503c8cf2a41db870965e1115fe8e7415&width=640&height=336&smart=true",
+   "source": "Chosunbiz",
+   "published": "2026-09-08T06:03:05+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "강남 집값 폭락세라지만 … 255억 찍은 나인원한남 - 매일경제",
+   "link": "https://www.mk.co.kr/news/realestate/12146514",
    "image": "",
    "source": "매일경제",
-   "published": "2026-09-07T05:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "국채부터 집값까지⋯금융시장 덮친 ‘기후 프리미엄’ [기후의 역습, 경제의 재편 ④] - etoday.co.kr",
-   "link": "https://www.etoday.co.kr/news/view/2622328",
-   "image": "https://img.etoday.co.kr/pto_db/2026/09/20260906181021_2383858_437_307.jpg",
-   "source": "etoday.co.kr",
-   "published": "2026-09-07T05:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "서울 집값 82주간 17% 상승… 文때보다 더 해 - 조선일보",
-   "link": "https://www.chosun.com/economy/real_estate/2026/09/07/CO35V5QTYNFBHKE5FPFLPCYZOQ/",
-   "image": "https://www.chosun.com/resizer/v2/ME2WCZJSGU2WKZRRGBSTAMZYHE.jpg?auth=59fee11a902dc39c4d5b7bf8035bd66c63c024028a4ebc991567da03d509d125&width=1200&height=630&smart=true",
-   "source": "조선일보",
-   "published": "2026-09-07T00:53:00+09:00",
+   "published": "2026-09-08T04:30:00+09:00",
    "has_time": true
   }
  ],
- "count": 7,
- "date": "2026-09-07"
+ "count": 13,
+ "date": "2026-09-08"
 }
