@@ -15,7 +15,7 @@ import json
 import asyncio
 import html as _html
 from datetime import datetime, timezone, timedelta, date
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
 
 sys.stdout.reconfigure(encoding="utf-8")
 # 크롤러는 주인님 바탕화면의 단일 파일(google_news_crawler.py)을 참조(무수정)
@@ -341,6 +341,17 @@ def _parse_dt(s):
     return None, False
 
 
+def _gnews_decode(link):
+    """구글 뉴스 RSS 링크(news.google.com/rss/articles/…) → 실제 기사 URL.
+    구글이 링크를 protobuf로 난독화 → googlenewsdecoder(기사페이지 signature/timestamp → batchexecute)로 복원. 실패 시 None."""
+    try:
+        from googlenewsdecoder import gnewsdecoder
+        r = gnewsdecoder(link, interval=1)
+        return r.get("decoded_url") if isinstance(r, dict) and r.get("status") else None
+    except Exception:
+        return None
+
+
 def article_meta(url, cl):
     """기사 페이지 1회 fetch → (og:image, 출처, 발행 raw, 본문요약)."""
     img = site = pub = desc = None
@@ -354,10 +365,14 @@ def article_meta(url, cl):
             r'content=["\']([^"\']+)["\'][^>]*property=["\']og:image',
         ):
             m = re.search(pat, h, re.I)
-            if m and m.group(1).startswith("http"):
-                img = _html.unescape(m.group(1))
+            if m and m.group(1).strip():
+                src = _html.unescape(m.group(1).strip())
+                # 🔴상대경로(/photos/…)·프로토콜상대(//host/…) og:image는 기사 도메인 붙여 절대화.
+                #   디지털데일리 등 일부 언론사가 og:image를 절대 URL이 아닌 상대경로로 줘서, 예전엔
+                #   startswith("http") 필터에 통째로 걸려 버려졌다(썸네일 누락, 주인님 2026-09-10).
+                img = src if src.startswith("http") else urljoin(str(r.url), src)
                 break
-        if not img:                          # AMP 기사 등 og:image 없으면 JSON-LD image 폴백
+        if not img:                          # og:image 아예 없으면 JSON-LD image 폴백
             img = _jsonld_image(h)
         m = re.search(r'property=["\']og:site_name["\'][^>]*content=["\']([^"\']+)', h, re.I)
         if m:
@@ -522,11 +537,21 @@ def main():
                 n_dup += 1
                 continue
             kept_titles.append(title)
+            # 구글 RSS 링크(난독화)를 실제 기사 URL로 디코딩 → og:image 썸네일 추출(주인님 지시 2026-09-07)
+            real_url, img = link, ""
+            try:
+                _dec = _gnews_decode(link)
+                if _dec:
+                    real_url = _dec
+                    _im, _si, _pb, _de = article_meta(_dec, cl)
+                    img = _im or ""
+            except Exception:
+                pass
             news.append({
                 "keyword": kw,
                 "title": title,
-                "link": link,
-                "image": "",                        # 구글 RSS 링크 난독화로 썸네일 불가(주인님 승인 2026-08-29: 썸네일 없이 복구)
+                "link": real_url,                   # 실제 기사 URL(클릭 시 원문 직행)
+                "image": img,                        # 기사 og:image 썸네일(디코딩/추출 실패 시 빈값)
                 "source": it.get("source") or "",
                 "published": dt.isoformat(),
                 "has_time": has_time,
