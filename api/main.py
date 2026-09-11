@@ -867,10 +867,38 @@ def _reg_col_backfill() -> None:
         pass
 
 
+def _search_group_col_backfill() -> None:
+    """신규 물건(items.search_group NULL)을 usage_name으로 분류 백필 — group 의존 표시(규제배지·매수판정·
+    유형필터)가 새 물건에서 누락되지 않게. 로컬 워머 전용(CLOUD_READER 쓰기금지), NULL만 UPDATE라 저비용.
+    매핑은 이미 채워진 데이터의 usage→dominant group과 일치(오피스텔·근린·숙박=상가 / 아파트·다세대·주택 등=주거용).
+    ⚠️ 상가 판정을 주거용보다 먼저(근린'상가'가 '주택' 패턴에 안 걸리게)."""
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        return
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return
+    try:
+        import psycopg
+        sql = ("UPDATE items SET search_group = CASE "
+               "WHEN usage_name ILIKE '%오피스텔%' OR usage_name ILIKE '%근린상가%' OR usage_name ILIKE '%근린시설%' "
+               "OR usage_name ILIKE '%숙박%' OR usage_name ILIKE '%상가%' OR usage_name ILIKE '%점포%' OR usage_name ILIKE '%사무%' THEN '상가' "
+               "WHEN usage_name ILIKE '%아파트%' OR usage_name ILIKE '%다세대%' OR usage_name ILIKE '%빌라%' OR usage_name ILIKE '%연립%' "
+               "OR usage_name ILIKE '%도시형%' OR usage_name ILIKE '%다가구%' OR usage_name ILIKE '%단독%' OR usage_name ILIKE '%농가%' "
+               "OR usage_name ILIKE '%주택%' THEN '주거용' "
+               "WHEN usage_name ILIKE '%차량%' THEN '차량외' "
+               "ELSE search_group END "
+               "WHERE search_group IS NULL AND usage_name IS NOT NULL")
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            c.execute(sql)
+    except Exception:
+        pass
+
+
 def _reg_warm() -> None:
     try:
         _reg_index(force=True)
         _reg_col_backfill()          # 신규 물건 reg 컬럼 백필(NULL만, 로컬 전용)
+        _search_group_col_backfill()  # 신규 물건 search_group 백필(규제배지·매수판정 등 group 의존)
     except Exception:
         pass
 
@@ -4200,6 +4228,8 @@ def _col_sync_loop() -> None:
             _area_col_backfill()
             _filter_cols_backfill()
             _sort_cols_backfill()          # 정렬컬럼(준공·세대·주행) 신규 백필 — 목록 위 정렬 서버화 유지
+            _reg_col_backfill()            # ★규제구분(reg) 신규 백필 — 기존 _reg_warm(캐시미스 1회성)만이라 신규물건 reg NULL 누적됐던 근본수정
+            _search_group_col_backfill()   # ★search_group 신규 백필 — 규제배지·매수판정 등 group 의존 표시가 새 물건에서 누락되지 않게
         except Exception:
             pass
         _t.sleep(1200)          # 20분마다 변경분 동기화
