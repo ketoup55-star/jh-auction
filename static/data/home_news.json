@@ -1,87 +1,42 @@
 {
  "items": [
   {
-   "keyword": "부동산 세금",
-   "title": "[해피라이프]부동산 세금부터 상가 임장까지…달라지는 투자 전략 - edaily.co.kr",
-   "link": "https://www.edaily.co.kr/News/Read?newsId=02974966645579136&mediaCodeNo=257",
-   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/09/PS26091100395.jpg",
-   "source": "edaily.co.kr",
-   "published": "2026-09-11T09:17:50+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "“1+1분양아파트 3년간 못 판다”…세금폭탄·금융규제 ‘더블펀치’에 분노 폭발 - 하우징헤럴드",
-   "link": "https://www.housingherald.co.kr/news/articleView.html?idxno=62824",
-   "image": "https://cdn.housingherald.co.kr/news/photo/202609/62824_44645_4216.jpg",
-   "source": "하우징헤럴드",
-   "published": "2026-09-11T09:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "\"집값 잡을 생각 없구나\"...李정부 지지하던 한문도도 한탄 - v.daum.net",
-   "link": "https://v.daum.net/v/20260911073244449",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/11/fnnewsi/20260911073244824dxht.jpg",
-   "source": "v.daum.net",
-   "published": "2026-09-11T07:32:44+09:00",
+   "keyword": "집값",
+   "title": "집값은 중요하지 않았다…국세청이 ‘황제사택’ 따지는 4가지 - 이코노미스트",
+   "link": "https://economist.co.kr/article/view/ecn202608270049",
+   "image": "https://economist.co.kr/data/ecn/image/2026/08/27/ecn20260827000078.800x.0.png",
+   "source": "이코노미스트",
+   "published": "2026-09-12T08:04:35+09:00",
    "has_time": true
   },
   {
    "keyword": "대출규제",
-   "title": "\"9억1000은 안 되고 8억9000은 된다?…'대출 기준선'이 부동산 왜곡 불렀다\" - 뉴시스",
-   "link": "https://www.newsis.com/view/NISX20260910_0003783560",
-   "image": "https://img1.newsis.com/2026/09/10/NISI20260910_0002235121_web.jpg",
-   "source": "뉴시스",
-   "published": "2026-09-11T06:00:00+09:00",
+   "title": "[2026 부동산개발 포럼] “정비사업에만 풀린 규제, 전월세 불안 가시화” : 네이버 블로그 - Naver Blog",
+   "link": "https://blog.naver.com/PostView.naver?blogId=dealsite&logNo=224408537580&redirect=Dlog",
+   "image": "https://blogthumb.pstatic.net/MjAyNjA5MTFfMTI2/MDAxNzg5MTE2NTU1MDQ4.zQsdaElt4MwBIa6g8k2RJsYmsso0vJOLZTqj2rZiqTQg.n9QI3c3gpBtFRq_3PRBUvPHv6fdz9mOHjMz636mmpRog.JPEG/thumb_%282%29.jpg?type=w2",
+   "source": "Naver Blog",
+   "published": "2026-09-12T07:00:45+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "세제 수정에 얼어붙은 강남 부동산…“정책 또 바뀔라” - 마켓인",
-   "link": "https://marketin.edaily.co.kr/News/ReadE?newsId=01722006645579136",
-   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/09/PS26091100225.jpg",
-   "source": "마켓인",
-   "published": "2026-09-11T05:08:02+09:00",
+   "keyword": "아파트 경매",
+   "title": "“경매 나온 집, 알면서 들어갔죠”…1000만원 날린 경험이 17억 집주인 만들었다 [경상도 청년의 성동구 입성기①] - 헤럴드경제",
+   "link": "https://biz.heraldcorp.com/article/10870890",
+   "image": "https://wimg.heraldcorp.com/news/cms/2026/09/11/news-p.v1.20260909.df3b837736bc40eb97de4b594d030746_T1.png",
+   "source": "헤럴드경제",
+   "published": "2026-09-12T07:00:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "집값",
-   "title": "83주간 집값 상승 ‘톱10’에 한강벨트-셔세권… 지방은 더 하락 - 동아일보",
-   "link": "https://www.donga.com/news/Economy/article/all/20260911/134647002/2",
-   "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/09/11/134647974.1.jpg",
-   "source": "동아일보",
-   "published": "2026-09-11T04:30:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "[사설]부동산거래 냉각, 세금·규제 후유증인가 - 머니투데이 - 머니투데이",
-   "link": "https://www.mt.co.kr/opinion/2026/09/11/2026091015301930879",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=688,fit=cover,bg=white,f=auto,quality=high,sharpen=2,g=face/21/2026/09/2026091015301930879_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-09-11T04:02:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "금리 오르면 집값 떨어진다?…지금은 과거와 다른 이유 - 뉴시스",
-   "link": "https://www.newsis.com/view/NISX20260910_0003784020",
-   "image": "https://img1.newsis.com/2026/09/10/NISI20260910_0002235400_web.jpg",
-   "source": "뉴시스",
-   "published": "2026-09-11T01:40:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "[사설] 대통령 픽 ‘이광수 선생’도 포기했다는 ‘부실 공급’ 집값 대책 - 조선일보",
-   "link": "https://www.chosun.com/opinion/editorial/2026/09/11/M6ET7EQG6RCBDH4V42ZQ7HE64Y/",
-   "image": "https://www.chosun.com/resizer/v2/GYZWKZDBGVSWGYRWMEZGENJYG4.jpg?auth=120ebba8290b04b43eb73618b2a66af6647a5a6e59f8f6d10379a43376f4a6ef&width=600&height=315&smart=true",
-   "source": "조선일보",
-   "published": "2026-09-11T00:00:00+09:00",
+   "keyword": "아파트 경매",
+   "title": "“15억 이하 중저가 아파트 강세”…수도권 경매시장 쏠림현상 지속 [집슐랭] - 서울경제",
+   "link": "https://www.sedaily.com/article/20090037",
+   "image": "https://wimg.sedaily.com/news/cms/2026/09/11/news-p.v1.20260904.7f169a9a0bca4609a1d2317b7eee0707_Z1.jpg",
+   "source": "서울경제",
+   "published": "2026-09-12T06:55:00+09:00",
    "has_time": true
   }
  ],
- "count": 9,
- "date": "2026-09-11"
+ "count": 4,
+ "date": "2026-09-12"
 }
