@@ -4159,6 +4159,11 @@ def _col_enrich_sync() -> None:
         """UPDATE items i SET est_price=(c.data->>'price')::numeric::bigint
             FROM api_cache c WHERE c.cache_key='villaest:'||i.item_key AND (c.data->>'price') ~ '^[0-9.]+$'
               AND i.est_price IS DISTINCT FROM (c.data->>'price')::numeric::bigint""",
+        # 오피스텔 시세 — offi:(오피스텔 전용 매매 실거래 평균) → est_price 컬럼. 기존엔 apt:/villaest:만 sync해서
+        #  오피스텔이 목록 시세에서 통째로 빠졌다(offi:est 계산은 돼 있는데 컬럼 미반영, 2026-09-12 실측 1,116건).
+        """UPDATE items i SET est_price=(c.data->>'est')::numeric::bigint
+            FROM api_cache c WHERE c.cache_key='offi:'||i.item_key AND (c.data->>'v')='2' AND (c.data->>'est') ~ '^[0-9.]+$'
+              AND i.est_price IS DISTINCT FROM (c.data->>'est')::numeric::bigint""",
         f"""UPDATE items i SET expected_bid=(c.data->>'expected_bid')::numeric::bigint, expbid_count=(c.data->>'count')::int
             FROM api_cache c WHERE c.cache_key='expbid:'||i.item_key AND (c.data->>'available')::bool AND (c.data->>'v')::int={_EXPBID_V}
               AND (c.data->>'expected_bid') ~ '^[0-9.]+$' AND i.expected_bid IS DISTINCT FROM (c.data->>'expected_bid')::numeric::bigint""",
