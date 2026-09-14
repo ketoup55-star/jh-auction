@@ -258,6 +258,12 @@ def main():
     print(f"대상: 빌라 {len(tgt['villa_est']):,} / 아파트 {len(tgt['apt']):,} / 차량 {len(tgt['car']):,}", flush=True)
     T0 = time.time()
     for cat in sel:
+        import datetime as _dt
+        _h = _dt.datetime.now().hour
+        if 7 <= _h < 23:          # ★주간(07~23시)엔 예열 보류 — 별도 프로세스 예열이 4011 검색·PC와 CPU 경합해
+            #   목록검색이 2~4초로 느려지고 PC가 버벅이던 것 방지(loop-until-dry라 다음 새벽 이어서·멱등, 2026-09-14 주인님)
+            print(f"[중단] 주간({_h}시) 진입 — 검색 경합 방지 위해 예열 보류(다음 새벽 이어서)", flush=True)
+            break
         if cat == 'docs':
             run_documents()
             continue
