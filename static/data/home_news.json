@@ -2,14 +2,50 @@
  "items": [
   {
    "keyword": "대출규제",
-   "title": "[기획] 정부는 실수요자 대출 규제, 삼성전자는 사내대출 확대…자산격차 커진다 - 매일일보",
-   "link": "https://www.m-i.kr/news/articleView.html?idxno=1412848",
-   "image": "https://cdn.m-i.kr/news/thumbnail/202609/1412848_1201246_5656_v150.jpg",
-   "source": "매일일보",
-   "published": "2026-09-13T09:00:00+09:00",
+   "title": "오피스텔 숨통 트이나...금융당국, 집단대출 총량규제 제외 카드 만지작 - 중앙신문",
+   "link": "https://www.jasm.co.kr/news/articleView.html?idxno=314471",
+   "image": "https://cdn.jasm.co.kr/news/photo/202609/314471_314542_513.jpg",
+   "source": "중앙신문",
+   "published": "2026-09-14T08:53:39+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "금리 올리고 대출 조여도 안 잡혔다…83주째 서울 집값 밀어올린 '유동성' - ebn.co.kr",
+   "link": "https://www.ebn.co.kr/news/articleView.html?idxno=1724047",
+   "image": "https://cdn.ebn.co.kr/news/thumbnail/202609/1724047_756833_1520_v150.jpg",
+   "source": "ebn.co.kr",
+   "published": "2026-09-14T08:19:25+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "\"부동산 세금, 너무 어려워\"…국세청에 양도세 질의 2배 급증 - v.daum.net",
+   "link": "https://v.daum.net/v/20260914075449477",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/14/akn/20260914075449369kryh.jpg",
+   "source": "v.daum.net",
+   "published": "2026-09-14T07:54:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "대출 규제·세 부담에 서울 아파트 거래 꽁꽁…토허 신청 최저치로 뚝 - v.daum.net",
+   "link": "https://v.daum.net/v/20260914060127248",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/14/akn/20260914060127851ihhb.jpg",
+   "source": "v.daum.net",
+   "published": "2026-09-14T06:01:27+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "\"부동산 얘기 안 하겠다\"⋯친정부 전문가들 잇단 쓴소리 [집값, 다시 묻다②] - v.daum.net",
+   "link": "https://v.daum.net/v/20260914060115232",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/14/552786-gygG85f/20260914060115921vfgc.jpg",
+   "source": "v.daum.net",
+   "published": "2026-09-14T06:01:15+09:00",
    "has_time": true
   }
  ],
- "count": 1,
- "date": "2026-09-13"
+ "count": 5,
+ "date": "2026-09-14"
 }
