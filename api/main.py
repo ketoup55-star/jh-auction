@@ -1734,6 +1734,10 @@ def _buy_ok_keys() -> set:
 
 # ───────────── 매수판정(AI 위험도 기반: 매수양호/검토/금지) ─────────────
 _grade_cache: dict = {"ts": 0.0, "buckets": None}
+# 인수면제(waiver) 집합 캐시 — detail_text LIKE 전수스캔이 55초(114k 대용량텍스트 seq-scan)라 매 재계산(25분)마다
+#  돌리면 부하·타임아웃→abort. 6시간 TTL로 드물게 갱신하고 그 사이엔 재사용. 갱신 실패해도 옛 집합 재사용(비치명적).
+_waiver_cache: dict = {"set": None, "ts": 0.0}
+_WAIVER_TTL = 6 * 3600
 _GRADE_LABELS = ["매수양호", "매수검토", "매수금지"]
 
 # items.buy_grade 컬럼 가속: 컬럼 있으면 매수판정 필터를 IN-리스트 대신 컬럼 WHERE로(수배 빠름)
@@ -1768,23 +1772,45 @@ def _sync_buy_grade(buckets: dict) -> None:
     rev = {k: g for g, s in buckets.items() for k in s}
     if not rev:
         return
-    rows = [{"item_key": k, "buy_grade": g} for k, g in rev.items()]
+    # 🔴변경분만 upsert: 현재 컬럼값을 읽어(가벼운 read) computed와 다른 것만 쓴다. items 쓰기는 autovacuum·타 워머와
+    #  심하게 경합(httpx upsert가 30s 타임아웃으로 대부분 실패해 1000건만 sync되던 것)이라, 안정 상태에선 변경분이 적어
+    #  쓰기를 최소화 → 경합↓·신뢰성↑. 읽기는 전용 새 psycopg 연결(스레드로컬 stale hang 방지).
+    cur_map: dict = {}
+    try:
+        import psycopg as _pgs
+        _sc = _pgs.connect(os.environ["SUPABASE_DB_URL"], connect_timeout=15, autocommit=True, prepare_threshold=None)
+        try:
+            with _sc.cursor() as _scur:
+                _scur.execute("SELECT item_key, buy_grade FROM items WHERE item_key = ANY(%s)", (list(rev.keys()),))
+                for _ik, _bg in _scur.fetchall():
+                    cur_map[_ik] = _bg
+        finally:
+            _sc.close()
+    except Exception:
+        cur_map = {}
+    rows = [{"item_key": k, "buy_grade": g} for k, g in rev.items() if cur_map.get(k) != g]  # 변경분만(읽기실패=cur_map빔→전량)
+    if not rows:
+        print("[buy_grade] 컬럼 동기화 0건(변경 없음)", flush=True)
+        return
     h = {"apikey": svc, "Authorization": f"Bearer {svc}",
          "Content-Type": "application/json",
          "Prefer": "resolution=merge-duplicates,return=minimal"}
+    import time as _st
     ok = 0
-    for i in range(0, len(rows), 500):
-        chunk = rows[i:i + 500]
-        try:
-            r = httpx.post(f"{auction_db.url}/rest/v1/items?on_conflict=item_key",
-                           headers=h, json=chunk, timeout=30)
-            if r.status_code in (200, 201, 204):
-                ok += len(chunk)
-        except Exception:
-            pass
+    for i in range(0, len(rows), 300):
+        chunk = rows[i:i + 300]
+        for _try in range(3):                        # 경합으로 실패 시 재시도(부분 sync 방지)
+            try:
+                r = httpx.post(f"{auction_db.url}/rest/v1/items?on_conflict=item_key",
+                               headers=h, json=chunk, timeout=60)
+                if r.status_code in (200, 201, 204):
+                    ok += len(chunk); break
+            except Exception:
+                pass
+            _st.sleep(1.5)
     if ok:
         _buy_grade["synced"] = True
-        print(f"[buy_grade] 컬럼 동기화 {ok}건", flush=True)
+    print(f"[buy_grade] 컬럼 동기화 {ok}/{len(rows)}건(변경분)", flush=True)
 
 
 def _grade_buckets(force: bool = False) -> dict:
@@ -1806,28 +1832,43 @@ def _grade_buckets(force: bool = False) -> dict:
         return _grade_cache.get("buckets") or {}
     db = auction_db
     out = {g: set() for g in _GRADE_LABELS}
+    # 🔴 동시 중복 재계산 방지: 빈 버킷이 요청마다(_grade_filter_keys 등) force 재계산을 재트리거해 res 114k 스캔이
+    #  여러 개 겹쳐 서로 느려지고 아무도 완주 못 하던 폭주를 차단. 10분 넘으면 자동 해제(크래시 대비). _abort·완료 시 해제.
+    if _grade_cache.get("rebuilding") and (_t.time() - _grade_cache.get("rebuild_ts", 0) < 600):
+        return _grade_cache.get("buckets") or {}
+    _grade_cache["rebuilding"] = True
+    _grade_cache["rebuild_ts"] = _t.time()
+    _rb0 = _t.time()
+    print("[buy_grade] 재계산 시작(keyset)", flush=True)
 
-    def _page(table, params):
-        rows, off = [], 0
-        while True:
-            try:
-                r = db._get(table, {**params, "limit": "1000", "offset": str(off)})
-                page = r.json() if r.status_code in (200, 206) else []
-            except Exception:
-                break
-            rows += page
-            if len(page) < 1000:
-                break
-            off += 1000
-        return rows
+    # 🔴 워머 신뢰성 근본수정(2026-09-15): 목록 배지 워머가 부분 실행/abort돼(NULL 29%·waiver-abort 49회) 안전 물건
+    #  배지가 안 붙던 문제. 원인=Supabase pooler statement_timeout(2분)이라 res 114k·tenants 126k·waiver 55s 전수스캔이
+    #  부하(autovacuum·타 워머 경합)에서 2분 초과→실패. (pooler는 SET statement_timeout 무시라 못 늘림.) 조치: 모든 큰
+    #  조회를 keyset/배치로 잘게 페이지네이션(각 페이지 <<2분·재시도)해 부하에 강하게. 최종 실패면 부분 sync 대신 abort.
+    def _abort(why):            # 부분 데이터로 sync하지 않고 옛 버킷 유지(대량 NULL/오분류 방지). 다음 주기 재시도.
+        print(f"[buy_grade] {why} — 재계산 중단(부분 sync 방지), 기존 버킷 유지", flush=True)
+        _grade_cache["building"] = False
+        _grade_cache["rebuilding"] = False
+        return _grade_cache.get("buckets") or {}
 
-    # ── 주거용(analyzed_at) 위험도 ──
-    res_rows = _page("items", {"select": "item_key,usage_name,address,tags",
-           "search_group": "eq.주거용", "analyzed_at": "not.is.null"})
+    # ── 주거용 현황(진행) — 단일 쿼리(결과 11.8k로 작아 <120s, keyset 불필요). None → abort ──
+    #  🔴현황만 재계산: 과거(매각완료) 93k는 등급이 불변(매각 종료)이라 매 25분 재계산이 낭비였고 brief/analysis
+    #  캐시루프를 10배 무겁게 해 재계산이 6~8분·검색과 경합. 과거 물건 배지는 이미 채워진 buy_grade 컬럼 값이 유지되고
+    #  (sync는 현황만 upsert), 등급 필터/배지는 컬럼 기반이라 과거도 정상. → 현황(11.8k)만 재계산해 가볍고 빠르게.
+    res_rows = None
+    for _ in range(4):
+        res_rows = db.query_pg("SELECT item_key, usage_name, address, tags FROM items "
+                               "WHERE data_class='현황' AND search_group='주거용' AND analyzed_at IS NOT NULL")
+        if res_rows is not None:
+            break
+        _t.sleep(1.0)
+    if res_rows is None:
+        return _abort("res(주거용 현황) 조회 실패")
     res = {x["item_key"] for x in res_rows}
     res_info = {x["item_key"]: (x.get("usage_name"), x.get("address")) for x in res_rows}
     tags_of = {x["item_key"]: (x.get("tags") or "") for x in res_rows}   # 유치권 등 특수물건 태그(매수판정 반영용)
-    # 승강기(brief 캐시) — 다세대·도시형 4층↑ 무승강기 매수검토 상향용. 미상(brief 없음)도 트리거(정책).
+    print(f"[buy_grade] res {len(res)}건 ({_t.time()-_rb0:.0f}s)", flush=True)
+    # 승강기·위반(brief 캐시) — 보조데이터(미상 허용)라 실패해도 abort 안 함.
     elev_map: dict = {}
     vio_map: dict = {}                              # 위반건축물(brief 캐시) — 신규 물건도 컬럼/필터에 자동 반영
     _rk = list(res)
@@ -1841,38 +1882,59 @@ def _grade_buckets(force: bool = False) -> dict:
             _bv = _got.get("brief:" + k)
             elev_map[k] = _bv.get("elevator") if isinstance(_bv, dict) else None
             vio_map[k] = bool(_bv.get("violation")) if isinstance(_bv, dict) else False
+    print(f"[buy_grade] brief캐시 {len(elev_map)}건 ({_t.time()-_rb0:.0f}s)", flush=True)
+    # 임차인 — 단일 전체 조회(126k, 2.3s·item_tenants는 items만큼 경합 안 함). None → abort(부분 tmap=danger/has_opp 오판).
+    _trows = None
+    for _ in range(4):
+        _trows = db.query_pg("SELECT item_key, has_opposing_power, assume_amount, status, "
+                             "move_in_date, fixed_date, dividend_date FROM item_tenants")
+        if _trows is not None:
+            break
+        _t.sleep(1.0)
+    if _trows is None:
+        return _abort("item_tenants 조회 실패")
     tmap = defaultdict(list)
-    for x in _page("item_tenants", {"select": "item_key,has_opposing_power,assume_amount,status,"
-                                              "move_in_date,fixed_date,dividend_date"}):
+    for x in _trows:
         tmap[x["item_key"]].append(x)
-    try:
-        # 🔴 인수권리(선순위전세권 등 status='인수') 전량 페이지네이션. 舊 limit=1000 은 인수권리 4,340물건 중
-        #    첫 1,000만 인식해, 캐시 없는(현황 96%) 물건의 선순위 인수를 놓쳐 '매수금지→매수양호' 오판을 냈다
-        #    (예: 광주 신동아 2025타경32532 선순위전세권 인수인데 목록 매수양호). _page로 전량 조회해 폴백 완성.
-        assume_right = {x["item_key"] for x in
-                        _page("item_rights", {"select": "item_key", "status": "like.*인수*"})}
-    except Exception:
-        assume_right = set()
-    # 인수 면제 조건 → ①확약서(말소동의·포기) ②특별매각조건(보증금 반환청구권/채권 포기).
-    #  ⚠️'*반환청구권*포기*'(이중 와일드카드) 전수스캔은 간헐 500 → waiver 셋이 비어 아파트 등이 매수금지로 오분류됨.
-    #  → 연속 phrase 단일패턴으로 분리(안정) + 빈결과면 재시도(간헐 500 방어).
-    def _wpage(params):
-        r = []
-        for _ in range(3):
-            r = _page("items", {"select": "item_key", **params})
-            if r:
-                break
-        return r
-    waiver = {x["item_key"] for x in _wpage({"detail_text": "like.*확약*",
-              "or": "(detail_text.like.*포기*,detail_text.like.*말소동의*)"})}
-    for _wp in ("*반환청구권을 포기*", "*반환채권을 포기*"):   # 특별매각조건 두 표현
-        waiver |= {x["item_key"] for x in _wpage({"detail_text": f"like.{_wp}"})}
-    # ③ 보증기관(HUG/SGI/HF) 인수조건변경 태그 = 임차보증금 인수 면제(명세서 본문에 포기문구가 없어도 태그로 인정)
-    waiver |= {x["item_key"] for x in _wpage({"tags": "like.*인수조건변경*"})}
-    if not waiver:                          # 정상이면 수천 건 → 0이면 조회 실패(고부하) → 재계산 중단·옛 버킷 유지(대량 오분류 방지)
-        print("[buy_grade] waiver 0건(조회 실패 추정) — 재계산 중단, 기존 버킷 유지", flush=True)
-        _grade_cache["building"] = False
-        return _grade_cache.get("buckets") or {}
+    print(f"[buy_grade] tenants {len(_trows)}행 ({_t.time()-_rb0:.0f}s)", flush=True)
+    # 인수권리(선순위전세권 등 status='인수') — 소형(4천건), 단일쿼리+재시도. None → abort. 舊 limit=1000 버그 근본해소:
+    #  누락 시 캐시없는 물건의 선순위 인수를 놓쳐 '매수금지→매수양호' 오판(예: 광주 신동아 2025타경32532).
+    _arows = None
+    for _ in range(4):
+        _arows = db.query_pg("SELECT DISTINCT item_key FROM item_rights WHERE status LIKE %s", ("%인수%",))
+        if _arows is not None:
+            break
+        _t.sleep(1.0)
+    if _arows is None:
+        return _abort("item_rights(인수) 조회 실패")
+    assume_right = {x["item_key"] for x in _arows}
+    # 인수 면제(waiver) — detail_text LIKE 전수스캔(55s)이 부하에서 2분 초과 실패하던 것을, res item_key를 5천씩 배치로
+    #  나눠 각 배치만 LIKE(각 <<2분·재시도). 6h 캐시(위 _waiver_cache): 신선하면 스캔 생략. 재스캔 실패라도 옛 캐시 있으면
+    #  재사용(비치명적). 캐시 아예 없을 때만 최종 실패=abort.
+    if _waiver_cache["set"] is None or (_t.time() - _waiver_cache["ts"] > _WAIVER_TTL):
+        _wv = set(); _wok = True; _reslist = list(res)
+        for _i in range(0, len(_reslist), 5000):
+            _batch = _reslist[_i:_i + 5000]
+            _wr = None
+            for _ in range(3):
+                _wr = db.query_pg(
+                    "SELECT item_key FROM items WHERE item_key = ANY(%s) AND ("
+                    "(detail_text LIKE %s AND (detail_text LIKE %s OR detail_text LIKE %s)) "
+                    "OR detail_text LIKE %s OR detail_text LIKE %s OR tags LIKE %s)",
+                    (_batch, "%확약%", "%포기%", "%말소동의%", "%반환청구권을 포기%", "%반환채권을 포기%", "%인수조건변경%"))
+                if _wr is not None:
+                    break
+                _t.sleep(1.0)
+            if _wr is None:
+                _wok = False; break
+            _wv |= {x["item_key"] for x in _wr}
+        if _wok:
+            _waiver_cache["set"] = _wv; _waiver_cache["ts"] = _t.time()
+            print(f"[buy_grade] waiver 재스캔 {len(_wv)}건 (배치·6h캐시 갱신)", flush=True)
+        elif _waiver_cache["set"] is None:  # 최초인데 최종 실패 → abort(다음 주기 재시도)
+            return _abort("waiver 최초 조회 실패")
+        # else: 재스캔 실패지만 옛 캐시 재사용(비치명적, 재계산 계속)
+    waiver = _waiver_cache["set"] or set()
     # ★목록 매수판정을 상세 위험도(analysis)와 일치시킴(㉯): analysis 캐시(analysis:)에 risk_level이
     #  있으면 그 값을 그대로 매핑(상세와 100% 동일). 캐시 없는 물건만 아래 danger 폴백으로 계산.
     #  기존 danger 로직은 말소기준 미반영이라 상세와 13.5% 어긋났음(위험→목록양호 등) → 캐시 우선으로 해소.
@@ -1963,10 +2025,10 @@ def _grade_buckets(force: bool = False) -> dict:
     _RISK_TAGS = ("유치권", "분묘기지권", "법정지상권", "대항력있는임차인")
     _yc_moved = 0
     for k in list(out["매수양호"]):
-        _t = tags_of.get(k, "")
-        if not any(rt in _t for rt in _RISK_TAGS):
+        _tg = tags_of.get(k, "")   # 🔴_t 아님! _t는 상단 import time as _t(시간모듈). 여기서 덮으면 아래 _t.time() 크래시
+        if not any(rt in _tg for rt in _RISK_TAGS):
             continue
-        if "대항력있는임차인" in _t and "인수조건변경" in _t:
+        if "대항력있는임차인" in _tg and "인수조건변경" in _tg:
             continue   # 대항력 포기(확약) → 인수부담 없음 → 매수양호 유지
         out["매수양호"].discard(k)
         out["매수검토"].add(k)
@@ -1974,17 +2036,45 @@ def _grade_buckets(force: bool = False) -> dict:
     if _yc_moved:
         print(f"[buy_grade] 위험특수물건(유치권·분묘·법정지상권·대항력임차인) 매수검토 상향 {_yc_moved}건", flush=True)
 
-    # ── 차량외 buy_grade ──
+    # ── 🔴인수권리(선순위전세권·가등기 등 status='인수') 보유 → 매수양호를 매수금지로(상세 위험과 일치·stale 로컬캐시 방어) ──
+    #  워머가 stale 로컬 analysis 캐시('안전')를 믿어 인수권리 물건을 매수양호로 오판하던 것 방어. 상세(analyze_from_crawler)는
+    #  '인수' status 권리(전세권/가등기)가 있으면 risk=위험 — waiver(확약)는 임차인 보증금 면제일 뿐 '권리' 인수는 안 지우므로
+    #  waiver 여부와 무관하게 매수금지(전세권 배당소멸=0 실측이라 과대플래그 없음). ★목록=상세 일치의 최종 안전망.
+    _ar_moved = 0
+    for k in list(out["매수양호"]):
+        if k in assume_right:
+            out["매수양호"].discard(k)
+            out["매수금지"].add(k)
+            _ar_moved += 1
+    if _ar_moved:
+        print(f"[buy_grade] 인수권리 보유 매수양호→매수금지 {_ar_moved}건", flush=True)
+
+    # ── 차량외 buy_grade — 🔴전용 새 연결(공유 스레드로컬은 앞 analysis(httpx) 단계 동안 idle→pooler가 끊어
+    #  다음 psycopg 호출이 무한 hang나던 것 방지). 실패/타임아웃해도 주거용 결과·sync는 그대로 진행(best-effort). ──
     from auction_analysis.vehicle_parser import buy_grade
-    for spec in _page("vehicle_specs", {"select": "*"}):
-        g = buy_grade(spec)
-        if not g:
-            continue
-        out["매수양호" if g.get("ok") else "매수금지"].add(spec.get("item_key"))
+    try:
+        import psycopg as _pgv
+        _vc = _pgv.connect(os.environ["SUPABASE_DB_URL"], connect_timeout=15, autocommit=True, prepare_threshold=None)
+        try:
+            with _vc.cursor() as _vcur:
+                _vcur.execute("SELECT * FROM vehicle_specs")
+                _vcols = [d[0] for d in _vcur.description]
+                _vall = _vcur.fetchall()
+        finally:
+            _vc.close()
+        for _r in _vall:
+            spec = dict(zip(_vcols, _r))
+            g = buy_grade(spec)
+            if g:
+                out["매수양호" if g.get("ok") else "매수금지"].add(spec.get("item_key"))
+    except Exception as _ve:
+        print(f"[buy_grade] 차량 grade skip: {str(_ve)[:80]}", flush=True)
 
     _grade_cache["buckets"] = out
     _grade_cache["ts"] = _t.time()
     _grade_cache["building"] = False
+    _grade_cache["rebuilding"] = False
+    print(f"[buy_grade] 재계산 완료 → sync 시작 ({_t.time()-_rb0:.0f}s)", flush=True)
     try:
         _sync_buy_grade(out)          # 버킷 → items.buy_grade 컬럼(있으면) 동기화
     except Exception:
@@ -3811,7 +3901,9 @@ def _grade_warm_loop() -> None:
     ⚠️ CLOUD_READER=1(클라우드 얇은 리더)이면 재계산 안 함 — 로컬 워머가 채운 items.buy_grade 컬럼을 신뢰.
        (25분마다 수만 행 페이징 재계산이 1GB 인스턴스에서 주기적 OOM→503을 유발하던 것을 제거)"""
     import time as _t
-    _t.sleep(3)          # 재기동 직후 곧바로 빌드 → 필터·배지 즉시 정상(첫 필터 16초 stall 방지)
+    _t.sleep(90)         # 재기동 직후 90초 대기 → 다른 워머(col_sync·expected_bid·filter_cols 등)의 startup 버스트가
+                         #  items 테이블 IO를 포화시키는 동안을 피해 재계산(경합으로 res/tenants 쿼리가 느려지는 것 완화).
+                         #  (배지/필터는 items.buy_grade 컬럼 기반이라 90초 지연 무해 — 컬럼은 이미 채워져 있음)
     if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
         # 클라우드: 재계산 생략. 필터=items.buy_grade 컬럼 WHERE, 배지=컬럼 SELECT, 히어로=Supabase 캐시(로컬이 채움).
         try:
