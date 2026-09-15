@@ -1846,9 +1846,11 @@ def _grade_buckets(force: bool = False) -> dict:
                                               "move_in_date,fixed_date,dividend_date"}):
         tmap[x["item_key"]].append(x)
     try:
+        # 🔴 인수권리(선순위전세권 등 status='인수') 전량 페이지네이션. 舊 limit=1000 은 인수권리 4,340물건 중
+        #    첫 1,000만 인식해, 캐시 없는(현황 96%) 물건의 선순위 인수를 놓쳐 '매수금지→매수양호' 오판을 냈다
+        #    (예: 광주 신동아 2025타경32532 선순위전세권 인수인데 목록 매수양호). _page로 전량 조회해 폴백 완성.
         assume_right = {x["item_key"] for x in
-                        (db._get("item_rights", {"select": "item_key", "status": "like.*인수*",
-                                                 "limit": "1000"}).json() or [])}
+                        _page("item_rights", {"select": "item_key", "status": "like.*인수*"})}
     except Exception:
         assume_right = set()
     # 인수 면제 조건 → ①확약서(말소동의·포기) ②특별매각조건(보증금 반환청구권/채권 포기).
@@ -2848,6 +2850,21 @@ def _compute_analysis(item_key: str) -> dict:
                     "·".join(_hit) + " — 등기 외 사실상 권리로 인수·명도 부담 가능, 확인 후 판단 필요(매수 검토)"]
         except Exception:
             pass
+    # [재발방지] 목록 buy_grade 컬럼을 상세 risk_level과 즉시 정합화 — analysis를 새로 계산한 순간
+    #  (상세 진입·워밍) 최종 risk_level 기준으로 buy_grade를 '단조 상향'(현재보다 엄격할 때만) 갱신한다.
+    #  기존엔 25분 버킷 재계산까지 컬럼이 stale → 선순위전세권 인수 물건이 상세=위험인데 목록=매수양호로
+    #  갈라지던 근본원인. 단조라 개선(위험→안전)은 건드리지 않고 버킷 재계산이 정식으로 하향(주거용만).
+    try:
+        _rl = res.get("risk_level") if isinstance(res, dict) else None
+        _RG = {"안전": "매수양호", "주의": "매수검토", "위험": "매수금지"}.get(_rl or "")
+        if _RG:
+            auction_db.query_pg(
+                "UPDATE items SET buy_grade=%s WHERE item_key=%s AND search_group='주거용' "
+                "AND (buy_grade IS NULL OR (CASE buy_grade WHEN '매수검토' THEN 1 WHEN '매수금지' THEN 2 ELSE 0 END) "
+                "< (CASE %s WHEN '매수검토' THEN 1 WHEN '매수금지' THEN 2 ELSE 0 END)) RETURNING item_key",
+                (_RG, item_key, _RG))
+    except Exception:
+        pass
     return res
 
 
