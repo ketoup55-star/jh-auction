@@ -3570,6 +3570,20 @@ def _doc_building_brief(item_key: str, want_fields: bool = True) -> dict:
     return merge_doc_brief(bldg, appr)
 
 
+def _unit_floor_from_addr(addr: str):
+    """주소에서 물건 층수(예: '16층1603호'→16) 파싱. 지하/B층은 제외, 1~60 범위만."""
+    if not addr or re.search(r"지하\s*\d*\s*층|지하층|B\d+", addr):
+        return None
+    m = re.findall(r"(\d+)\s*층", addr)
+    if not m:
+        return None
+    try:
+        f = int(m[-1])          # 마지막 'N층'(동 뒤 층)
+    except Exception:
+        return None
+    return f if 1 <= f <= 60 else None
+
+
 def _compute_brief(item_key: str) -> dict:
     """목록용 경량. 주거용=준공·세대·승강기, 차량외=연식·주행거리.
     준공/세대/승강기는 ①저장문서(건축물대장·감정평가서) → ②건축물대장 API 순(쿼터 절약)."""
@@ -3646,6 +3660,7 @@ def _compute_brief(item_key: str) -> dict:
             #      모두 없을 때만 최후 폴백으로 사용.
             bi = None
             purpose = ""
+            _bi_wrong = False   # 지번 표제부가 '다른(저층 부속)동'을 읽었는지(집합건물 층 모순) 플래그
             if (not by) or (not un) or (ev is None):
                 try:
                     bi = building.info(addr)
@@ -3655,11 +3670,20 @@ def _compute_brief(item_key: str) -> dict:
                 purpose = bi.get("purpose") or ""
                 # 지번 조회로 잘못된 동(부속/전유)을 읽은 경우 → 세대수·승강기는 신뢰 안 함(준공년도만 사용).
                 _is_ho = (bi.get("unit_label") == "호")
+                # ★2차 안전망: 물건 층(주소) > 표제부 총층이면 같은 지번의 '다른(저층 부속)동'을 읽은 것.
+                #   K-apt(단지) 소스가 폐기/미스매치로 비어 지번 표제부로 폴백했을 때, 경비·상가동 등
+                #   저층 부속동의 층수·승강기·세대수가 물리적 모순으로 박히던 것을 차단(집합건물만).
+                try:
+                    _bif = int(re.search(r"\d+", str(bi.get("floors"))).group()) if bi.get("floors") else None
+                except Exception:
+                    _bif = None
+                _uf = _unit_floor_from_addr(addr)
+                _bi_wrong = bool(_collective and _bif and _uf and _uf > _bif)
                 if not by:
                     by = bi.get("build_year")
-                if not un and bi.get("units") and not (_collective and _is_ho):
+                if not un and bi.get("units") and not (_collective and _is_ho) and not _bi_wrong:
                     un, ul = bi.get("units"), bi.get("unit_label")
-                if ev is None and bi.get("elevator") is not None and not (_collective and _is_ho):
+                if ev is None and bi.get("elevator") is not None and not (_collective and _is_ho) and not _bi_wrong:
                     ev = int(bi.get("elevator") or 0) > 0
                 used_api = bool(bi.get("build_year") or bi.get("units")
                                 or (bi.get("elevator") is not None))
@@ -3675,7 +3699,7 @@ def _compute_brief(item_key: str) -> dict:
                        "households": hh_disp,
                        "unit_label": hh_label,
                        "elevator": (("1" if ev else "0") if ev is not None else None),
-                       "floors": (bi.get("floors") if bi else None),    # 지상 층수(다가구 3요건)
+                       "floors": ((None if _bi_wrong else bi.get("floors")) if bi else None),    # 지상 층수(다가구 3요건). 지번 오독(_bi_wrong)이면 버림
                        "purpose": (purpose or None),                     # 주용도(상가주택·위반 판별)
                        "usage_detail": _sub,                             # 숙박 세부용도(여관·생활형숙박시설 등) → 목록/상세 표시
                        "violation": vio,                                  # 위반건축물(건축물대장 스탬프)

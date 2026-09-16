@@ -1,24 +1,33 @@
 """국토부 공동주택(K-apt) 단지정보 OpenAPI 연동 (data.go.kr).
 
-  1) 단지 목록제공: AptListService3/getSigunguAptList3 (sigunguCode=시군구5자리)
+  1) 단지 목록제공: AptListService4/getSigunguAptList4 (sigunguCode=시군구5자리)
        → 단지명 매칭으로 kaptCode 획득
-  2) 기본 정보제공: AptBasisInfoServiceV4/getAphusBassInfoV4 (kaptCode)
+  2) 기본 정보제공: AptBasisInfoServiceV5/getAphusBassInfoV5 (kaptCode)
        → 세대수·동수·준공일·주차·난방·관리방식·시공사 등
 
 키 미전파 시 403을 반환할 수 있어, 실패는 None으로 graceful 처리(실거래는 별도라 영향 없음).
+
+🔴 2026-09-16 근본수정: data.go.kr이 구버전(AptListService3·AptBasisInfoServiceV4)을 폐기
+   ("NO_OPENAPI_SERVICE_ERROR"·400) → 모든 아파트 kapt 조회가 조용히 None이 되어 지번 표제부
+   API로 폴백 → 부속동 오독으로 세대수·승강기 결측 + 층 오매칭이 대량 발생했다(실측 진행중
+   아파트 21%). list 3→4, basis/detail V4→V5로 교체(필드명 동일). 폐기 재발은 _get_json의
+   [KAPT-DEAD] 경보로 조기 포착한다.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import sys
+import time
 
 import httpx
 
-_LIST = "https://apis.data.go.kr/1613000/AptListService3/getSigunguAptList3"
-_BASIS = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV4/getAphusBassInfoV4"
-_DETAIL = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV4/getAphusDtlInfoV4"
+_LIST = "https://apis.data.go.kr/1613000/AptListService4/getSigunguAptList4"
+_BASIS = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusBassInfoV5"
+_DETAIL = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusDtlInfoV5"
 _UA = {"User-Agent": "Mozilla/5.0"}
+_KAPT_HEALTH = {"dead_warned": 0.0}   # 폐기응답 경보 스로틀(최근 경보 시각)
 
 
 def _norm(s: str) -> str:
@@ -59,6 +68,14 @@ class KaptSource:
             r = httpx.get(url, params={**params, "serviceKey": self.key, "_type": "json"},
                           headers=_UA, timeout=25)
             if r.status_code != 200:
+                # ★재발방지: data.go.kr이 K-apt API 버전을 폐기하면 여기서 조용히 None→지번폴백→오매칭.
+                #   폐기응답("NO_OPENAPI_SERVICE_ERROR")을 '크게' 남겨 다음 폐기를 즉시 포착한다
+                #   (과거엔 세대수·승강기 결측/층 오매칭을 주인님이 눈으로 잡을 때까지 방치됐음).
+                if "NO_OPENAPI_SERVICE_ERROR" in (r.text or ""):
+                    if time.time() - _KAPT_HEALTH["dead_warned"] > 600:
+                        _KAPT_HEALTH["dead_warned"] = time.time()
+                        sys.stderr.write(f"[KAPT-DEAD] 공동주택 API 폐기응답 감지 — 엔드포인트 버전 확인 필요: {url}\n")
+                        sys.stderr.flush()
                 return None
             return r.json()
         except Exception:
@@ -188,7 +205,7 @@ class KaptSource:
         used = g(b, "kaptUsedate")            # YYYYMMDD
         used_fmt = (f"{used[:4]}.{used[4:6]}.{used[6:8]}" if len(used) == 8 else used)
 
-        # 상세정보(주차·교통·시설) 병합 — 같은 서비스의 getAphusDtlInfoV4
+        # 상세정보(주차·교통·시설) 병합 — 같은 서비스의 getAphusDtlInfoV5
         dj = self._get_json(_DETAIL, {"kaptCode": kapt_code})
         try:
             dd = dj["response"]["body"]["item"]
