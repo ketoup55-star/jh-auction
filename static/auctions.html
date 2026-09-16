@@ -129,6 +129,8 @@
   .tbl th{background:var(--label);color:var(--labeltx);font-size:11px;font-weight:600;padding:9px 6px;border-bottom:1px solid var(--line);}
   .tbl td{padding:10px 8px;border-bottom:1px solid var(--line);font-size:12px;vertical-align:top;}
   .tbl tr:last-child td{border-bottom:none;}.tbl tbody tr:hover{background:#f7f9fc;cursor:pointer;}
+  /* 🔴렉/마우스버벅 근본완화: 화면 밖 행은 렌더(레이아웃·페인트·썸네일 디코드) 건너뜀 → 150행·127외부사진(490×367) 목록의 스크롤/마우스 버벅 제거. .tbl은 table-layout:fixed라 컬럼 안 흔들림. 화면 안 들어오면 자동 렌더 */
+  .tbl tbody tr{content-visibility:auto;contain-intrinsic-size:auto 82px;}
   .cmid{text-align:center;white-space:nowrap;}.cnum{text-align:right;white-space:nowrap;}
   .thumb{width:78px;height:62px;border-radius:6px;object-fit:cover;background:var(--label);flex:0 0 78px;}
   .ph{width:78px;height:62px;border-radius:6px;background:var(--label);display:flex;align-items:center;justify-content:center;color:#aab4c8;font-size:20px;flex:0 0 78px;}
