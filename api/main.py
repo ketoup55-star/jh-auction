@@ -100,6 +100,31 @@ async def _http_mw(request, call_next):
     return response
 
 
+@app.post("/client_perf")
+async def client_perf(request: Request):
+    """클라이언트(사용자 실브라우저) 버벅 텔레메트리 → slow_requests(host='client')에 기록.
+    서버는 포그라운드 이벤트루프 랙/롱태스크를 못 봐서, 실브라우저에서 측정해 원격 수집(재발방지 클라 확장).
+    자동화 브라우저는 occluded(hidden)라 스로틀돼 측정 불가 → 실사용자 포그라운드만이 진짜 버벅을 준다."""
+    try:
+        p = await request.json()
+    except Exception:
+        p = {}
+    def _w():
+        try:
+            q = ("worst=%s 150+%s 100+%s 50+%s ltmax=%s rows=%s imgs=%s dom=%s cpu=%s mem=%sGB view=%s %ss ua=%s"
+                 % (p.get('worst', 0), p.get('o150', 0), p.get('o100', 0), p.get('o50', 0), p.get('ltmax', 0),
+                    p.get('rows', 0), p.get('imgs', 0), p.get('dom', 0), p.get('cpu', 0), p.get('mem', 0),
+                    p.get('view', ''), p.get('secs', 0), str(p.get('ua', ''))[:40]))
+            httpx.post(auction_db.url + "/rest/v1/slow_requests",
+                       headers={**auction_db._h, "Content-Type": "application/json", "Prefer": "return=minimal"},
+                       json={"method": "CLIENT", "path": "/__client_jank__", "query": q[:300],
+                             "duration_ms": int(p.get('worst', 0) or 0), "status": 200, "host": "client"}, timeout=5)
+        except Exception:
+            pass
+    threading.Thread(target=_w, daemon=True).start()
+    return {"ok": True}
+
+
 store = ListingStore(":memory:")
 
 _ROOT = os.path.dirname(os.path.dirname(__file__))

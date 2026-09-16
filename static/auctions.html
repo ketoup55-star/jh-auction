@@ -1671,5 +1671,32 @@ async function aibotSend(){
 }
 </script>
 <script src="/static/profile_setup.js"></script>
+<script>
+/* 🔴클라이언트 버벅 텔레메트리 — 사용자 실브라우저(포그라운드)의 이벤트루프 랙/롱태스크를 측정해
+   서버(/client_perf → slow_requests host='client')에 자동 기록. 서버·자동화브라우저(occluded)는
+   포그라운드 렌더 부하를 못 봐서, 실사용자 브라우저만이 진짜 버벅을 준다. 진단 완료 후 제거. */
+(function(){
+  try{
+    var J={worst:0,o150:0,o100:0,o50:0,ltmax:0,t0:Date.now()};
+    var last=performance.now();
+    setInterval(function(){ var n=performance.now(), lag=Math.round(n-last-50); last=n;
+      if(lag>50){ J.o50++; if(lag>100)J.o100++; if(lag>150)J.o150++; if(lag>J.worst)J.worst=lag; } },50);
+    try{ new PerformanceObserver(function(l){ l.getEntries().forEach(function(e){ if(e.duration>J.ltmax)J.ltmax=Math.round(e.duration); }); }).observe({entryTypes:['longtask']}); }catch(e){}
+    function payload(){ var rows=document.querySelectorAll('tbody tr').length;
+      return { worst:J.worst,o150:J.o150,o100:J.o100,o50:J.o50,ltmax:J.ltmax,
+        rows:rows, imgs:document.querySelectorAll('img').length, dom:document.querySelectorAll('*').length,
+        cpu:navigator.hardwareConcurrency||0, mem:navigator.deviceMemory||0,
+        view:(rows>0?'table':'card'), ua:(navigator.userAgent.match(/Chrome\/[\d.]+/)||[''])[0],
+        secs:Math.round((Date.now()-J.t0)/1000) }; }
+    function send(beacon){ try{ var b=JSON.stringify(payload());
+      if(beacon && navigator.sendBeacon){ navigator.sendBeacon('/client_perf', new Blob([b],{type:'application/json'})); }
+      else{ fetch('/client_perf',{method:'POST',headers:{'Content-Type':'application/json'},body:b,keepalive:true}).catch(function(){}); }
+    }catch(e){} }
+    setInterval(function(){ send(false); }, 20000);   // 20초마다 세션 누적 최악값 전송
+    document.addEventListener('visibilitychange', function(){ if(document.hidden) send(true); });
+    window.addEventListener('pagehide', function(){ send(true); });
+  }catch(e){}
+})();
+</script>
 </body>
 </html>
