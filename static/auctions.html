@@ -1230,7 +1230,14 @@ function _applyAptSortNow(){
   if(SRV_SORTED.indexOf(k1)>=0 || SRV_SORTED.indexOf(k2)>=0) return;
   const rows=[...tbody.children];
   const idx=tr=>+(tr.dataset.idx||0);
-  if(!k1 && !k2){ rows.sort((a,b)=>idx(a)-idx(b)); rows.forEach(r=>tbody.appendChild(r)); return; }
+  if(!k1 && !k2){
+    // 🔴검색 렉 실측근거: 정렬 미선택(기본)이면 행은 이미 서버순서라, enrich(시세·판정·유사거래)가 채울 때마다
+    //  전 행 재append(실측 30ms)는 순서 안 바뀌는 순수 낭비였다 → 한 검색에 30ms×수십회 헛리플로우로 버벅.
+    //  이미 순서대로면 건너뛴다(정렬 클리어 등으로 흐트러진 경우만 재정렬).
+    let ordered=true; for(let i=1;i<rows.length;i++){ if(idx(rows[i])<idx(rows[i-1])){ ordered=false; break; } }
+    if(!ordered){ rows.sort((a,b)=>idx(a)-idx(b)); rows.forEach(r=>tbody.appendChild(r)); }
+    return;
+  }
   rows.sort((a,b)=>{
     let c=_aptCmp(k1,a,b); if(c) return c;            // 1차 정렬
     c=_aptCmp(k2,a,b); if(c) return c;                // 2차 정렬(동점 시)
@@ -1569,7 +1576,8 @@ loadRegions().then(()=>{ applyUrl(); restorePageSize();
   </div>
 </div>
 <style>
-#aibot-btn{position:fixed;right:22px;bottom:22px;width:60px;height:60px;border-radius:50%;background:#1a73e8;color:#fff;border:none;font-size:22px;font-weight:800;letter-spacing:1px;cursor:pointer;box-shadow:0 6px 20px -4px rgba(26,115,232,.6);z-index:9998;display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:aibotTilt 4.5s ease-in-out infinite,aibotGlow 2.2s ease-in-out infinite;transform-origin:center bottom;}
+#aibot-btn{position:fixed;right:22px;bottom:22px;width:60px;height:60px;border-radius:50%;background:#1a73e8;color:#fff;border:none;font-size:22px;font-weight:800;letter-spacing:1px;cursor:pointer;box-shadow:0 6px 20px -4px rgba(26,115,232,.6);z-index:9998;display:flex;align-items:center;justify-content:center;transition:transform .15s;animation:aibotTilt 4.5s ease-in-out infinite;transform-origin:center bottom;}
+/* 🔴마우스 버벅 실측근거: box-shadow는 compositor 불가라 aibotGlow(무한 box-shadow 애니)가 매 프레임 메인스레드 페인트를 유발(상시). 상시 애니에서 제거하고 정적 그림자만 유지 → 마우스 이동 중 페인트 부하 제거. 틸트(transform)는 compositor라 유지 */
 @keyframes aibotTilt{0%,84%,100%{transform:rotate(0)}88%{transform:rotate(-13deg)}92%{transform:rotate(13deg)}96%{transform:rotate(-6deg)}}
 @keyframes aibotJump{0%,100%{transform:translateY(0)}45%{transform:translateY(-16px)}}
 @keyframes aibotGlow{0%,100%{box-shadow:0 4px 13px -2px rgba(26,115,232,.5),0 0 10px 1px rgba(26,115,232,.35)}50%{box-shadow:0 4px 17px -2px rgba(26,115,232,.62),0 0 23px 5px rgba(26,115,232,.62)}}
