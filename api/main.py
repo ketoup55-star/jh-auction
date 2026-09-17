@@ -4353,6 +4353,14 @@ def _col_enrich_sync() -> None:
                   AND (it.area IS NULL OR (l.area_excl IS NOT NULL AND abs(l.area_excl-it.area)<=3))
              GROUP BY it.item_key
            ) sub WHERE i.item_key=sub.item_key AND i.kb_count IS DISTINCT FROM sub.cnt""",
+        # 수요배지(양호/보통/검토) — aptdemand: 캐시(유효 demand_v2·available) → items.apt_demand 컬럼(변경분만).
+        #  🔴근본원인 차단: 이 컬럼이 없어서 목록 enrich(fillAptDemand)가 매 검색 compute=1(실측 0.45초/건 지오계산,
+        #  미캐시 최대 80건)을 클라우드 2vCPU에 던져 포화 → "필터 하나만 걸어도 느림"이었다. est_price와 동일하게 컬럼화해
+        #  검색경로에서 온-패스 compute를 근본제거(워머가 캐시 채우면 여기서 자동 컬럼반영 → 목록 1쿼리 즉시표시).
+        """UPDATE items i SET apt_demand=(c.data->>'demand')
+            FROM api_cache c WHERE c.cache_key='aptdemand:'||i.item_key
+              AND c.data->>'_sv'='demand_v2' AND (c.data->>'available')='true'
+              AND i.apt_demand IS DISTINCT FROM (c.data->>'demand')""",
         # ⛔[2026-07-21 제거] '매각 30일 경과 analysis 캐시 삭제'(용량관리)를 뺐다. 다시 넣지 말 것.
         #  넣었던 근거는 "risk_level은 buy_grade 컬럼에 이미 반영되니 캐시는 지워도 안전"이었으나 **틀렸다**:
         #  _grade_buckets(force=True)는 매 재계산마다 _sync_buy_grade로 컬럼을 전량 덮어쓰고(실측 117,198건),

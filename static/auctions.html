@@ -1048,22 +1048,20 @@ async function fillKbCounts(attempt){
     setTimeout(()=>fillKbCounts(attempt+1), 1500);
   }
 }
-// 아파트 행: 수요 판정(물건단지 12개월 월평균 거래 vs 법정동 단지당 월평균) 배지.
-//  캐시(aptdemand:) 즉시 → 미캐시만 compute(무거운 법정동조회 → 20개씩 순차, 서버 과부하 방지). 워머가 대부분 미리 채움.
+// 아파트/오피스텔 행: 수요 판정(물건단지 12개월 월평균 거래 vs 법정동 단지당 월평균) 배지.
+//  🔴컬럼화(items.apt_demand): prefillFromResponse가 응답 컬럼값으로 즉시 표시한다. 여기선 '컬럼 동기화 지연분'만
+//  캐시(compute 없음)로 보완 — 서버 계산 0. 과거엔 미캐시를 compute=1(실측 0.45초/건 지오계산·최대 80건)로
+//  검색경로에서 돌려 클라우드 2vCPU를 포화시킨 게 "검색·필터 느림"의 근본원인이었다 → 온-패스 compute 완전제거.
+//  미캐시(컬럼 NULL)는 배지 없이 두고, 백그라운드 워머가 채우면 다음 검색부터 컬럼으로 즉시 표시된다.
 async function fillAptDemand(){
   const els=[...document.querySelectorAll('.demchip[data-key]')].filter(e=>!e.dataset.done);
   if(!els.length) return;
   const setD=(k,v)=>{ document.querySelectorAll('.demchip[data-key="'+k+'"]').forEach(e=>{ e.dataset.done="1"; if(v){ e.textContent="수요 "+v; e.classList.add("dem-"+({"양호":"good","보통":"mid","검토":"rev"}[v]||"mid")); } }); };
   const keys=[...new Set(els.map(e=>e.dataset.key))];
   try{
-    const d=await (await fetch("/auction/apt_demands?keys="+encodeURIComponent(keys.join(",")))).json();
-    const dm=d.demands||{}, miss=[];
-    keys.forEach(k=>{ if(dm[k]) setD(k,dm[k]); else miss.push(k); });   // 캐시 히트 즉시
-    for(let i=0;i<miss.length && i<80;i+=20){                          // 미캐시는 20개씩 순차 compute(최대 80개/1회, 나머지는 워머·다음조회)
-      const chunk=miss.slice(i,i+20);
-      try{ const d2=await (await fetch("/auction/apt_demands?compute=1&keys="+encodeURIComponent(chunk.join(",")))).json();
-        const dm2=d2.demands||{}; chunk.forEach(k=>setD(k, dm2[k])); }catch(e){}
-    }
+    const d=await (await fetch("/auction/apt_demands?keys="+encodeURIComponent(keys.join(",")))).json();   // compute 없음 = 캐시(demand_v2)만 읽음(서버 부하 0)
+    const dm=d.demands||{};
+    keys.forEach(k=>{ if(dm[k]) setD(k,dm[k]); });   // 컬럼엔 아직 없지만 캐시엔 있는 것만 보완(계산 안 함)
   }catch(e){}
 }
 // 매수판정 필터(AI 위험도 기반): 매수양호/매수검토/매수금지 드롭다운
@@ -1323,6 +1321,13 @@ function prefillFromResponse(list){
     const L=m[el.dataset.key]; if(!L||L.kb_count==null) return;
     el.dataset.done="1";
     if(L.kb_count>0) el.innerHTML=`<span class="kbcnt" data-tip="KB부동산에 호가로 올라온 동일평형(전용±3㎡) 매매 매물 수">호가 ${L.kb_count}건</span>`;
+  });
+  // ⑤ 수요배지(양호/보통/검토) → .demchip (컬럼화 — 응답 apt_demand 컬럼으로 즉시표시. 🔴검색경로 apt_demands?compute=1(지오계산 0.45초/건) 근본제거)
+  document.querySelectorAll('.demchip[data-key]').forEach(el=>{
+    const L=m[el.dataset.key]; if(!L||!L.demand) return;
+    el.dataset.done="1";
+    el.textContent="수요 "+L.demand;
+    el.classList.add("dem-"+({"양호":"good","보통":"mid","검토":"rev"}[L.demand]||"mid"));
   });
   applyAptSort();
 }
