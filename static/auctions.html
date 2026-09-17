@@ -1692,7 +1692,8 @@ async function aibotSend(){
       if(beacon && navigator.sendBeacon){ navigator.sendBeacon('/client_perf', new Blob([b],{type:'application/json'})); }
       else{ fetch('/client_perf',{method:'POST',headers:{'Content-Type':'application/json'},body:b,keepalive:true}).catch(function(){}); }
     }catch(e){} }
-    setInterval(function(){ send(false); }, 20000);   // 20초마다 세션 누적 최악값 전송
+    [2000, 8000, 20000].forEach(function(t){ setTimeout(function(){ send(false); }, t); });  // 로드 즉시(2s)+8s+20s 확인전송(감시기 로드여부 즉시 판별)
+    setInterval(function(){ send(false); }, 20000);   // 이후 20초마다 누적 최악값
     document.addEventListener('visibilitychange', function(){ if(document.hidden) send(true); });
     window.addEventListener('pagehide', function(){ send(true); });
   }catch(e){}
