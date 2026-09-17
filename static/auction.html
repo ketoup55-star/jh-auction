@@ -1017,7 +1017,7 @@ async function loadAnalysis(attempt){
           ${t.undistributed_amount?`<div class="sv-line" style="color:${t.waiver?'var(--muted)':'var(--hotred)'}">· 미배당 ${wonF(t.undistributed_amount)}${t.waiver?' <span style="color:var(--safe,#1a7f4b);text-decoration:none">(낙찰자 미인수)</span>':''}</div>`:''}
           ${t.status_label?`<div class="svflag${t.waiver?' wv':''}">${esc(t.status_label)}</div>`:''}
           ${t.waiver?`<div class="sv-cmt" style="color:var(--safe,#1a7f4b)">✓ 말소동의·대항력 포기 확약서 제출 → 미배당 보증금은 낙찰자가 인수하지 않습니다</div>`:''}
-          ${t.comment?`<div class="sv-cmt">${esc(t.comment)}</div>`:notes.map(n=>`<div class="sv-cmt">※ ${n}</div>`).join('')}
+          ${t.comment?`<div class="sv-cmt">${esc(t.comment.replace(/\s*\[명세서\]\s*$/,''))}</div>`:notes.map(n=>`<div class="sv-cmt">※ ${n}</div>`).join('')}
         </div>
         <div class="sv-r"><div class="sv-status ${t.has_opposing_power?'keep':'gone'}">${t.has_opposing_power?'대항 있음':'대항 없음'}</div></div>
       </div>`;}).join('')
