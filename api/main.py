@@ -6120,7 +6120,7 @@ def _brief_recompute(keys: list, usage_by_key: dict = None, workers: int = 8, ta
                    "started": _tm.time(), "finished": None, "stats": {}})
     stats: dict = {"hh": 0, "nohh": 0, "unavailable": 0, "error": 0}
     try:
-        _purge_briefs(keys)
+        # ★무효화는 배치 직전에 40건씩 — 1만 건을 한꺼번에 비우면 재계산이 닿기 전까지(수 시간) 목록이 빈칸이 된다(실측).
 
         def one(k):
             try:
@@ -6141,6 +6141,7 @@ def _brief_recompute(keys: list, usage_by_key: dict = None, workers: int = 8, ta
             finally:
                 st["done"] += 1
         for i in range(0, len(keys), 40):
+            _purge_briefs(keys[i:i + 40])
             with _cf.ThreadPoolExecutor(max_workers=workers) as ex:
                 list(ex.map(one, keys[i:i + 40]))
             _save_brief_cache()
@@ -6206,7 +6207,7 @@ def require_admin_or_local(request: Request, sid: Optional[str] = Cookie(None)) 
 
 
 @app.post("/admin/brief_recompute")
-def admin_brief_recompute(scope: str = Query("bad", pattern="^(bad|collective|keys)$"), keys: str = "",
+def admin_brief_recompute(scope: str = Query("bad", pattern="^(bad|collective|collective_missing|keys)$"), keys: str = "",
                           limit: int = Query(0, ge=0, le=30000), workers: int = Query(8, ge=1, le=16),
                           _u: dict = Depends(require_admin_or_local)) -> dict:
     """세대수 brief 재계산(로컬 전용·백그라운드): scope=bad(틀린값만)|collective(진행중 집합건물 전부)|keys(직접)."""
@@ -6228,6 +6229,11 @@ def admin_brief_recompute(scope: str = Query("bad", pattern="^(bad|collective|ke
                 q = f"""SELECT i.item_key, i.usage_name FROM api_cache c JOIN items i ON c.cache_key='brief:'||i.item_key
                         WHERE {_COLLECTIVE_SQL} AND (c.data->>'available')='true' AND {_HH_BAD_SQL}
                         ORDER BY i.is_active DESC, c.updated_at"""
+            elif scope == "collective_missing":      # 새 규칙(hh_ok)으로 아직 계산되지 않은 것만(중단된 전량 작업 이어가기)
+                q = f"""SELECT i.item_key, i.usage_name FROM items i LEFT JOIN api_cache c ON c.cache_key='brief:'||i.item_key
+                        WHERE i.is_active AND {_COLLECTIVE_SQL}
+                          AND (c.data IS NULL OR coalesce(c.data->>'hh_ok','') = '')
+                        ORDER BY (i.usage_name ~ '아파트') DESC, (i.usage_name ~ '오피스텔') DESC, i.item_key"""
             else:
                 q = f"""SELECT i.item_key, i.usage_name FROM items i
                         WHERE i.is_active AND {_COLLECTIVE_SQL}
