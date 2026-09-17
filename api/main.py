@@ -6185,8 +6185,16 @@ def _brief_sweep(limit: int = 300) -> None:
         cnt[r] = cnt.get(r, 0) + 1
     print(f"[BRIEF-IMPLAUSIBLE] 세대수 재계산 대상 {len(rows)}건 (bad={cnt.get('bad', 0)} legacy={cnt.get('legacy', 0)} "
           f"stale={cnt.get('stale', 0)})", flush=True)
+    # ★경보: 틀린 값(bad)이 3주기(1시간) 연속 다시 잡히면 원천(API/매칭)이 다시 오염되고 있다는 뜻 — 크게 남긴다.
+    _brief_sweep._bad_streak = (_brief_sweep._bad_streak + 1) if cnt.get("bad") else 0
+    if _brief_sweep._bad_streak >= 3:
+        print(f"[BRIEF-ALERT] 세대수 틀린값이 {_brief_sweep._bad_streak}주기 연속 재발생(bad={cnt.get('bad')}) — "
+              f"/admin/brief_audit 확인·원천 API/매칭 점검 필요", flush=True)
     res = _brief_recompute([r[0] for r in rows], {r[0]: r[1] for r in rows}, tag="sweep")
     print(f"[brief_sweep] 완료 {res.get('stats')}", flush=True)
+
+
+_brief_sweep._bad_streak = 0
 
 
 def require_admin_or_local(request: Request, sid: Optional[str] = Cookie(None)) -> dict:
