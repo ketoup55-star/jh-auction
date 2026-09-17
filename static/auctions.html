@@ -1422,19 +1422,26 @@ async function doSearch(){
     //  이 8개를 검색과 동시에 쏘면 2vCPU 서버가 경합해 목록 fetch가 0.34초→3.2초로 밀린다(브라우저 실측).
     //  연속 검색(용도 전환 등) 시 이전 enrich 타이머를 취소 → 목록 fetch끼리 CPU 경합 제거 → 로딩 급개선.
     if(window._enrichT) clearTimeout(window._enrichT);
-    window._enrichT=setTimeout(async function(){
-      // 🔴각 enrich를 '순차'(await) 실행 — 예전엔 7개를 forEach로 동시 발사해 2vCPU 클라우드가 ~10개 동시요청에
-      //  과부하→무거운 /auction/similar가 502/503→fillSimilar/fillAptBriefs 재시도 스파이럴로 '렉이 안 풀리던' 근본원인.
-      //  순차 실행으로 동시성을 낮춰 과부하·502/503을 차단(값은 그대로 점진적으로 채워짐). 하나가 예외나도 나머지는 계속.
-      for(const fn of [fillAptBriefs,      // 주거용 준공년도·세대수(응답에 없던 미캐시만)
-                       fillEncarAvgs,      // 차량외 엔카 평균시세·차익
-                       fillEstimates,      // 주거용(아파트) 추정시세
-                       fillVillaEstimates, // 빌라/연립/도시형 추정시세(무거움)
-                       fillGrades,         // 주거용 매수판정(양호/검토/금지) 배지
-                       fillKbCounts,       // 아파트 호가 매물(동일평형 KB) 수
-                       fillAptDemand]){    // 아파트 수요 판정(물건단지 vs 법정동 평균 → 양호/보통/검토)
-        try{ await fn(); }catch(e){ console.warn('[enrich]', fn.name, e); }
+    window._enrichT=setTimeout(function(){
+      // 🔴enrich를 '제한 병렬'(동시 3)로 실행 — 순차(await)는 총시간=7종의 합이라 배지(매수판정·시세·예상낙찰·수요)가
+      //  최대 ~17초에 걸쳐 하나씩 채워지던 근본원인(Resource Timing 실측: grades/vexpbid 16.9s·apt_ests 13s = 대기시간의 합).
+      //  서버는 각 요청을 빠르게 처리(slow_requests에 안 걸림). 동시 3으로 제한해 2vCPU 과부하·502/503은 막으면서
+      //  총시간을 '합 → 최대치'로 단축(브라우저 6커넥션 상한과 함께). 하나가 예외나도 나머지는 계속.
+      var fns=[fillAptBriefs,      // 주거용 준공년도·세대수(응답에 없던 미캐시만)
+               fillEncarAvgs,      // 차량외 엔카 평균시세·차익
+               fillEstimates,      // 주거용(아파트) 추정시세
+               fillVillaEstimates, // 빌라/연립/도시형 추정시세(무거움)
+               fillGrades,         // 주거용 매수판정(양호/검토/금지) 배지
+               fillKbCounts,       // 아파트 호가 매물(동일평형 KB) 수
+               fillAptDemand];     // 아파트 수요 판정(물건단지 vs 법정동 평균 → 양호/보통/검토)
+      var CONC=3, idx=0, active=0;
+      function pump(){
+        while(active<CONC && idx<fns.length){
+          var fn=fns[idx++]; active++;
+          Promise.resolve().then(fn).catch(function(e){ console.warn('[enrich]', e); }).then(function(){ active--; pump(); });
+        }
       }
+      pump();
     }, 300);
   }
   // ★물건통계(stats)도 목록 페인트 '후'로 지연 발사 — 목록 fetch가 stats와 2vCPU 경합해 간헐 1초+로 밀리던 근본원인 제거(enrich와 동일 전략)
