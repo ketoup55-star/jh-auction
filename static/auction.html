@@ -800,9 +800,11 @@ async function load(){
           ${(d.schedule||[]).length?`<div class="card"><h2>기일현황</h2><table class="gridtbl">
             <thead><tr><th>회차</th><th>매각기일</th><th>최저매각금액</th><th>결과</th></tr></thead>
             <tbody>
-            ${[...d.schedule].sort((a,b)=>rOrd(a.round)-rOrd(b.round)).map(s=>{
+            ${[...d.schedule].sort((a,b)=>String(a.sell_date||"").slice(0,10).localeCompare(String(b.sell_date||"").slice(0,10))).map(s=>{
+              // 시간순 한 표(2026-09-18 정규화): 매각기일 행은 금액, 그 외 기일(매각결정기일·대금지급기한·배당기일)은 기일종류 텍스트·회차 없음
+              const mpTxt=String(s.min_price||"").trim(), mpNum=/^[0-9,]+(원)?$/.test(mpTxt);
               const main=`<tr><td>${s.round||""}</td><td>${s.sell_date||""}</td>`
-                +`<td class="num">${won(num(s.min_price))}</td><td>${s.result||"-"}</td></tr>`;
+                +`<td class="${mpNum?'num':''}">${mpNum?won(num(mpTxt)):(mpTxt||"-")}</td><td>${s.result||"-"}</td></tr>`;
               if(!s.sale_price) return main;                    // 낙찰 안 된 회차(유찰 등)는 서브행 없음
               const lines=[`낙찰 <b>${won(s.sale_price)}</b>${s.sale_rate?` (${s.sale_rate})`:""}`];
               if(s.bid_count!=null) lines.push(`입찰 ${s.bid_count}명`);
@@ -930,6 +932,7 @@ async function loadAnalysis(attempt){
   const rightsCard=`<div class="svcard">
     <div class="sv-hd">등기사항 / 소멸여부</div>
     ${dt2.reg_view_date?`<div class="sv-row"><span class="lbl" style="color:var(--warn,#c47f00)">건물열람</span><span class="dt">${dt2.reg_view_date}</span></div>`:''}
+    ${(typeof DETAIL!=='undefined'&&DETAIL&&DETAIL.creditor)?`<div class="sv-row"><span class="lbl">신청채권자</span><span class="dt">${esc(DETAIL.creditor)}</span></div>`:''}
     ${(ot && !(d.rights||[]).some(r=>(r.type||'').includes('소유권')))?`<div class="sv-item">
         <div class="sv-l">
           <div class="sv-type">${esc(ot.type)||'소유권'}</div>
@@ -979,7 +982,7 @@ async function loadAnalysis(attempt){
   const ddl=d.dividend_deadline||(DETAIL&&DETAIL.dividend_deadline)||'';
   const tenantCard=`<div class="svcard">
     <div class="sv-hd">임차인 / 대항력여부</div>
-    ${d.baseline?`<div class="sv-row"><span class="lbl" style="color:var(--hotred)">소멸기준일</span><span class="dt">${d.baseline.date}</span></div>`:''}
+    ${d.baseline?`<div class="sv-row"><span class="lbl" style="color:var(--hotred)">소멸기준일</span><span class="dt">${d.baseline.date}${d.baseline.type?` <span style="color:var(--muted)">(${esc(d.baseline.type)})</span>`:''}</span></div>`:''}
     ${ddl?`<div class="sv-row"><span class="lbl" style="color:var(--hotred)">배당종기일</span><span class="dt">${ddl}</span></div>`:''}
     ${d.occupancy?`<div class="sv-row"><span class="lbl">점유관계</span><span class="dt">${d.occupancy}</span></div>`:''}
     ${tenants.length?tenants.map(t=>{
@@ -1018,7 +1021,7 @@ async function loadAnalysis(attempt){
         </div>
         <div class="sv-r"><div class="sv-status ${t.has_opposing_power?'keep':'gone'}">${t.has_opposing_power?'대항 있음':'대항 없음'}</div></div>
       </div>`;}).join('')
-      :`<div class="sv-note">· 현황조사서상 조사된 임차내역이 없습니다.</div>`}
+      :`<div class="sv-note">· 매각물건명세서·현황조사서상 조사된 임차내역이 없습니다.</div>`}
     ${d.deposit_total?`<div class="sv-total"><span>보증금합계</span><b>${wonF(d.deposit_total)}</b></div>`:''}
     ${d.rent_total?`<div class="sv-total"><span>월세합계</span><b>${wonF(d.rent_total)}</b></div>`:''}
     ${d.waiver?`<div class="sv-note" style="color:var(--safe,#1a7f4b);border-top:1px solid var(--line)">✓ 말소동의·대항력 포기 확약서 제출 → 대항력 임차인이라도 미배당 보증금을 낙찰자가 인수하지 않습니다.</div>`

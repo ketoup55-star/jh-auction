@@ -227,6 +227,10 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
                        "is_baseline": bool(x.get("is_baseline"))})
         if x.get("is_baseline") and baseline is None:
             baseline = {"date": x.get("reg_date"), "type": rtype, "holder": x.get("holder") or ""}
+    # 등기 권리행이 없거나 말소기준 표식이 없는 물건(법원 수집분): items.rights_baseline_date(매각물건명세서 '최선순위 설정'로
+    #  statement_fill이 채움)을 말소기준으로 쓴다 — 아래 대항력 보정·화면 '소멸기준일' 표시가 이 값에 의존. (2026-09-18)
+    if baseline is None and it.get("rights_baseline_date"):
+        baseline = {"date": str(it["rights_baseline_date"])[:10], "type": "최선순위 설정(매각물건명세서)", "holder": ""}
     # 등기 목록은 접수일자순으로 정렬 — psycopg 직접쿼리(성능 최적화)엔 ORDER BY가 없어
     #  DB 저장순(갑구/을구 뒤섞임)으로 나와 날짜가 뒤죽박죽이던 것 통일. is_baseline 플래그는 순서 무관.
     rights.sort(key=lambda r: (r.get("date") or "9999-99-99"))

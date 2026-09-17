@@ -1051,7 +1051,7 @@ class SupabaseSource:
             item = self._detail(_it[0])
             _sc = self.query_pg("SELECT round,sell_date,min_price,result,sale_price,sale_rate,"
                                 "bid_count,sale_2nd_price,winner_name FROM auction_schedule "
-                                "WHERE item_key=%s ORDER BY round", (item_key,)) or []
+                                "WHERE item_key=%s ORDER BY left(sell_date,10), id", (item_key,)) or []   # 시간순(회차 라벨 순 아님 — 2026-09-18 기일현황 정규화)
             for s in _sc:
                 if s.get("winner_name"):
                     s["winner_name"] = self._name(s["winner_name"])
@@ -1069,7 +1069,7 @@ class SupabaseSource:
             f_sched = _ex.submit(self._get, "auction_schedule",
                                  {"select": ("round,sell_date,min_price,result,"
                                              "sale_price,sale_rate,bid_count,sale_2nd_price,winner_name"),
-                                  "item_key": f"eq.{item_key}", "order": "round.asc"})
+                                  "item_key": f"eq.{item_key}", "order": "sell_date.asc,id.asc"})
             f_media = _ex.submit(self._get, "media",
                                  {"select": "kind,seq,r2_key,content_type",
                                   "item_key": f"eq.{item_key}", "order": "kind.asc,seq.asc"})

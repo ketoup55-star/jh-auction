@@ -4566,6 +4566,14 @@ def _col_sync_loop() -> None:
             _apt_detail_sync()             # ★목록≠상세 자동 동기(미캐시 계산 경로가 상세를 안 건드려 생기는 어긋남)
         except Exception:
             pass
+        try:
+            _schedule_sweep()              # ★기일현황 정규형 유지(크롤러가 덮어쓴 행·법원 신규 행 → 스피드옥션 양식+회차규칙으로) — 2026-09-18
+        except Exception as _e:
+            print(f"[sched_sweep] skip: {str(_e)[:80]}", flush=True)
+        try:
+            _statement_sweep()             # ★명세서→임차인 채우기 유지(새 법원 수집분도 20분 안에 권리분석 반영) — 2026-09-18
+        except Exception as _e:
+            print(f"[stmt_sweep] skip: {str(_e)[:80]}", flush=True)
         _t.sleep(1200)          # 20분마다 변경분 동기화
 
 
@@ -6370,6 +6378,531 @@ def admin_apt_detail_refresh(scope: str = Query("differ", pattern="^(differ|keys
         _refresh_apt_detail(k, "아파트")
         done += 1
     return {"n": len(ks), "done": done}
+
+
+# ── 기일현황(auction_schedule) 정규화 — 스피드옥션 양식 + 주인님 회차 규칙(2026-09-18) ──────────────────
+#   규칙·파서·정규화 로직은 auction_analysis/schedule_norm.py. 여기는 DB 읽기/쓰기·대량 실행·20분 스윕·관리 API.
+#   원천 = 법원 '기일내역문서'(media, R2 HTML) 우선, 없으면 기존 행 재정규화. 결과가 기존과 같으면 쓰지 않는다.
+#   재발방지(유지 장치): _schedule_sweep()이 20분 루프에서 '정규형이 아닌 행'(법원 크롤러의 숫자만 최저가·회차 라벨
+#   불일치·매각결정기일 결과없음 등)을 SQL로 찾아 다시 정규화 → 크롤러(스피드옥션 replace_schedule·법원 insert)가
+#   나중에 덮어써도 20분 안에 되돌아온다.
+from auction_analysis import schedule_norm as _schn   # noqa: E402
+
+_sched_norm: dict = {"running": False, "tag": "", "total": 0, "done": 0, "changed": 0, "doc": 0, "nodoc": 0,
+                     "same": 0, "empty": 0, "err": 0, "started": None, "finished": None, "last_err": ""}
+_SCHED_COLS = ("id", "round", "sell_date", "min_price", "result", "sale_price", "sale_rate", "bid_count",
+               "sale_2nd_price", "winner_name")
+_SCHED_SEL = ("SELECT " + ",".join(_SCHED_COLS) + " FROM auction_schedule WHERE item_key=%s ORDER BY id")
+# 정규형이 아닌 행 탐지(정규화가 절대 만들지 않는 모양만 — 같은 물건을 매번 다시 잡는 공회전 방지)
+_SCHED_NONCANON_SQL = r"""
+WITH s AS (
+  SELECT s.id, s.item_key, coalesce(s.round,'') rnd, coalesce(s.sell_date,'') sd, coalesce(s.min_price,'') mp, coalesce(s.result,'') res
+    FROM auction_schedule s JOIN items i ON i.item_key=s.item_key WHERE i.is_active {extra}
+), flag AS (
+  SELECT item_key,
+         bool_or(mp ~ '^[0-9]+$')                                   AS digits_only,   -- 법원 크롤러 insert(원 표기 없음)
+         bool_or(mp = '' AND rnd = '')                              AS blank_row,     -- 금액도 기일종류도 없음
+         bool_or(mp ~ '기일|기한' AND rnd <> '')                     AS round_on_nonsale,
+         bool_or(mp ~ '^[0-9,]+원$' AND rnd = '')                   AS sale_no_round,
+         bool_or(mp ~ '^매각결정기일' AND res = '')                   AS decision_no_result,
+         bool_or(sd !~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$')           AS bad_date,
+         -- 정규화가 원문 그대로 두는 결과('차순위매각허가결정' 등)는 잡지 않는다. 잡는 것 = 정규화가 바꾸는 법원 원문(최고가매각허가결정→허가,
+         --  …취소결정→허가취소)·HTML 조각·괄호 금액·앞뒤 공백 (실측 J05|2025|20385|1: '차순위매각허가결정'을 계속 잡던 공회전 수정)
+         bool_or(res ~ '^(최고가)?매각허가결정$|취소결정|<|\(.*원\)|^\s|\s$')   AS raw_result
+    FROM s GROUP BY item_key
+), sale AS (   -- 매각기일(금액 있는 행)만, 날짜순. 회차 = 금액이 떨어질 때만 +1, 금액이 오르면(재감정·새 주기) 신건부터 다시
+               -- 같은 날짜·같은 회차칸으로 병합된 행('810,000,000원 / 890,000,000원')은 앞 금액으로(정규화의 회차 계산과 동일)
+  SELECT item_key, id, rnd, sd, regexp_replace(substring(mp from '([0-9][0-9,]*)\s*원?\s*$'),',','','g')::numeric d
+    FROM s WHERE (mp ~ '^[0-9,]+원' OR mp ~ '^[0-9]+$') AND coalesce(substring(mp from '([0-9][0-9,]*)\s*원?\s*$'),'') ~ '[0-9]'
+), lagged AS (
+  SELECT *, lag(d) OVER (PARTITION BY item_key ORDER BY sd, id) prev FROM sale
+), seg AS (
+  SELECT *, sum(CASE WHEN prev IS NOT NULL AND d > prev THEN 1 ELSE 0 END) OVER (PARTITION BY item_key ORDER BY sd, id ROWS UNBOUNDED PRECEDING) sg
+    FROM lagged
+), num AS (
+  SELECT item_key, rnd,
+         1 + sum(CASE WHEN prev IS NOT NULL AND d < prev THEN 1 ELSE 0 END) OVER (PARTITION BY item_key, sg ORDER BY sd, id ROWS UNBOUNDED PRECEDING) n
+    FROM seg
+), rn_bad AS (
+  SELECT DISTINCT item_key FROM num WHERE rnd <> (CASE WHEN n <= 1 THEN '신건' ELSE n||'차' END)
+)
+SELECT f.item_key,
+       concat_ws(',', CASE WHEN digits_only THEN 'digits' END, CASE WHEN blank_row THEN 'blank' END,
+                      CASE WHEN round_on_nonsale THEN 'round_nonsale' END, CASE WHEN sale_no_round THEN 'sale_noround' END,
+                      CASE WHEN decision_no_result THEN 'decision_noresult' END, CASE WHEN bad_date THEN 'date' END,
+                      CASE WHEN raw_result THEN 'result' END, CASE WHEN b.item_key IS NOT NULL THEN 'round_label' END) reasons
+  FROM flag f LEFT JOIN rn_bad b ON b.item_key = f.item_key
+ WHERE digits_only OR blank_row OR round_on_nonsale OR sale_no_round OR decision_no_result OR bad_date OR raw_result
+    OR b.item_key IS NOT NULL
+"""
+
+
+def _sched_doc_rows(c, item_key: str):
+    """법원 기일내역문서(HTML, R2) → (이 물건번호의 기일 행 목록, 다물건 여부). 문서 없음 → None. 문서는 있는데 행 0 → ([], multi)."""
+    r = c.execute("SELECT r2_key FROM media WHERE item_key=%s AND kind='기일내역문서' AND r2_key IS NOT NULL "
+                  "ORDER BY seq LIMIT 1", (item_key,)).fetchone()
+    if not r or not auction_db.r2:
+        return None
+    url = f"{auction_db.r2}/{r[0]}"
+    last = None
+    for _ in range(3):
+        try:
+            resp = httpx.get(url, timeout=20, follow_redirects=True)
+            if resp.status_code == 404:
+                return None
+            if resp.status_code == 200 and resp.text:
+                allobj = _schn.parse_court_schedule_all(resp.text)
+                return allobj.get(item_key.split("|")[-1].strip(), []), len(allobj) > 1
+            last = f"http {resp.status_code}"
+        except Exception as e:
+            last = str(e)[:60]
+    raise RuntimeError(f"기일내역문서 조회 실패: {last}")
+
+
+def _schedule_normalize_item(c, item_key: str, use_doc: bool = True) -> str:
+    """한 물건의 기일현황을 정규화해 DB에 반영. 반환: same|changed|nodoc-changed|empty|error:…
+    (문서 행이 있으면 문서 기준, 없으면 기존 행만 재정규화. 결과가 기존과 같으면 쓰지 않음.)"""
+    existing = [dict(zip(_SCHED_COLS, r)) for r in c.execute(_SCHED_SEL, (item_key,)).fetchall()]
+    doc, multi = None, False
+    try:
+        if use_doc:
+            got = _sched_doc_rows(c, item_key)
+            if got is not None:
+                doc, multi = got
+    except Exception as e:
+        _sched_norm["last_err"] = f"{item_key}: {str(e)[:80]}"
+        return "error:doc"
+    if not doc and not existing:
+        return "empty"
+    rows = _schn.canonical_rows(doc or None, existing, doc_multi=multi)
+    if not rows:
+        return "empty"                      # 정규화 결과 0행이면 기존 행을 지우지 않는다(안전)
+    if _schn.rows_equal(existing, rows):
+        return "same"
+    with c.transaction():
+        c.execute("SET LOCAL lock_timeout = '5s'")
+        c.execute("DELETE FROM auction_schedule WHERE item_key=%s", (item_key,))
+        c.cursor().executemany(
+            "INSERT INTO auction_schedule(item_key,round,sell_date,min_price,result,sale_price,sale_rate,bid_count,"
+            "sale_2nd_price,winner_name) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+            [(item_key, r["round"], r["sell_date"], r["min_price"], r["result"], r["sale_price"], r["sale_rate"],
+              r["bid_count"], r["sale_2nd_price"], r["winner_name"]) for r in rows])
+    return "changed" if doc else "nodoc-changed"
+
+
+def _schedule_normalize_bulk(keys: list, workers: int = 6, tag: str = "bulk") -> dict:
+    """여러 물건 정규화(스레드별 DB 연결). 진행 상태는 _sched_norm."""
+    import time as _t
+    import psycopg
+    if _sched_norm["running"]:
+        return {"started": False, "reason": "이미 실행 중"}
+    _sched_norm.update({"running": True, "tag": tag, "total": len(keys), "done": 0, "changed": 0, "doc": 0, "nodoc": 0,
+                        "same": 0, "empty": 0, "err": 0, "started": _t.strftime("%Y-%m-%d %H:%M:%S"), "finished": None,
+                        "last_err": ""})
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    lock = threading.Lock()
+    idx = {"i": 0}
+
+    def _worker():
+        try:
+            with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+                while True:
+                    with lock:
+                        i = idx["i"]
+                        idx["i"] += 1
+                    if i >= len(keys):
+                        return
+                    k = keys[i]
+                    try:
+                        st = _schedule_normalize_item(c, k)
+                    except Exception as e:
+                        st = "error"
+                        _sched_norm["last_err"] = f"{k}: {str(e)[:80]}"
+                    with lock:
+                        _sched_norm["done"] += 1
+                        if st == "changed":
+                            _sched_norm["changed"] += 1
+                            _sched_norm["doc"] += 1
+                        elif st == "nodoc-changed":
+                            _sched_norm["changed"] += 1
+                            _sched_norm["nodoc"] += 1
+                        elif st == "same":
+                            _sched_norm["same"] += 1
+                        elif st == "empty":
+                            _sched_norm["empty"] += 1
+                        else:
+                            _sched_norm["err"] += 1
+                        if _sched_norm["done"] % 500 == 0:
+                            print(f"[sched_norm:{tag}] {_sched_norm['done']}/{len(keys)} changed={_sched_norm['changed']} "
+                                  f"err={_sched_norm['err']}", flush=True)
+        except Exception as e:
+            _sched_norm["last_err"] = f"worker: {str(e)[:80]}"
+
+    try:
+        ths = [threading.Thread(target=_worker, daemon=True) for _ in range(max(1, workers))]
+        for t in ths:
+            t.start()
+        for t in ths:
+            t.join()
+    finally:
+        _sched_norm["running"] = False
+        _sched_norm["finished"] = _t.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[sched_norm:{tag}] 완료 {_sched_norm['done']}/{len(keys)} changed={_sched_norm['changed']} "
+          f"(doc={_sched_norm['doc']} nodoc={_sched_norm['nodoc']}) same={_sched_norm['same']} empty={_sched_norm['empty']} "
+          f"err={_sched_norm['err']}", flush=True)
+    return {"started": True, "n": len(keys)}
+
+
+def _schedule_noncanon_keys(c, limit: int = 0, extra: str = "") -> list:
+    q = _SCHED_NONCANON_SQL.format(extra=extra) + (" LIMIT %s" % int(limit) if limit else "")
+    return [(r[0], r[1]) for r in c.execute(q).fetchall()]
+
+
+def _schedule_sweep(limit: int = 300) -> int:
+    """20분 주기 유지 장치(로컬 전용): 진행중 물건 중 정규형이 아닌 기일현황을 찾아 다시 정규화. 처리 건수 반환."""
+    if _IS_CLOUD or _sched_norm["running"]:
+        return 0
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return 0
+    try:
+        import psycopg
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            c.execute("SET statement_timeout = '120s'")
+            found = _schedule_noncanon_keys(c, limit)
+    except Exception as e:
+        print(f"[sched_sweep] 조회 실패: {str(e)[:80]}", flush=True)
+        return 0
+    if not found:
+        return 0
+    cnt: dict = {}
+    for _, reasons in found:
+        for rs in (reasons or "").split(","):
+            if rs:
+                cnt[rs] = cnt.get(rs, 0) + 1
+    print(f"[SCHED-NONCANON] 기일현황 재정규화 대상 {len(found)}건 {cnt}", flush=True)
+    _schedule_normalize_bulk([k for k, _ in found], workers=4, tag="sweep")
+    # 경보: 같은 물건이 계속 다시 잡히면(정규화해도 SQL이 계속 잡음) 탐지 조건·정규화 규칙이 어긋난 것 → 크게 남긴다
+    _schedule_sweep._streak = (_schedule_sweep._streak + 1) if _sched_norm["same"] >= max(3, len(found) // 2) else 0
+    if _schedule_sweep._streak >= 3:
+        print(f"[SCHED-ALERT] 정규화해도 다시 잡히는 기일현황 {_sched_norm['same']}건이 {_schedule_sweep._streak}주기 연속 — "
+              f"/admin/schedule_audit 확인 필요", flush=True)
+    return len(found)
+
+
+_schedule_sweep._streak = 0
+
+
+@app.post("/admin/schedule_normalize")
+def admin_schedule_normalize(scope: str = Query("noncanon", pattern="^(noncanon|active|keys)$"), keys: str = "",
+                             limit: int = Query(0, ge=0, le=50000), workers: int = Query(6, ge=1, le=12),
+                             _u: dict = Depends(require_admin_or_local)) -> dict:
+    """기일현황 정규화(로컬 전용·백그라운드). scope=noncanon(정규형 아닌 진행중 물건)|active(진행중 전부)|keys(직접)."""
+    if _IS_CLOUD:
+        raise HTTPException(400, "클라우드는 계산하지 않습니다(로컬 4011에서 실행).")
+    if _sched_norm["running"]:
+        return {"started": False, "reason": "이미 실행 중", "tag": _sched_norm["tag"], "total": _sched_norm["total"],
+                "done": _sched_norm["done"]}
+    import psycopg
+    with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+        c.execute("SET statement_timeout = '180s'")
+        if scope == "keys":
+            ks = [k for k in keys.split(",") if k]
+        elif scope == "active":
+            ks = [r[0] for r in c.execute("SELECT i.item_key FROM items i WHERE i.is_active AND EXISTS "
+                                          "(SELECT 1 FROM auction_schedule s WHERE s.item_key=i.item_key) ORDER BY i.item_key").fetchall()]
+        else:
+            ks = [k for k, _ in _schedule_noncanon_keys(c)]
+    if limit:
+        ks = ks[:limit]
+    threading.Thread(target=_schedule_normalize_bulk, args=(ks, workers, scope), daemon=True).start()
+    return {"started": True, "scope": scope, "n": len(ks)}
+
+
+@app.get("/admin/schedule_normalize/status")
+def admin_schedule_normalize_status(_u: dict = Depends(require_admin_or_local)) -> dict:
+    return dict(_sched_norm)
+
+
+@app.get("/admin/schedule_audit")
+def admin_schedule_audit(_u: dict = Depends(require_admin_or_local)) -> dict:
+    """기일현황 정합 감사(검수 항목 고정): 진행중 물건의 정규형 위반 사유별 건수 + 표본 키."""
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        raise HTTPException(500, "SUPABASE_DB_URL 없음")
+    import psycopg
+    out: dict = {}
+    with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+        c.execute("SET statement_timeout = '180s'")
+        found = _schedule_noncanon_keys(c)
+        cnt: dict = {}
+        sample: dict = {}
+        for k, reasons in found:
+            for rs in (reasons or "").split(","):
+                if rs:
+                    cnt[rs] = cnt.get(rs, 0) + 1
+                    sample.setdefault(rs, []).append(k) if len(sample.get(rs, [])) < 5 else None
+        out["noncanon_items"] = len(found)
+        out["by_reason"] = cnt
+        out["samples"] = sample
+        r = c.execute("SELECT count(*) FILTER (WHERE EXISTS (SELECT 1 FROM auction_schedule s WHERE s.item_key=i.item_key)), count(*) "
+                      "FROM items i WHERE i.is_active").fetchone()
+        out["active_with_schedule"] = r[0]
+        out["active"] = r[1]
+    out["normalize"] = dict(_sched_norm)
+    return out
+
+
+# ── 매각물건명세서 → 임차인(item_tenants)·최선순위/배당종기(items)·인수권리(item_rights) 채우기 — 2026-09-18 주인님 지시 ──
+#   판정 로직은 auction_analysis/statement_fill.py. 여기는 PDF 조회·DB 반영·캐시 무효화·재계산·대량 실행·20분 스윕·관리 API.
+#   대상 = 진행중 + 명세서 있음 + 임차인 행 없음 + 처리 표식(api_cache stmt:) 없음. 스피드옥션 크롤러가 나중에 임차인을
+#   채우면(delete+insert) 그 행이 우선이고 우리는 손대지 않는다(행이 있으면 skip).
+from auction_analysis import statement_fill as _stf   # noqa: E402
+
+_stmt_fill: dict = {"running": False, "tag": "", "total": 0, "done": 0, "filled": 0, "no_tenant": 0, "skip": 0, "nodoc": 0,
+                    "noparse": 0, "err": 0, "tenants": 0, "rights_assumed": 0, "unknown_power": 0, "started": None,
+                    "finished": None, "last_err": ""}
+_STMT_TARGET_SQL = """
+SELECT i.item_key FROM items i
+ WHERE i.is_active
+   AND EXISTS (SELECT 1 FROM media m WHERE m.item_key=i.item_key AND m.kind='매각물건명세서' AND m.r2_key IS NOT NULL)
+   AND NOT EXISTS (SELECT 1 FROM item_tenants t WHERE t.item_key=i.item_key)
+   AND NOT EXISTS (SELECT 1 FROM api_cache c WHERE c.cache_key = 'stmt:'||i.item_key)
+ ORDER BY i.item_key"""
+_STMT_PDF_SEM = threading.Semaphore(8)     # PDF 동시 파싱 상한(메모리) — doc_analysis._PDF_SEM과 같은 8(실측 ~50MB/parse → ~400MB)
+
+
+def _statement_fill_item(c, item_key: str, force: bool = False) -> str:
+    """한 물건: 명세서 PDF → item_tenants 채움 + items 보완(NULL만) + 명세서상 인수 권리 + 분석캐시 무효화·재계산.
+    반환: filled|no_tenant|has_tenants|nodoc|noparse|error"""
+    import time as _t
+    r = c.execute("SELECT r2_key FROM media WHERE item_key=%s AND kind='매각물건명세서' AND r2_key IS NOT NULL "
+                  "ORDER BY seq LIMIT 1", (item_key,)).fetchone()
+    if not r or not auction_db.r2:
+        return "nodoc"
+    url = f"{auction_db.r2}/{r[0]}"
+    data, last = None, ""
+    for _ in range(3):
+        try:
+            resp = httpx.get(url, timeout=40, follow_redirects=True)
+            if resp.status_code == 404:
+                return "nodoc"
+            if resp.status_code == 200 and resp.content[:5] == b"%PDF-":
+                data = resp.content
+                break
+            last = f"http {resp.status_code}" if resp.status_code != 200 else "PDF 아님"
+            if last == "PDF 아님":
+                break
+        except Exception as e:
+            last = str(e)[:60]
+    if data is None:
+        if last == "PDF 아님":
+            auction_db.cache_save("stmt:" + item_key, {"v": _stf.STMT_VER, "available": False, "reason": last,
+                                                       "at": _t.strftime("%Y-%m-%d %H:%M:%S")})
+            return "noparse"
+        raise RuntimeError(f"명세서 조회 실패: {last}")
+    with _STMT_PDF_SEM:
+        parsed = _stf.parse_pdf(data)
+    del data
+    built = _stf.build_rows(parsed)
+    if not built.get("available"):
+        auction_db.cache_save("stmt:" + item_key, {"v": _stf.STMT_VER, "available": False, "reason": parsed.get("reason"),
+                                                   "at": _t.strftime("%Y-%m-%d %H:%M:%S")})
+        return "noparse"
+    upd: list = []
+    with c.transaction():
+        c.execute("SET LOCAL lock_timeout = '5s'")
+        if force:
+            c.execute("DELETE FROM item_tenants WHERE item_key=%s AND status LIKE %s", (item_key, "%" + _stf.SRC_TAG))
+        n = c.execute("SELECT count(*) FROM item_tenants WHERE item_key=%s", (item_key,)).fetchone()[0]
+        if n:
+            return "has_tenants"                     # 크롤러(스피드옥션)가 채운 행이 있으면 그 행이 우선 — 손대지 않음
+        for t in built["tenants"]:
+            c.execute("INSERT INTO item_tenants(item_key,seq,name,has_opposing_power,move_in_date,fixed_date,dividend_date,"
+                      "deposit,tenant_right,occupancy,status,assume_amount) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                      (item_key, t["seq"], t["name"], t["has_opposing_power"], t["move_in_date"], t["fixed_date"],
+                       t["dividend_date"], t["deposit"], t["tenant_right"], t["occupancy"], t["status"], t["assume_amount"]))
+        rights = [dict(zip(("id", "right_type", "holder", "status"), x)) for x in
+                  c.execute("SELECT id, right_type, holder, status FROM item_rights WHERE item_key=%s", (item_key,)).fetchall()]
+        upd = _stf.rights_to_assume(rights, built["surviving"], built["tenants"])
+        if upd:
+            # 인수 면제(말소동의·대항력 포기 확약서 / 보증기관 인수조건변경 태그)면 임차권·전세권도 말소 예정 → 등기 '인수' 전환 안 함
+            #  (crawler_analysis가 임차인 인수액을 0으로 면제하는 것과 같은 기준 — 실측 A01|2024|124388|1: 면제인데 등기만 인수라 '위험' 오판)
+            from auction_analysis.crawler_analysis import _detect_waiver
+            _it = c.execute("SELECT tags, detail_text FROM items WHERE item_key=%s", (item_key,)).fetchone()
+            if _it and (("인수조건변경" in (_it[0] or "")) or _detect_waiver(_it[1] or "")):
+                upd = []
+        for x in upd:                                 # 명세서 우선: '소멸되지 아니하는 것'/대항력 임차인의 임차권·전세권 = 인수
+            c.execute("UPDATE item_rights SET status='인수' WHERE id=%s", (x["id"],))
+    if built.get("senior_date") or built.get("deadline"):
+        with _items_backfill_lock:                    # items UPDATE는 다른 백필 루프와 같은 락 아래(교착 방지). 비어 있을 때만 채움
+            c.execute("UPDATE items SET rights_baseline_date=COALESCE(NULLIF(rights_baseline_date,''),%s), "
+                      "dividend_deadline=COALESCE(NULLIF(dividend_deadline,''),%s) WHERE item_key=%s",
+                      (built.get("senior_date"), built.get("deadline"), item_key))
+    # 캐시: 분석 관련만 무효화(brief/apt 등 무관 캐시 보존). 명세서 차임(docrents:)은 이번 파싱값으로 미리 저장 → 재파싱 없음
+    try:
+        auction_db.cache_delete_many(["analysis:" + item_key, "docsummary:" + item_key])
+    except Exception:
+        pass
+    try:
+        from auction_analysis.doc_analysis import evict_item
+        evict_item(item_key)
+    except Exception:
+        pass
+    try:
+        auction_db.cache_save("docrents:" + item_key, {"rents": [{"name": t["name"], "rent": t["rent"], "move_in": t["move_in_date"],
+                                                                  "fixed": t["fixed_date"]} for t in built["tenants"]]})
+    except Exception:
+        pass
+    auction_db.cache_save("stmt:" + item_key, {
+        "v": _stf.STMT_VER, "available": True, "no_tenant": built["no_tenant"], "n_tenants": len(built["tenants"]),
+        "senior_date": built.get("senior_date"), "senior_kind": built.get("senior_kind"), "deadline": built.get("deadline"),
+        "rights_assumed": len(upd), "unknown_power": built.get("unknown_power", 0),
+        "labels": [t["label"] for t in built["tenants"]], "at": _t.strftime("%Y-%m-%d %H:%M:%S")})
+    try:
+        auction_analysis(item_key)                    # analysis: 재계산·저장 + 목록 buy_grade 단조 상향(매수금지 등) 즉시 반영
+    except Exception as e:
+        _stmt_fill["last_err"] = f"{item_key}: analysis {str(e)[:60]}"
+    _stmt_fill["tenants"] += len(built["tenants"])
+    _stmt_fill["rights_assumed"] += len(upd)
+    _stmt_fill["unknown_power"] += built.get("unknown_power", 0)
+    return "no_tenant" if built["no_tenant"] else "filled"
+
+
+def _statement_fill_bulk(keys: list, workers: int = 4, tag: str = "bulk", force: bool = False) -> dict:
+    import time as _t
+    import psycopg
+    if _stmt_fill["running"]:
+        return {"started": False, "reason": "이미 실행 중"}
+    _stmt_fill.update({"running": True, "tag": tag, "total": len(keys), "done": 0, "filled": 0, "no_tenant": 0, "skip": 0,
+                       "nodoc": 0, "noparse": 0, "err": 0, "tenants": 0, "rights_assumed": 0, "unknown_power": 0,
+                       "started": _t.strftime("%Y-%m-%d %H:%M:%S"), "finished": None, "last_err": ""})
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    lock = threading.Lock()
+    idx = {"i": 0}
+
+    def _worker():
+        try:
+            with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+                while True:
+                    with lock:
+                        i = idx["i"]
+                        idx["i"] += 1
+                    if i >= len(keys):
+                        return
+                    k = keys[i]
+                    try:
+                        st = _statement_fill_item(c, k, force=force)
+                    except Exception as e:
+                        st = "error"
+                        _stmt_fill["last_err"] = f"{k}: {str(e)[:80]}"
+                    with lock:
+                        _stmt_fill["done"] += 1
+                        _stmt_fill[{"filled": "filled", "no_tenant": "no_tenant", "has_tenants": "skip", "nodoc": "nodoc",
+                                    "noparse": "noparse"}.get(st, "err")] += 1
+                        if _stmt_fill["done"] % 200 == 0:
+                            print(f"[stmt_fill:{tag}] {_stmt_fill['done']}/{len(keys)} filled={_stmt_fill['filled']} "
+                                  f"no_tenant={_stmt_fill['no_tenant']} err={_stmt_fill['err']}", flush=True)
+        except Exception as e:
+            _stmt_fill["last_err"] = f"worker: {str(e)[:80]}"
+
+    try:
+        ths = [threading.Thread(target=_worker, daemon=True) for _ in range(max(1, workers))]
+        for t in ths:
+            t.start()
+        for t in ths:
+            t.join()
+    finally:
+        _stmt_fill["running"] = False
+        _stmt_fill["finished"] = _t.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[stmt_fill:{tag}] 완료 {_stmt_fill['done']}/{len(keys)} filled={_stmt_fill['filled']} no_tenant={_stmt_fill['no_tenant']} "
+          f"skip={_stmt_fill['skip']} nodoc={_stmt_fill['nodoc']} noparse={_stmt_fill['noparse']} err={_stmt_fill['err']} "
+          f"tenants={_stmt_fill['tenants']} rights_assumed={_stmt_fill['rights_assumed']} unknown_power={_stmt_fill['unknown_power']}",
+          flush=True)
+    return {"started": True, "n": len(keys)}
+
+
+def _statement_sweep(limit: int = 100) -> int:
+    """20분 주기 유지 장치(로컬 전용): 새로 들어온 명세서 있는 물건 중 임차인 행이 없고 미처리인 것을 채운다."""
+    if _IS_CLOUD or _stmt_fill["running"]:
+        return 0
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return 0
+    try:
+        import psycopg
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            c.execute("SET statement_timeout = '120s'")
+            ks = [r[0] for r in c.execute(_STMT_TARGET_SQL + " LIMIT %s", (limit,)).fetchall()]
+    except Exception as e:
+        print(f"[stmt_sweep] 조회 실패: {str(e)[:80]}", flush=True)
+        return 0
+    if not ks:
+        return 0
+    print(f"[STMT-FILL] 명세서→임차인 채우기 대상 {len(ks)}건", flush=True)
+    _statement_fill_bulk(ks, workers=3, tag="sweep")
+    return len(ks)
+
+
+@app.post("/admin/statement_fill")
+def admin_statement_fill(scope: str = Query("missing", pattern="^(missing|keys)$"), keys: str = "",
+                         limit: int = Query(0, ge=0, le=50000), workers: int = Query(4, ge=1, le=12),
+                         force: int = Query(0, ge=0, le=1), _u: dict = Depends(require_admin_or_local)) -> dict:
+    """명세서→임차인 채우기(로컬 전용·백그라운드). scope=missing(대상 전부)|keys(직접). force=1: 우리가 채운 행을 지우고 다시."""
+    if _IS_CLOUD:
+        raise HTTPException(400, "클라우드는 계산하지 않습니다(로컬 4011에서 실행).")
+    if _stmt_fill["running"]:
+        return {"started": False, "reason": "이미 실행 중", "tag": _stmt_fill["tag"], "total": _stmt_fill["total"],
+                "done": _stmt_fill["done"]}
+    if scope == "keys":
+        ks = [k for k in keys.split(",") if k]
+    else:
+        import psycopg
+        with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            c.execute("SET statement_timeout = '180s'")
+            ks = [r[0] for r in c.execute(_STMT_TARGET_SQL).fetchall()]
+    if limit:
+        ks = ks[:limit]
+    threading.Thread(target=_statement_fill_bulk, args=(ks, workers, scope, bool(force)), daemon=True).start()
+    return {"started": True, "scope": scope, "n": len(ks)}
+
+
+@app.get("/admin/statement_fill/status")
+def admin_statement_fill_status(_u: dict = Depends(require_admin_or_local)) -> dict:
+    return dict(_stmt_fill)
+
+
+@app.get("/admin/statement_audit")
+def admin_statement_audit(_u: dict = Depends(require_admin_or_local)) -> dict:
+    """명세서 채우기 감사(검수 항목 고정): 남은 대상·처리 표식 집계·라벨 분포·표식↔행 정합(표식 n_tenants>0인데 행 0 = 불일치)."""
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        raise HTTPException(500, "SUPABASE_DB_URL 없음")
+    import psycopg
+    out: dict = {}
+    with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+        c.execute("SET statement_timeout = '180s'")
+        out["remaining_targets"] = c.execute(f"SELECT count(*) FROM ({_STMT_TARGET_SQL}) t").fetchone()[0]
+        r = c.execute("""
+            SELECT count(*), count(*) FILTER (WHERE (data->>'available')='true' AND (data->>'n_tenants')::int > 0),
+                   count(*) FILTER (WHERE (data->>'no_tenant')='true'), count(*) FILTER (WHERE (data->>'available')='false'),
+                   coalesce(sum((data->>'rights_assumed')::int),0), coalesce(sum((data->>'unknown_power')::int),0),
+                   coalesce(sum((data->>'n_tenants')::int),0)
+              FROM api_cache WHERE cache_key LIKE 'stmt:%'""").fetchone()
+        out["markers"] = {"total": r[0], "with_tenants": r[1], "no_tenant": r[2], "unavailable": r[3],
+                          "rights_assumed": r[4], "unknown_power": r[5], "tenant_rows": r[6]}
+        out["labels"] = {k: v for k, v in c.execute("""
+            SELECT l, count(*) FROM api_cache, jsonb_array_elements_text(coalesce(data->'labels','[]'::jsonb)) l
+             WHERE cache_key LIKE 'stmt:%' GROUP BY l ORDER BY 2 DESC""").fetchall()}
+        out["marker_without_rows"] = c.execute("""
+            SELECT count(*) FROM api_cache a WHERE a.cache_key LIKE 'stmt:%' AND (a.data->>'n_tenants')::int > 0
+               AND NOT EXISTS (SELECT 1 FROM item_tenants t WHERE t.item_key = substr(a.cache_key, 6))""").fetchone()[0]
+        out["filled_rows_total"] = c.execute("SELECT count(*) FROM item_tenants WHERE status LIKE %s", ("%" + _stf.SRC_TAG,)).fetchone()[0]
+        out["filled_without_analysis_cache"] = c.execute("""
+            SELECT count(*) FROM api_cache a WHERE a.cache_key LIKE 'stmt:%' AND (a.data->>'available')='true'
+               AND NOT EXISTS (SELECT 1 FROM api_cache b WHERE b.cache_key = 'analysis:'||substr(a.cache_key, 6))""").fetchone()[0]
+    out["fill"] = dict(_stmt_fill)
+    return out
 
 
 def _compute_similar(item_key: str):

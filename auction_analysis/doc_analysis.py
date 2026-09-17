@@ -272,6 +272,10 @@ def _occupant_key(name: str) -> str:
     m = re.search(r"입주자[:\s]*([가-힣]{2,4})", name)
     if m:
         return m.group(1)
+    # 승계기관 표기 '주택도시보증공사(김현진)' → 김현진 (같은 임대차의 승계인 행을 원임차인과 합침 — 2026-09-18 실측: 따로 두면 인수액 2배)
+    m = re.match(r"^\s*([^()]*?(?:공사|공단|은행|보증|관리원|보험|캐피탈|대부)[^()]*)\(([가-힣]{2,4})\)\s*$", name)
+    if m:
+        return m.group(2)
     name = re.sub(r"^\s*\([^)]*\)\s*", "", name)   # 앞쪽 (201호)/(1층) 등 제거
     name = re.sub(r"\(.*$", "", name)               # 뒤쪽 (별지)/(입주자:..) 등 제거
     return name.strip()
