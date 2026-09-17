@@ -6115,29 +6115,6 @@ def _refresh_apt_detail(item_key: str, usage: str = "아파트") -> None:
         pass
 
 
-@app.post("/admin/apt_detail_refresh")
-def admin_apt_detail_refresh(scope: str = Query("differ", pattern="^(differ|keys)$"), keys: str = "",
-                             _u: dict = Depends(require_admin_or_local)) -> dict:
-    """상세 단지정보(apt: complex_detail)를 brief와 다시 맞춘다(brief 재계산 없이). scope=differ: 목록≠상세·상세 없음인 진행중 아파트."""
-    if scope == "keys":
-        ks = [k for k in keys.split(",") if k]
-    else:
-        import psycopg
-        with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15,
-                             autocommit=True) as c:
-            ks = [r[0] for r in c.execute("""
-                SELECT i.item_key FROM items i JOIN api_cache b ON b.cache_key='brief:'||i.item_key
-                  JOIN api_cache a ON a.cache_key='apt:'||i.item_key
-                 WHERE i.is_active AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
-                   AND (a.data->'complex_detail' IS NULL
-                        OR (b.data->>'households') IS DISTINCT FROM (a.data->'complex_detail'->>'households'))""").fetchall()]
-    done = 0
-    for k in ks:
-        _refresh_apt_detail(k, "아파트")
-        done += 1
-    return {"n": len(ks), "done": done}
-
-
 def _brief_recompute(keys: list, usage_by_key: dict = None, workers: int = 8, tag: str = "",
                      addr_by_key: dict = None) -> dict:
     """무효화 → 재계산(병렬) → 아파트·오피스텔은 상세 단지정보 동기 → items 정렬컬럼 동기. 진행상황은 _brief_recomp."""
@@ -6336,6 +6313,30 @@ def admin_brief_audit(_u: dict = Depends(require_admin_or_local)) -> dict:
     except Exception:
         out["building_api_quota_blocked"] = None
     return out
+
+
+@app.post("/admin/apt_detail_refresh")
+def admin_apt_detail_refresh(scope: str = Query("differ", pattern="^(differ|keys)$"), keys: str = "",
+                             _u: dict = Depends(require_admin_or_local)) -> dict:
+    """상세 단지정보(apt: complex_detail)를 brief와 다시 맞춘다(brief 재계산 없이). scope=differ: 목록≠상세·상세 없음인 진행중 아파트.
+    ⚠️require_admin_or_local 정의 뒤에 있어야 한다(앞에 두면 import 시 NameError로 서버가 기동 실패 — 2026-09-17 실제 사고)."""
+    if scope == "keys":
+        ks = [k for k in keys.split(",") if k]
+    else:
+        import psycopg
+        with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15,
+                             autocommit=True) as c:
+            ks = [r[0] for r in c.execute("""
+                SELECT i.item_key FROM items i JOIN api_cache b ON b.cache_key='brief:'||i.item_key
+                  JOIN api_cache a ON a.cache_key='apt:'||i.item_key
+                 WHERE i.is_active AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
+                   AND (a.data->'complex_detail' IS NULL
+                        OR (b.data->>'households') IS DISTINCT FROM (a.data->'complex_detail'->>'households'))""").fetchall()]
+    done = 0
+    for k in ks:
+        _refresh_apt_detail(k, "아파트")
+        done += 1
+    return {"n": len(ks), "done": done}
 
 
 def _compute_similar(item_key: str):
