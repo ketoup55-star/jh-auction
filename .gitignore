@@ -37,3 +37,7 @@ run_server_*.bat
 _dbg_*.py
 _warmup.py
 kakao_broadcast.json
+
+# K-apt 시군구 단지목록 디스크 캐시(7일)
+kapt_lists.json
+kapt_lists.json.tmp
