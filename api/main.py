@@ -4563,6 +4563,7 @@ def _col_sync_loop() -> None:
                 pass
         try:
             _brief_sweep()                 # ★세대수 타당성 스윕(틀린값·옛캐시·30일 경과 → 재계산) — 2026-09-17 감사 재발방지(락 밖: 내부에서 정렬동기 시 락 취득)
+            _apt_detail_sync()             # ★목록≠상세 자동 동기(미캐시 계산 경로가 상세를 안 건드려 생기는 어긋남)
         except Exception:
             pass
         _t.sleep(1200)          # 20분마다 변경분 동기화
@@ -6217,6 +6218,34 @@ def _brief_sweep(limit: int = 300) -> None:
 
 
 _brief_sweep._bad_streak = 0
+
+
+def _apt_detail_sync(limit: int = 200) -> int:
+    """목록(brief)≠상세(apt: complex_detail)인 진행중 아파트를 다시 맞춘다 — _prewarm_briefs(미캐시 계산)는 상세를 안 건드려
+    시간이 지나면 다시 어긋나므로(실측 35건) 20분 루프에서 같이 돈다. 처리 건수 반환."""
+    if _IS_CLOUD:
+        return 0
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return 0
+    try:
+        import psycopg
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            ks = [r[0] for r in c.execute("""
+                SELECT i.item_key FROM items i JOIN api_cache b ON b.cache_key='brief:'||i.item_key
+                  JOIN api_cache a ON a.cache_key='apt:'||i.item_key
+                 WHERE i.is_active AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
+                   AND (a.data->'complex_detail' IS NULL
+                        OR (b.data->>'households') IS DISTINCT FROM (a.data->'complex_detail'->>'households'))
+                 LIMIT %s""", (limit,)).fetchall()]
+    except Exception as e:
+        print(f"[apt_detail_sync] 조회 실패: {str(e)[:80]}", flush=True)
+        return 0
+    for k in ks:
+        _refresh_apt_detail(k, "아파트")
+    if ks:
+        print(f"[apt_detail_sync] 목록≠상세 아파트 {len(ks)}건 동기", flush=True)
+    return len(ks)
 
 
 def require_admin_or_local(request: Request, sid: Optional[str] = Cookie(None)) -> dict:
