@@ -659,6 +659,13 @@ def _sort_cols_backfill_locked(dburl: str) -> bool:
                   AND i.usage_name ~ '아파트|오피스텔|다세대|연립|도시형|빌라'
                   AND (ac.data->>'available')='true' AND coalesce(ac.data->>'hh_ok','') <> 'true'""")
             n1 += r1c.rowcount
+            # ★brief 행이 아예 없는(무효화·미계산) 진행중 집합건물의 정렬값도 비운다 — 옛 brief 복사본(예: 교대금호어울림 0세대)이
+            #   brief 삭제 뒤에도 items에 남아 '세대수 적은순' 1위로 나오던 실측 사례. 재계산되면 r1b가 다시 채운다.
+            r1d = c.execute("""UPDATE items i SET households = NULL
+                WHERE i.is_active AND i.households IS NOT NULL
+                  AND i.usage_name ~ '아파트|오피스텔|다세대|연립|도시형|빌라'
+                  AND NOT EXISTS (SELECT 1 FROM api_cache ac WHERE ac.cache_key = 'brief:'||i.item_key)""")
+            n1 += r1d.rowcount
             r2 = c.execute("""UPDATE items i SET mileage = vs.mileage_km FROM vehicle_specs vs
                 WHERE vs.item_key = i.item_key AND vs.mileage_km IS NOT NULL AND i.mileage IS NULL""")
             n2 = r2.rowcount
