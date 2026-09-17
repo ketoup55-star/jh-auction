@@ -101,6 +101,8 @@
   .searching .sdots i{width:9px;height:9px;border-radius:50%;background:currentColor;display:inline-block;animation:searchBounce 1s infinite ease-in-out;}
   .searching .sdots i:nth-child(2){animation-delay:.16s;}
   .searching .sdots i:nth-child(3){animation-delay:.32s;}
+  #grid.loading > :not(.searching){opacity:.42;pointer-events:none;transition:opacity .15s;}   /* 검색 중: 이전 목록을 흐리게만(높이 유지 → 스크롤 계속 됨, 2026-09-18) */
+  .searching.floating{position:sticky;top:8px;z-index:5;padding:10px 16px;font-size:16px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 18px rgba(20,40,80,.12);margin:0 auto 8px;width:max-content;}
   @keyframes searchBounce{0%,65%,100%{transform:translateY(0);opacity:.5;}30%{transform:translateY(-11px);opacity:1;}}
   .tbl{width:100%;border-collapse:collapse;min-width:900px;table-layout:fixed;}
   /* ── 모바일 목록 카드(히어로 스타일): PC 숨김, 폰에서만 표시 ── */
@@ -1333,7 +1335,14 @@ function prefillFromResponse(list){
 }
 var _MCPH="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%232b3a52'/%3E%3Cpath d='M50 30 L72 50 L66 50 L66 72 L54 72 L54 58 L46 58 L46 72 L34 72 L34 50 L28 50 Z' fill='%23ffffff' fill-opacity='0.22'/%3E%3C/svg%3E"; window._MCPH=_MCPH;
 async function doSearch(){
-  const _g=document.getElementById("grid"); if(_g) _g.innerHTML='<div class="searching">검색 중<span class="sdots"><i></i><i></i><i></i></span></div>';   // 클릭 즉시 피드백 + 통통 튀는 로딩 애니메이션
+  // ★검색 중에도 이전 목록을 남겨 둔다(흐리게 + 상단 고정 스피너). 예전엔 grid를 스피너 하나로 통째 교체해
+  //  문서 높이가 17,000px→1,375px로 무너졌고(실측), 응답(≈1초)이 올 때까지 휠 스크롤이 갈 곳이 없어 "스크롤이 안 먹는" 현상.
+  const _g=document.getElementById("grid");
+  if(_g){
+    if(_g.children.length===0 || !_g.querySelector('.tbl,.cardlist')) _g.innerHTML='<div class="searching">검색 중<span class="sdots"><i></i><i></i><i></i></span></div>';   // 첫 로딩/빈 상태: 스피너만
+    else if(!_g.querySelector('.searching')){ const _s=document.createElement('div'); _s.className='searching floating'; _s.innerHTML='검색 중<span class="sdots"><i></i><i></i><i></i></span>'; _g.prepend(_s); }
+    _g.classList.add('loading');
+  }
   const _c=document.getElementById("cnt"); if(_c) _c.textContent="검색 중…";
   const _statsP=filterParams();   // ★물건통계 파라미터를 지금 캡처(_urlCaseno 해제 전). 발사는 목록 페인트 '후'로 지연 — 목록 fetch와 stats의 2vCPU 경합 제거
   const _q=buildQuery();   // 메인 쿼리도 _urlCaseno 읽음
@@ -1364,11 +1373,13 @@ async function doSearch(){
       }
       // 3회 모두 실패 → 오류로 명확히(사건번호 버그로 오해 방지)
       const _c2=document.getElementById("cnt"); if(_c2) _c2.textContent="일시적 오류";
+      document.getElementById("grid").classList.remove('loading');
       document.getElementById("grid").innerHTML='<div class="kv" style="padding:26px;text-align:center;color:#c0392b;font-weight:600">⚠️ 목록을 불러오지 못했습니다 (일시적 서버 오류).<br><a href="javascript:doSearch()" style="color:var(--primary);font-weight:700">다시 시도</a> 하거나 잠시 후 새로고침해 주세요.</div>';
       return;
     }
   }
   document.getElementById("cnt").innerHTML=`검색결과 <b>${d.total.toLocaleString()}</b>건`;
+  document.getElementById("grid").classList.remove('loading');
   if(!d.items.length){ document.getElementById("grid").innerHTML='<div class="kv" style="padding:20px;text-align:center">조건에 맞는 물건이 없습니다.</div>'; }
   else{
     const isMobile=window.matchMedia("(max-width:600px)").matches;   // @media(max-width:600px) 기준 — 보이는 레이아웃만 생성(카드/테이블 이중생성 제거 → 렌더 블록 130ms→~65ms)
