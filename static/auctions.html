@@ -1144,7 +1144,7 @@ async function fillAptBriefs(attempt){
         return;
       }else{
         if(r.build_year){ parts.push("준공 "+r.build_year+"년"); el.dataset.year=r.build_year; }
-        if(r.households){ parts.push(r.households==="단독"?"단독":r.households+(r.unit_label||"세대")); el.dataset.hh=r.households; }
+        if(r.households&&r.households!=="0"){ parts.push(r.households==="단독"?"단독":r.households+(r.unit_label||"세대")); el.dataset.hh=r.households; }   // "0"은 미기재(표시 안 함)
         if(r.elevator!==undefined&&r.elevator!==null&&r.elevator!=="") parts.push("승강기 "+(+r.elevator>0?"있음":"없음"));
       }
       if(parts.length) el.innerHTML=parts.join(" · ");
@@ -1267,7 +1267,7 @@ function prefillFromResponse(list){
         const tr=el.closest('tr'); if(tr) tr.dataset.buy = r.grade ? (r.grade.ok?'ok':'no') : 'na';
       }else{
         if(r.build_year){ parts.push("준공 "+r.build_year+"년"); el.dataset.year=r.build_year; }
-        if(r.households){ parts.push(r.households==="단독"?"단독":r.households+(r.unit_label||"세대")); el.dataset.hh=r.households; }
+        if(r.households&&r.households!=="0"){ parts.push(r.households==="단독"?"단독":r.households+(r.unit_label||"세대")); el.dataset.hh=r.households; }   // "0"은 미기재(표시 안 함)
         if(r.elevator!==undefined&&r.elevator!==null&&r.elevator!=="") parts.push("승강기 "+(+r.elevator>0?"있음":"없음"));
         else parts.push('<span class="nodemand">승강기 정보없음</span>');   // 미상은 '정보없음'으로 명시
         if(parts.length) el.innerHTML=parts.join(" · ");

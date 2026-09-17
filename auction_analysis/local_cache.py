@@ -117,6 +117,26 @@ class LocalCache:
         except Exception:
             return False
 
+    def delete_many(self, keys) -> int:
+        """키 목록 삭제(캐시 무효화). ★없던 메서드 — Supabase 행만 지우고 로컬은 남아 옛값이 되살아나던 누수의 근본.
+        삭제 시도 수 반환."""
+        keys = list(keys)
+        if not keys:
+            return 0
+        n = 0
+        try:
+            c = _conn(self.path)
+            for i in range(0, len(keys), 400):
+                chunk = keys[i:i + 400]
+                qs = ",".join("?" * len(chunk))
+                c.execute("DELETE FROM kv WHERE k IN (%s)" % qs, chunk)
+                n += len(chunk)
+            c.commit()
+            c.close()
+        except Exception:
+            pass
+        return n
+
     def unsynced(self, limit=200000):
         """flush 대상(synced=0). [(key, value), ...]."""
         out = []

@@ -601,15 +601,34 @@ def _area_col_backfill() -> None:
         print(f"[col_sync] area_excl 백필 실패: {str(e)[:80]}", flush=True)
 
 
+_items_backfill_lock = threading.RLock()   # items UPDATE 백필 계열 공용(20분 루프 ↔ brief 재계산 동기) — 교착 방지
+_sort_backfill_lock = _items_backfill_lock
+
+
 def _sort_cols_backfill() -> None:
     """신규 물건의 정렬 컬럼(build_year·households·mileage) 백필 — api_cache brief·vehicle_specs에서.
     목록 위 정렬(준공·세대·주행)이 서버 전역정렬(items 컬럼)로 동작하게 신선도 유지 → 클라 재정렬(요동) 폐지.
-    로컬 워머 전용(CLOUD_READER 쓰기금지), NULL(신규)만 UPDATE라 저비용."""
+    로컬 워머 전용(CLOUD_READER 쓰기금지), NULL(신규)만 UPDATE라 저비용.
+    ★락: 20분 루프와 brief 재계산이 동시에 돌면 items UPDATE가 교착(실측 'deadlock detected')."""
     if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
         return
     dburl = os.environ.get("SUPABASE_DB_URL")
     if not dburl:
         return
+    if not _sort_backfill_lock.acquire(timeout=600):
+        return
+    try:
+        import time as _tm
+        for _try in range(3):                       # ★교착(deadlock detected) 시 재시도 — 다른 워머(est·buy_grade)의 items UPDATE와 겹칠 때
+            if _sort_cols_backfill_locked(dburl):
+                break
+            _tm.sleep(3 * (_try + 1))
+    finally:
+        _sort_backfill_lock.release()
+
+
+def _sort_cols_backfill_locked(dburl: str) -> bool:
+    """True=완료, False=교착으로 실패(호출측이 재시도)."""
     try:
         import psycopg
         with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
@@ -626,12 +645,20 @@ def _sort_cols_backfill() -> None:
                   AND (coalesce(ac.data->>'source','') <> 'api' OR i.build_year IS NULL)
                   AND i.build_year IS DISTINCT FROM NULLIF(regexp_replace(ac.data->>'build_year','[^0-9]','','g'),'')::smallint""")
             n1 = r1.rowcount
+            # ★세대수 복사는 타당성 통과(hh_ok) 값만 — 옛 r1b는 '0'·'1'·동 단위 값까지 무조건 복사해 정렬 컬럼을 오염시키고,
+            #   그 오염값이 _compute_brief의 items 폴백으로 되돌아오는 순환의 반쪽이었다(2026-09-17 감사).
             r1b = c.execute("""UPDATE items i SET
-                households = NULLIF(regexp_replace(coalesce(ac.data->>'households',''),'[^0-9]','','g'),'')::integer
+                households = (ac.data->>'households')::integer
                 FROM api_cache ac WHERE ac.cache_key = 'brief:'||i.item_key AND (ac.data->>'available')='true'
-                  AND ac.data->>'households' ~ '[0-9]'
-                  AND i.households IS DISTINCT FROM NULLIF(regexp_replace(coalesce(ac.data->>'households',''),'[^0-9]','','g'),'')::integer""")
+                  AND (ac.data->>'hh_ok')='true' AND ac.data->>'households' ~ '^[0-9]+$'
+                  AND i.households IS DISTINCT FROM (ac.data->>'households')::integer""")
             n1 += r1b.rowcount
+            # ★집합건물(진행중)인데 brief가 타당성 표식(hh_ok)이 없거나 실패면 정렬 컬럼을 비운다 — 틀린 값으로 정렬되느니 빈칸.
+            r1c = c.execute("""UPDATE items i SET households = NULL
+                FROM api_cache ac WHERE ac.cache_key = 'brief:'||i.item_key AND i.is_active AND i.households IS NOT NULL
+                  AND i.usage_name ~ '아파트|오피스텔|다세대|연립|도시형|빌라'
+                  AND (ac.data->>'available')='true' AND coalesce(ac.data->>'hh_ok','') <> 'true'""")
+            n1 += r1c.rowcount
             r2 = c.execute("""UPDATE items i SET mileage = vs.mileage_km FROM vehicle_specs vs
                 WHERE vs.item_key = i.item_key AND vs.mileage_km IS NOT NULL AND i.mileage IS NULL""")
             n2 = r2.rowcount
@@ -648,8 +675,10 @@ def _sort_cols_backfill() -> None:
             n3 = r3.rowcount
             if n1 or n2 or n3:
                 print(f"[col_sync] 정렬컬럼 백필: 준공/세대 {n1}행·주행 {n2}행·준공(상세) {n3}행(신규)", flush=True)
+        return True
     except Exception as e:
         print(f"[col_sync] 정렬컬럼 백필 실패: {str(e)[:80]}", flush=True)
+        return "deadlock" not in str(e).lower()
 
 
 def _area_warm() -> None:
@@ -3595,6 +3624,85 @@ def _doc_building_brief(item_key: str, want_fields: bool = True) -> dict:
     return merge_doc_brief(bldg, appr)
 
 
+_IS_CLOUD = os.environ.get("CLOUD_READER", "0") in ("1", "true", "True")
+_COLLECTIVE_RE = re.compile(r"아파트|오피스텔|다세대|연립|빌라|도시형")
+
+
+def _has_dong_no(addr: str) -> bool:
+    """주소에 건물 동번호('101동'·'제2405동'·'가동')가 있는가 = 여러 동으로 된 단지."""
+    a = addr or ""
+    return bool(re.search(r"(?:^|[\s,])제?\d{1,4}동(?=\s|\d|호|$)", a) or re.search(r"(?:^|\s)[가-힣]동(?=\s|\d|호|$)", a))
+
+
+def _danji_hint(addr: str):
+    """4자리 동번호(2405동)에서 단지번호(24)를 유도 — 1기 신도시식 'N단지 NNN동' 표기. 없으면 None."""
+    m = re.search(r"(?:^|[\s,])제?(\d{4})동(?=\s|\d|호|$)", addr or "")
+    if not m:
+        return None
+    n = int(m.group(1))
+    return n // 100 if n >= 1000 else None
+
+
+def _bjd10(addr: str):
+    """주소 → 법정동코드 10자리(시군구5+법정동5). K-apt 후보를 같은 법정동으로 좁히는 데 씀. 실패 None."""
+    try:
+        r = resolve_bjd(addr)
+    except Exception:
+        r = None
+    return (r[0] + r[1]) if r else None
+
+
+def _hh_plausible(un, ul, usage: str, addr: str) -> bool:
+    """세대수 값의 타당성(출처 무관, 마지막 방어선). 2026-09-17 감사: 집합건물 '1세대'(오피스텔 209·아파트 61)·'0세대'(45)·
+    동번호 있는 대단지 '5세대'(44) 등이 전부 화면에 나갔다 — 어느 경로에서 왔든 여기서 거른다."""
+    coll = bool(_COLLECTIVE_RE.search(usage or ""))
+    if un in (None, "", "단독"):
+        return un == "단독" and not coll
+    try:
+        v = int(str(un).replace(",", ""))
+    except Exception:
+        return False
+    if v <= 0 or v > 20000:
+        return False
+    if coll and v < 2:                                              # 전유부(그 호실 1세대) 오독
+        return False
+    if re.search(r"아파트", usage or "") and _has_dong_no(addr) and v < 10:   # 여러 동 단지가 10세대 미만일 수 없음
+        return False
+    return True
+
+
+def _api_addr_for(item_key: str, addr: str):
+    """건축물대장 API용 주소. 지번주소면 그대로, 도로명(지번 0000)이면 괄호 법정동 + detail_text 지번으로 재구성.
+    못 만들면 None(→ API 안 부름). 0000으로 부르면 그 법정동 0-0 레코드(단독주택 1가구)가 돌아와 오염되므로 절대 금지."""
+    try:
+        r = resolve_bjd(addr)
+    except Exception:
+        r = None
+    if r and not (r[2] == "0000" and r[3] == "0000"):
+        return addr
+    m = re.search(r"\(([^),]*?[동읍면리])", addr or "")
+    umd = m.group(1) if m else None
+    if not umd:
+        return None
+    try:
+        row = auction_db._get("items", {"select": "detail_text",
+                                        "item_key": f"eq.{item_key}", "limit": "1"}).json()
+    except Exception:
+        return None
+    dt = (row[0].get("detail_text") if row else "") or ""
+    jm = re.search(re.escape(umd) + r"\s+(산\s*)?(\d+(?:-\d+)?)", dt)
+    if not jm:
+        return None
+    toks = []
+    for tk in (addr or "").split():
+        if re.search(r"(동|읍|면|리|로|길|가|번길)$", tk) or re.match(r"^\d", tk):
+            break
+        toks.append(tk)
+    if not toks:
+        return None
+    return f"{' '.join(toks)} {umd} {(jm.group(1) or '').strip()}{jm.group(2)}".replace("  ", " ")
+
+
 def _unit_floor_from_addr(addr: str):
     """주소에서 물건 층수(예: '16층1603호'→16) 파싱. 지하/B층은 제외, 1~60 범위만."""
     if not addr or re.search(r"지하\s*\d*\s*층|지하층|B\d+", addr):
@@ -3628,13 +3736,21 @@ def _compute_brief(item_key: str) -> dict:
                            "fuel": _classify_fuel(fm.get("사용연료") or ""),   # 5버킷 라벨(필터와 일치)
                            "grade": v.get("grade")}
             return out
-        if re.search(r"아파트|오피스텔", usage):
+        # 집합건물(아파트·오피스텔·다세대·연립·도시형)의 '호' 라벨은 전유부(그 호실=1호)라 건물 세대수로 쓰지 않음.
+        _collective = bool(_COLLECTIVE_RE.search(usage))
+        need_hh = False      # K-apt가 준공·승강기는 줬는데 세대수는 못 준 경우(미등록 0.0) → 아래 경로로 세대수만 보완
+        # ★K-apt는 아파트만: 오피스텔이 K-apt에 잡히면 주상복합의 '아파트' 세대수(대동레미안 187)가 오피스텔 호수(144) 자리에 박힌다.
+        if re.search(r"아파트", usage):
             lawd = resolve_lawd(addr) or _sgg_geo_fallback(addr)
             name = _apt_name_from_addr(addr)
             if lawd and name:
-                b = kapt.brief(lawd, name)
+                b = kapt.brief(lawd, name, danji=_danji_hint(addr), bjd=_bjd10(addr))
                 if b and (b.get("build_year") or b.get("households")):
-                    out = {"available": True, "unit_label": "세대", **b}
+                    out = {"available": True, "unit_label": "세대", **b, "hh_src": "kapt"}
+                    out["hh_ok"] = _hh_plausible(out.get("households"), "세대", usage, addr)
+                    if not out["hh_ok"]:
+                        out["households"] = None       # K-apt 미기재(0.0 등) → 없음. 아래에서 문서/총괄표제부로 보완 시도
+                        need_hh = True
                     # ★준공년도만은 R2 건축물대장(그 물건의 '실제 문서') 우선 — kapt는 단지명+법정동 매칭이라
                     #   오매칭 위험이 있고, R2 전수대조에서 아파트 521건(12.1%)이 실제와 달랐다.
                     #   R2에 준공이 있으면 교정(source=doc) → r1이 items를 R2값으로 유지.
@@ -3648,11 +3764,9 @@ def _compute_brief(item_key: str) -> dict:
                             out["violation"] = True
                     except Exception:
                         pass
-        if not out.get("available") and re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|숙박", usage):
+        if (not out.get("available") or need_hh) and re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형|다가구|단독|주택|숙박", usage):
             by = un = ul = ev = None
             used_api = used_doc = False
-            # 집합건물(아파트·오피스텔·다세대·연립·도시형)의 '호' 라벨은 전유부(그 호실=1호)라 건물 세대수로 쓰지 않음.
-            _collective = bool(re.search(r"아파트|오피스텔|다세대|연립|빌라|도시형", usage))
             # ① 저장문서(R2 건축물대장 PDF) 우선 — 무쿼터 + '그 물건의 실제 문서'라 지번조회 API보다 정확.
             #    옛 API 우선은 API가 준공을 주면 R2 문서를 아예 보지 않아, 지번조회로 읽은 '같은 땅의 다른
             #    신축 건물' 준공이 그대로 박혔다(실측: 실제 1955 → API 2020, 1962 → 2016, 1957 → 2018).
@@ -3660,7 +3774,10 @@ def _compute_brief(item_key: str) -> dict:
             doc = _doc_building_brief(item_key, want_fields=True)
             vio = bool(doc.get("violation"))
             by = doc.get("build_year")
-            if doc.get("units") and not (doc.get("unit_label") == "호" and _collective):
+            # 집합건물: 문서의 '호'(전유 1호)와 '가구'(첨부가 다른 건물 일반대장이던 실측 사례)는 세대수로 안 쓴다.
+            # 여러 동 아파트의 R2 표제부는 '그 동' 세대수(단지 총세대 아님) → 단지 세대수로 쓰지 않는다(K-apt·총괄표제부만).
+            if (doc.get("units") and not (_collective and doc.get("unit_label") in ("호", "가구"))
+                    and not (re.search(r"아파트", usage) and _has_dong_no(addr))):
                 un, ul = doc.get("units"), doc.get("unit_label")
             if doc.get("elevator") is not None:
                 ev = doc.get("elevator")
@@ -3673,22 +3790,21 @@ def _compute_brief(item_key: str) -> dict:
             if not by and d.get("build_year"):
                 by = str(d.get("build_year"))
                 _from_items = True
-            # 세대수 items 폴백 — 건축물대장 문서·API에 세대수가 없어도 items.households(크롤러 수집·64%)로 표시.
-            #   집합건물이라도 items.households는 '건물 전체 세대수'(전유부 '호'와 무관)라 폴백에 안전.
-            if not un and d.get("households"):
-                un = str(d.get("households"))
-                ul = ul or "세대"
-                _from_items = True
+            # 🔴 items.households 폴백은 삭제(2026-09-17 감사). 이 컬럼의 유일한 writer는 r1b(brief→items 복사)라
+            #    '크롤러 수집값'이 아니었고, 틀린 brief가 items를 거쳐 자기 자신에게 돌아오는 순환의 반쪽이었다
+            #    (7/17 대비 273→1·710→1 퇴행 29건 실증). 세대수는 K-apt·문서·총괄표제부에서만.
             # ② 건축물대장 API 폴백 — 세대수·승강기·층수·주용도 보완용(이것들은 API에만 있음).
             #    ★준공년도는 위(doc → items)에서 확보됐으면 API 값을 쓰지 않는다: API는 지번 조회라
             #      같은 땅의 '다른 신축 건물'을 읽어 최대 65년 틀림(실제 1955 → API 2020). doc·items가
             #      모두 없을 때만 최후 폴백으로 사용.
+            #    ★도로명주소는 지번 0000 → 그대로 부르면 0-0 레코드(단독주택 1가구) 오염 → detail_text 지번으로 재구성.
             bi = None
             purpose = ""
             _bi_wrong = False   # 지번 표제부가 '다른(저층 부속)동'을 읽었는지(집합건물 층 모순) 플래그
             if (not by) or (not un) or (ev is None):
                 try:
-                    bi = building.info(addr)
+                    _addr_api = _api_addr_for(item_key, addr)
+                    bi = building.info(_addr_api, collective=_collective) if _addr_api else None
                 except Exception:
                     bi = None
             if bi:
@@ -3704,9 +3820,16 @@ def _compute_brief(item_key: str) -> dict:
                     _bif = None
                 _uf = _unit_floor_from_addr(addr)
                 _bi_wrong = bool(_collective and _bif and _uf and _uf > _bif)
+                # 여러 동 단지인데 총괄표제부 없이 '한 동' 표제부 값이면 단지 세대수가 아님(예술인아파트 5동 120 vs 1,485).
+                _title_only = bool(re.search(r"아파트", usage) and bi.get("units_src") == "title" and _has_dong_no(addr))
                 if not by:
                     by = bi.get("build_year")
-                if not un and bi.get("units") and not (_collective and _is_ho) and not _bi_wrong:
+                # 오피스텔은 '호'가 정상 단위(표제부 hoCnt) — 전유 1호는 타당성 규칙(≤1)이 거른다.
+                _ho_ok = _is_ho and re.search(r"오피스텔", usage) and int(bi.get("units") or 0) > 1
+                # 총괄표제부(recap)의 단지 총세대는 '어느 동을 골랐나'와 무관 → 층 가드(_bi_wrong: 상가동 2층 vs 물건 22층)로 버리지 않는다.
+                _recap = bi.get("units_src") == "recap"
+                if (not un and bi.get("units") and not _title_only
+                        and (_recap or ((not (_collective and _is_ho) or _ho_ok) and not _bi_wrong))):
                     un, ul = bi.get("units"), bi.get("unit_label")
                 if ev is None and bi.get("elevator") is not None and not (_collective and _is_ho) and not _bi_wrong:
                     ev = int(bi.get("elevator") or 0) > 0
@@ -3714,12 +3837,28 @@ def _compute_brief(item_key: str) -> dict:
                                 or (bi.get("elevator") is not None))
             # 숙박 세부용도(여관·생활숙박 등): 전유부 문서 우선(그 호실 용도) → 표제부 API 기타용도 폴백.
             _sub = doc.get("sukbak_sub") or (bi.get("sukbak_sub") if bi else None)
-            # 단독주택(다가구 아닌 단독)인데 가구수 못 구하면 '단독'으로 표기(빈칸/오추출 방지)
+            # ★타당성 규칙(출처 무관 마지막 방어선): 집합건물 ≤1·아파트 동번호 있는데 <10 등은 없는 값으로.
+            hh_ok = bool(un) and _hh_plausible(un, ul or "세대", usage, addr)
+            if un and not hh_ok:
+                un = ul = None
+            # 단독주택(다가구 아닌 단독)인데 가구수 못 구하면 '단독'으로 표기(빈칸/오추출 방지). 집합건물엔 절대 안 붙임.
             hh_disp = str(un) if un else None
             hh_label = ul or "세대"
-            if not un and ("단독주택" in purpose or "단독주택" in usage) and "다가구" not in (purpose + usage):
-                hh_disp, hh_label = "단독", ""
-            if by or un or (ev is not None) or hh_disp or vio or _sub:
+            if (not un and not _collective and ("단독주택" in purpose or "단독주택" in usage)
+                    and "다가구" not in (purpose + usage)):
+                hh_disp, hh_label, hh_ok = "단독", "", True
+            _hh_src = ("doc" if (un and doc.get("units") == un) else "api" if un else None)
+            # 쿼터 차단 중이라 표제부를 못 부른 집합건물은 'quota' 표식 → 20분 스윕이 쿼터 풀린 뒤 재계산(30일 TTL로 굳지 않게).
+            _quota = bool(_collective and not un and building.quota_blocked())
+            if need_hh:
+                if _quota:
+                    out["quota"] = True
+                # K-apt 결과(준공·승강기·kapt_code)는 유지하고 세대수만 보완. 못 구하면 households None(정직한 빈칸).
+                if hh_disp and hh_disp != "단독":
+                    out["households"], out["unit_label"], out["hh_ok"], out["hh_src"] = hh_disp, hh_label, True, _hh_src
+                if vio:
+                    out["violation"] = True
+            elif by or un or (ev is not None) or hh_disp or vio or _sub:
                 out = {"available": True, "build_year": by,
                        "households": hh_disp,
                        "unit_label": hh_label,
@@ -3728,9 +3867,12 @@ def _compute_brief(item_key: str) -> dict:
                        "purpose": (purpose or None),                     # 주용도(상가주택·위반 판별)
                        "usage_detail": _sub,                             # 숙박 세부용도(여관·생활형숙박시설 등) → 목록/상세 표시
                        "violation": vio,                                  # 위반건축물(건축물대장 스탬프)
+                       "hh_ok": bool(hh_ok),                              # 세대수 타당성 통과(r1b 복사·스윕 기준)
+                       "hh_src": _hh_src,                                 # 세대수 출처(kapt/doc/api)
+                       **({"quota": True} if _quota else {}),             # 쿼터 차단 중 산출 → 스윕 재계산 대상
                        "source": ("api+doc" if (used_api and used_doc) else
                                   "api" if used_api else
-                                  "items" if _from_items else "doc")}   # items=R2교정 컬럼 폴백(r1 가드 통과 → 자기 값이라 무해)
+                                  "items" if _from_items else "doc")}   # items=R2교정 컬럼 폴백(준공년도만)
     return out
 
 
@@ -3758,10 +3900,15 @@ def _load_briefs_from_db(keys: list, remote: bool = True) -> None:
 
 
 def _get_brief(item_key: str) -> dict:
-    """캐시 우선(메모리/디스크). 없으면 계산 → 캐시 + 주거 building 정보는 Supabase에 영구 저장."""
+    """캐시 우선(메모리/디스크). 없으면 계산 → 캐시 + 주거 building 정보는 Supabase에 영구 저장.
+    ★클라우드(CLOUD_READER)는 계산하지 않는다 — DB에 있으면 로딩, 없으면 '없음'. (키 없는 환경에서 문서/표제부만으로
+    계산해 로컬과 다른 값을 Supabase에 써넣던 경로 차단. 계산은 로컬 워머(_prewarm_briefs 2시간)·스윕이 맡는다.)"""
     global _brief_dirty
     if item_key in _brief_cache:
         return _brief_cache[item_key]
+    if _IS_CLOUD:
+        _load_briefs_from_db([item_key])
+        return _brief_cache.get(item_key) or {"available": False}
     out = _compute_brief(item_key)
     _brief_cache[item_key] = out
     _brief_dirty = True
@@ -3936,13 +4083,14 @@ def _prewarm_apt_info() -> None:
 
 
 def _prewarm_loop() -> None:
-    """brief(준공/세대/승강기) 자동 예열 → DB. 시작 90초 후 + 12시간마다."""
+    """brief(준공/세대/승강기) 자동 예열 → DB. 시작 90초 후 + 2시간마다(미캐시만이라 저비용).
+    클라우드가 더 이상 온디맨드 계산을 안 하므로(_get_brief 게이트) 신규 물건은 이 루프가 채운다."""
     import time as _t
     _t.sleep(90)
     while True:
         _prewarm_briefs()
         _flush_all_caches()
-        _t.sleep(12 * 3600)
+        _t.sleep(2 * 3600)
 
 
 def _grade_warm_loop() -> None:
@@ -4391,16 +4539,22 @@ def _col_sync_loop() -> None:
     import time as _t
     _t.sleep(90)                # 기동 직후 부하 회피
     while True:
-        _col_enrich_sync()
-        # ★재발방지: 신규 물건 파생컬럼(area_excl·fuel·brand·car_ok·invest_amount)을 20분마다 백필.
-        #   기존엔 _area_warm/_invest_warm이 '기동 1회'만 돌아, 크롤러가 넣는 새 물건이 다음 재시작까지
-        #   컬럼 NULL→필터에서 누락(=시간 지나면 목록이 불완전해지는 재발). NULL만 UPDATE라 저비용.
+        # ★items UPDATE 계열은 하나의 락 아래(brief 재계산의 정렬컬럼 동기와 겹치면 'deadlock detected' 실측).
+        with _items_backfill_lock:
+            _col_enrich_sync()
+            # ★재발방지: 신규 물건 파생컬럼(area_excl·fuel·brand·car_ok·invest_amount)을 20분마다 백필.
+            #   기존엔 _area_warm/_invest_warm이 '기동 1회'만 돌아, 크롤러가 넣는 새 물건이 다음 재시작까지
+            #   컬럼 NULL→필터에서 누락(=시간 지나면 목록이 불완전해지는 재발). NULL만 UPDATE라 저비용.
+            try:
+                _area_col_backfill()
+                _filter_cols_backfill()
+                _sort_cols_backfill()          # 정렬컬럼(준공·세대·주행) 신규 백필 — 목록 위 정렬 서버화 유지
+                _reg_col_backfill()            # ★규제구분(reg) 신규 백필 — 기존 _reg_warm(캐시미스 1회성)만이라 신규물건 reg NULL 누적됐던 근본수정
+                _search_group_col_backfill()   # ★search_group 신규 백필 — 규제배지·매수판정 등 group 의존 표시가 새 물건에서 누락되지 않게
+            except Exception:
+                pass
         try:
-            _area_col_backfill()
-            _filter_cols_backfill()
-            _sort_cols_backfill()          # 정렬컬럼(준공·세대·주행) 신규 백필 — 목록 위 정렬 서버화 유지
-            _reg_col_backfill()            # ★규제구분(reg) 신규 백필 — 기존 _reg_warm(캐시미스 1회성)만이라 신규물건 reg NULL 누적됐던 근본수정
-            _search_group_col_backfill()   # ★search_group 신규 백필 — 규제배지·매수판정 등 group 의존 표시가 새 물건에서 누락되지 않게
+            _brief_sweep()                 # ★세대수 타당성 스윕(틀린값·옛캐시·30일 경과 → 재계산) — 2026-09-17 감사 재발방지(락 밖: 내부에서 정렬동기 시 락 취득)
         except Exception:
             pass
         _t.sleep(1200)          # 20분마다 변경분 동기화
@@ -5846,18 +6000,8 @@ def auction_apt_brief(item_key: str) -> dict:
     """단건(상세페이지용). 모든 주거용 준공·세대·승강기."""
     r = _get_brief(item_key)
     _save_brief_cache()
-    # 캐시된 brief에 세대수가 비어있으면 items.households(크롤러 수집·64%)로 보강 — 기존 캐시(세대 없이
-    #   저장된 것)도 클리어 없이 즉시 반영. 보강분은 DB 캐시에 재저장해 다음부턴 캐시에서 바로 나오게(재발방지).
-    if isinstance(r, dict) and r.get("available") and not r.get("households"):
-        try:
-            _d = auction_db.get_auction(item_key)
-            _hh = _d.get("households") if _d else None
-            if _hh:
-                r = {**r, "households": str(_hh), "unit_label": r.get("unit_label") or "세대"}
-                _brief_cache[item_key] = r
-                auction_db.cache_save("brief:" + item_key, r)
-        except Exception:
-            pass
+    # 🔴 items.households 보강은 삭제(2026-09-17): items.households는 brief 복사본(r1b)이라 '보강'이 아니라
+    #    오염값을 brief에 되박아 DB에 영구화하는 경로였다. 세대수가 없으면 없는 대로 낸다.
     return r
 
 
@@ -5900,9 +6044,235 @@ def auction_briefs(keys: str) -> dict:
     klist = [k for k in keys.split(",") if k][:80]
     _load_briefs_from_db(klist)                    # Supabase building_brief 일괄 로딩(빠름)
     todo = [k for k in klist if k not in _brief_cache]
-    if todo:
+    if todo and not _IS_CLOUD:                     # 클라우드는 계산 안 함(로컬 워머·스윕이 채운 DB만 읽음)
         _bg_fill(todo, _get_brief, _save_brief_cache)
     return {k: _brief_cache[k] for k in klist if k in _brief_cache}
+
+
+# ───────── 세대수(brief) 정합 유지 — 2026-09-17 감사 후 신설 ─────────
+#  (a) _purge_briefs: 메모리·디스크·로컬SQLite·Supabase 4계층 동시 무효화(예전엔 Supabase만 지워 옛값이 되살아남)
+#  (b) _brief_recompute: 무효화 → 재계산 → 상세 complex_detail 동기(목록=상세) → items 정렬컬럼 동기
+#  (c) _brief_sweep: 20분마다 틀린값·옛캐시·30일 경과분을 300건씩 자동 재계산 + [BRIEF-IMPLAUSIBLE] 로그
+#  (d) /admin/brief_audit: 검수 항목(≤1 건수·hh_ok 커버리지·목록≠상세·items ≤1)을 숫자로 고정
+_brief_recomp: dict = {"running": False, "tag": "", "total": 0, "done": 0, "started": None, "finished": None, "stats": {}}
+_brief_recomp_lock = threading.Lock()
+_HH_BAD_SQL = """(((c.data->>'households') ~ '^[0-9]+$' AND ((c.data->>'households')::int <= 1
+                   OR (i.usage_name ~ '아파트' AND i.address ~ '(^|[[:space:],])제?[0-9]{1,4}동' AND (c.data->>'households')::int < 10)))
+                  OR (c.data->>'quota')='true')"""
+_COLLECTIVE_SQL = "i.usage_name ~ '아파트|오피스텔|다세대|연립|도시형|빌라'"
+
+
+def _purge_briefs(keys: list) -> None:
+    """brief 캐시 4계층 동시 무효화(메모리 → 디스크는 _save_brief_cache가 재기록, 로컬SQLite+Supabase는 cache_delete_many)."""
+    global _brief_dirty
+    for k in keys:
+        _brief_cache.pop(k, None)
+    _brief_dirty = True
+    try:
+        auction_db.cache_delete_many(["brief:" + k for k in keys])
+    except Exception:
+        pass
+
+
+def _refresh_apt_detail(item_key: str, usage: str = "아파트") -> None:
+    """상세 단지정보(apt: complex_detail)를 목록 brief와 같은 소스로 다시 맞춘다 → 목록≠상세(실측 391건) 제거.
+    아파트만: K-apt 단지정보가 잡히면 그 세대수를 brief에도 되박아 목록=상세 단일 소스로.
+    (오피스텔은 K-apt 값이 주상복합의 '아파트' 세대수라 되박지 않는다 — 대동레미안 187 vs 오피스텔 144 실측.)"""
+    try:
+        cur = _apt_cache.get(item_key)
+        if not isinstance(cur, dict):
+            cur = auction_db.cache_get_many(["apt:" + item_key]).get("apt:" + item_key)
+        if not isinstance(cur, dict):
+            return
+        det = _complex_detail_for(cur) or _brief_as_detail(
+            item_key, cur.get("complex") or _apt_name_from_addr(cur.get("address", "")))
+        b = _brief_cache.get(item_key)
+        if (re.search(r"아파트", usage or "") and isinstance(det, dict) and det.get("_src") != "건축물대장"
+                and isinstance(b, dict) and b.get("available")
+                and str(det.get("households") or "").isdigit()
+                and _hh_plausible(det.get("households"), "세대", "아파트", cur.get("address", ""))
+                and str(b.get("households") or "") != str(det.get("households"))):
+            b = {**b, "households": str(det["households"]), "unit_label": "세대", "hh_ok": True, "hh_src": "kapt",
+                 "kapt_code": det.get("kapt_code")}
+            _brief_cache[item_key] = b
+            globals()["_brief_dirty"] = True
+            auction_db.cache_save("brief:" + item_key, b)
+        if det == cur.get("complex_detail"):
+            return
+        cur = dict(cur)
+        cur["complex_detail"] = det
+        _apt_cache.remember(item_key, cur)
+        auction_db.cache_save("apt:" + item_key, cur)
+    except Exception:
+        pass
+
+
+def _brief_recompute(keys: list, usage_by_key: dict = None, workers: int = 8, tag: str = "") -> dict:
+    """무효화 → 재계산(병렬) → 아파트·오피스텔은 상세 단지정보 동기 → items 정렬컬럼 동기. 진행상황은 _brief_recomp."""
+    import time as _tm
+    keys = [k for k in dict.fromkeys(keys or []) if k]
+    usage_by_key = usage_by_key or {}
+    st = _brief_recomp
+    with _brief_recomp_lock:
+        if st["running"]:
+            return {"started": False, "reason": "이미 실행 중"}
+        st.update({"running": True, "tag": tag, "total": len(keys), "done": 0,
+                   "started": _tm.time(), "finished": None, "stats": {}})
+    stats: dict = {"hh": 0, "nohh": 0, "unavailable": 0, "error": 0}
+    try:
+        _purge_briefs(keys)
+
+        def one(k):
+            try:
+                b = _get_brief(k)
+                if re.search(r"아파트|오피스텔", usage_by_key.get(k) or ""):
+                    _refresh_apt_detail(k, usage_by_key.get(k) or "")
+                    b = _brief_cache.get(k, b)
+                if not (isinstance(b, dict) and b.get("available")):
+                    stats["unavailable"] += 1
+                elif b.get("households"):
+                    stats["hh"] += 1
+                    s = "src:" + str(b.get("hh_src"))
+                    stats[s] = stats.get(s, 0) + 1
+                else:
+                    stats["nohh"] += 1
+            except Exception:
+                stats["error"] += 1
+            finally:
+                st["done"] += 1
+        for i in range(0, len(keys), 40):
+            with _cf.ThreadPoolExecutor(max_workers=workers) as ex:
+                list(ex.map(one, keys[i:i + 40]))
+            _save_brief_cache()
+        try:
+            _sort_cols_backfill()          # items.households 즉시 동기(hh_ok만 복사·미통과는 NULL)
+        except Exception:
+            pass
+    finally:
+        st.update({"running": False, "finished": _tm.time(), "stats": stats})
+    return {"started": True, "n": len(keys), "stats": stats}
+
+
+def _brief_sweep(limit: int = 300) -> None:
+    """20분 주기 타당성 스윕(로컬 워머 전용): 집합건물 brief 중 ①틀린 값(≤1·동번호 아파트 <10) ②hh_ok 표식 없는 옛 캐시
+    ③30일 지난 값 → 재계산. 진행중·틀린값 우선, 한 번에 limit건(표제부 API 쿼터 보호). 재발방지의 '유지 장치'."""
+    if _IS_CLOUD or _brief_recomp["running"]:
+        return
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return
+    try:
+        import psycopg
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            rows = c.execute(f"""
+                SELECT item_key, usage_name, reason FROM (
+                  SELECT i.item_key, i.usage_name, i.is_active, c.updated_at,
+                         CASE WHEN {_HH_BAD_SQL} THEN 'bad'
+                              WHEN coalesce(c.data->>'hh_ok','') = '' THEN 'legacy'
+                              WHEN c.updated_at < now() - interval '30 days' THEN 'stale' END AS reason
+                    FROM api_cache c JOIN items i ON c.cache_key = 'brief:'||i.item_key
+                   WHERE {_COLLECTIVE_SQL} AND (c.data->>'available')='true'
+                ) t WHERE reason IS NOT NULL
+                ORDER BY is_active DESC, (CASE reason WHEN 'bad' THEN 0 WHEN 'legacy' THEN 1 ELSE 2 END), updated_at
+                LIMIT %s""", (limit,)).fetchall()
+    except Exception as e:
+        print(f"[brief_sweep] 조회 실패: {str(e)[:80]}", flush=True)
+        return
+    if not rows:
+        return
+    cnt: dict = {}
+    for _, _, r in rows:
+        cnt[r] = cnt.get(r, 0) + 1
+    print(f"[BRIEF-IMPLAUSIBLE] 세대수 재계산 대상 {len(rows)}건 (bad={cnt.get('bad', 0)} legacy={cnt.get('legacy', 0)} "
+          f"stale={cnt.get('stale', 0)})", flush=True)
+    res = _brief_recompute([r[0] for r in rows], {r[0]: r[1] for r in rows}, tag="sweep")
+    print(f"[brief_sweep] 완료 {res.get('stats')}", flush=True)
+
+
+def require_admin_or_local(request: Request, sid: Optional[str] = Cookie(None)) -> dict:
+    """관리자 세션 또는 로컬호스트(운영 curl)만."""
+    host = request.client.host if (request is not None and request.client) else ""
+    if host in ("127.0.0.1", "::1", "localhost"):
+        return {"name": "local"}
+    return require_admin(sid)
+
+
+@app.post("/admin/brief_recompute")
+def admin_brief_recompute(scope: str = Query("bad", pattern="^(bad|collective|keys)$"), keys: str = "",
+                          limit: int = Query(0, ge=0, le=30000), workers: int = Query(8, ge=1, le=16),
+                          _u: dict = Depends(require_admin_or_local)) -> dict:
+    """세대수 brief 재계산(로컬 전용·백그라운드): scope=bad(틀린값만)|collective(진행중 집합건물 전부)|keys(직접)."""
+    if _IS_CLOUD:
+        raise HTTPException(400, "클라우드는 계산하지 않습니다(로컬 4011에서 실행).")
+    if _brief_recomp["running"]:
+        return {"started": False, "reason": "이미 실행 중", "tag": _brief_recomp["tag"],
+                "total": _brief_recomp["total"], "done": _brief_recomp["done"]}
+    import psycopg
+    if scope == "keys":
+        ks0 = [k for k in keys.split(",") if k]
+        with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15,
+                             autocommit=True) as c:
+            sel = c.execute("SELECT item_key, usage_name FROM items WHERE item_key = ANY(%s)", (ks0,)).fetchall()
+    else:
+        with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15,
+                             autocommit=True) as c:
+            if scope == "bad":
+                q = f"""SELECT i.item_key, i.usage_name FROM api_cache c JOIN items i ON c.cache_key='brief:'||i.item_key
+                        WHERE {_COLLECTIVE_SQL} AND (c.data->>'available')='true' AND {_HH_BAD_SQL}
+                        ORDER BY i.is_active DESC, c.updated_at"""
+            else:
+                q = f"""SELECT i.item_key, i.usage_name FROM items i
+                        WHERE i.is_active AND {_COLLECTIVE_SQL}
+                        ORDER BY (i.usage_name ~ '아파트') DESC, (i.usage_name ~ '오피스텔') DESC, i.item_key"""
+            sel = c.execute(q).fetchall()
+    if limit:
+        sel = sel[:limit]
+    ks = [r[0] for r in sel]
+    ub = {r[0]: r[1] for r in sel}
+    threading.Thread(target=_brief_recompute, args=(ks, ub, workers, scope), daemon=True).start()
+    return {"started": True, "scope": scope, "n": len(ks)}
+
+
+@app.get("/admin/brief_recompute/status")
+def admin_brief_recompute_status(_u: dict = Depends(require_admin_or_local)) -> dict:
+    return dict(_brief_recomp)
+
+
+@app.get("/admin/brief_audit")
+def admin_brief_audit(_u: dict = Depends(require_admin_or_local)) -> dict:
+    """세대수 정합 감사(검수 항목 고정): 용도군별 진행중 brief ≤1·틀린값·hh_ok 커버리지·목록≠상세·items ≤1."""
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        raise HTTPException(500, "SUPABASE_DB_URL 없음")
+    import psycopg
+    out: dict = {}
+    with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+        rows = c.execute(f"""
+            SELECT CASE WHEN i.usage_name ~ '아파트' THEN '아파트' WHEN i.usage_name ~ '오피스텔' THEN '오피스텔' ELSE '빌라류' END g,
+                   count(*) n,
+                   sum(CASE WHEN (c.data->>'households') ~ '^[0-9]+$' AND (c.data->>'households')::int <= 1 THEN 1 ELSE 0 END) le1,
+                   sum(CASE WHEN {_HH_BAD_SQL} THEN 1 ELSE 0 END) bad,
+                   sum(CASE WHEN (c.data->>'hh_ok')='true' THEN 1 ELSE 0 END) hh_ok,
+                   sum(CASE WHEN (c.data->>'households') ~ '^[0-9]+$' THEN 1 ELSE 0 END) has_hh
+              FROM api_cache c JOIN items i ON c.cache_key='brief:'||i.item_key
+             WHERE i.is_active AND {_COLLECTIVE_SQL} AND (c.data->>'available')='true'
+             GROUP BY 1""").fetchall()
+        out["active_brief"] = {r[0]: {"n": r[1], "le1": r[2], "bad": r[3], "hh_ok": r[4], "has_hh": r[5]} for r in rows}
+        r2 = c.execute("""
+            SELECT count(*) FILTER (WHERE (b.data->>'households') IS DISTINCT FROM (a.data->'complex_detail'->>'households')) AS differ,
+                   count(*) AS n
+              FROM items i JOIN api_cache b ON b.cache_key='brief:'||i.item_key JOIN api_cache a ON a.cache_key='apt:'||i.item_key
+             WHERE i.is_active AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
+               AND a.data->'complex_detail' IS NOT NULL""").fetchone()
+        out["list_vs_detail_apt"] = {"differ": r2[0], "n": r2[1]}
+        r3 = c.execute(f"""SELECT count(*) FROM items i WHERE i.is_active AND i.households <= 1 AND {_COLLECTIVE_SQL}""").fetchone()
+        out["items_households_le1"] = r3[0]
+    out["recompute"] = dict(_brief_recomp)
+    try:
+        out["building_api_quota_blocked"] = bool(building.quota_blocked())
+    except Exception:
+        out["building_api_quota_blocked"] = None
+    return out
 
 
 def _compute_similar(item_key: str):
@@ -9949,13 +10319,32 @@ def _estimate_price(same_area: list, auction_floor) -> Optional[dict]:
 
 
 def _apt_name_from_addr(addr: str) -> str:
-    """주소에서 단지명 추정. ①지번 뒤 ~ 'NNN동' 앞(가장 일반적·접미키워드 무관) ②키워드 접미 폴백.
+    """주소에서 단지명 추정. ⓪괄호 '(법정동,단지명)' ①지번 뒤 ~ 'NNN동' 앞(가장 일반적·접미키워드 무관) ②키워드 접미 폴백.
     예: '사수동 833 금호서한이다음 101동 24층2401호' → '금호서한이다음'."""
-    # ① 지번(번지) 다음 ~ 건물 'NNN동' 앞 = 단지명. 행정동(사수'동')은 지번 앞이라 안 걸림.
-    m = re.search(r"\d+(?:-\d+)?\s+(\S.*?)\s*\d+동(?:\s|\d|호|$)", addr)
+    # ⓪ 도로명주소 괄호 '(행신동,햇빛마을아파트)' → 단지명. (2026-09-17: 이 형태가 추출 실패 781건(27%)의 주범이라
+    #    K-apt를 아예 안 거치고 표제부/items 폴백으로 흘러 '1세대'가 됐다.)
+    m = re.search(r"\([^)]*?,\s*([^),]+?)\s*\)", addr or "")
     if m:
         nm = m.group(1).strip()
+        if len(nm) >= 2:
+            return nm
+    # ⓪-b 쉼표 없는 괄호 '(우신미가뷰아파트)' — 법정동만 든 괄호 '(행신동)'는 제외.
+    m = re.search(r"\(\s*([^(),]+?)\s*\)", addr or "")
+    if m:
+        nm = m.group(1).strip()
+        if len(nm) >= 2 and not re.fullmatch(r"[가-힣]{1,5}(동|리|가)\d*", nm):
+            return nm
+    # ① 지번(번지) 다음 ~ 건물 'NNN동' 앞 = 단지명. 행정동(사수'동')은 지번 앞이라 안 걸림. '제101동' 표기도 허용.
+    m = re.search(r"\d+(?:-\d+)?\s+(\S.*?)\s*제?\s*\d+동(?:\s|\d|호|$)", addr or "")
+    if m:
+        nm = re.sub(r"\s*제$", "", m.group(1).strip()).strip()
         if len(nm) >= 2:                        # 너무 짧으면(행정동 오인 등) 폴백
+            return nm
+    # ①-b 지번 없는 주소('가정동 루원시티공동2블록 포레나루원시티 207동') → 동번호 바로 앞 토큰.
+    m = re.search(r"(\S{2,})\s+제?\d{1,4}동(?=\s|\d|호|$)", addr or "")
+    if m:
+        nm = m.group(1).strip()
+        if not re.fullmatch(r"[가-힣]{1,5}(동|리|가|읍|면)\d*|\d[\d\-]*", nm):
             return nm
     # ② 키워드 접미 폴백(동 표기 없는 주소 등)
     m = re.search(r"\d+(?:-\d+)?\s+([^\s]*(?:아파트|오피스텔|마을|캐슬|푸르지오|자이|"
@@ -9969,9 +10358,11 @@ def _complex_detail_for(out: dict):
     if not lawd:
         return None
     cands = [n for n in (out.get("complex"), _apt_name_from_addr(out.get("address", ""))) if n]
+    _danji = _danji_hint(out.get("address", ""))
+    _bjd = _bjd10(out.get("address", ""))
     for nm in dict.fromkeys(cands):           # 중복 제거, 순서 유지
         try:
-            det = kapt.complex_detail(lawd, nm)
+            det = kapt.complex_detail(lawd, nm, danji=_danji, bjd=_bjd)
         except Exception:
             det = None
         if det:

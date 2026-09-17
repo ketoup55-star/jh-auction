@@ -1726,13 +1726,13 @@ async function loadAptInfo(){
     ${r&&r.complex?`<div class="m"><span class="k">단지명</span><span class="v">${eok(r.complex)}</span></div>`:''}
     ${r&&r.area?`<div class="m"><span class="k">전용면적</span><span class="v">${r.area}㎡</span></div>`:''}
     ${yearVal?`<div class="m"><span class="k">준공년도</span><span class="v">${eok(yearVal)}년</span></div>`:''}
-    ${(cd&&cd.households)?`<div class="m"><span class="k">세대수</span><span class="v">${eok(cd.households)}세대</span></div>`:''}
+    ${(cd&&cd.households&&cd.households!=="0")?`<div class="m"><span class="k">세대수</span><span class="v">${eok(cd.households)}세대</span></div>`:''}
     ${r&&r.complex_trades_total?`<div class="m"><span class="k">동일단지 거래</span><span class="v">최근 ${r.months}개월 ${r.complex_trades_total}건</span></div>`:''}
   </div>`;
   const detailRow=cd?`
-    <div class="apt-subhd">상세 단지정보<span class="apt-src">국토부 공동주택</span></div>
+    <div class="apt-subhd">상세 단지정보<span class="apt-src">${cd._src==="건축물대장"?"건축물대장":"국토부 공동주택"}</span></div>
     <div class="apt-meta apt-detail">
-      ${cd.households?`<div class="m"><span class="k">세대수</span><span class="v">${eok(cd.households)}세대</span></div>`:''}
+      ${(cd.households&&cd.households!=="0")?`<div class="m"><span class="k">세대수</span><span class="v">${eok(cd.households)}세대</span></div>`:''}
       ${cd.dongs?`<div class="m"><span class="k">동수</span><span class="v">${eok(cd.dongs)}개동</span></div>`:''}
       ${cd.approved?`<div class="m"><span class="k">준공</span><span class="v">${eok(cd.approved)}</span></div>`:''}
       ${cd.floors_high?`<div class="m"><span class="k">최고층</span><span class="v">${eok(cd.floors_high)}층</span></div>`:''}
@@ -1900,7 +1900,7 @@ async function loadBuildingBrief(){
   const ul=r.unit_label||"세대";
   const items=[];
   if(r.build_year) items.push(`<div class="m"><span class="k">준공년도</span><span class="v">${r.build_year}년</span></div>`);
-  if(r.households) items.push(`<div class="m"><span class="k">${ul}수</span><span class="v">${r.households}${ul}</span></div>`);
+  if(r.households&&r.households!=="0") items.push(`<div class="m"><span class="k">${ul}수</span><span class="v">${r.households}${ul}</span></div>`);   // "0"은 미기재
   if(r.elevator!==undefined&&r.elevator!==null&&r.elevator!=="") items.push(`<div class="m"><span class="k">승강기</span><span class="v">${+r.elevator>0?(r.elevator+"대"):"없음"}</span></div>`);
   else items.push(`<div class="m"><span class="k">승강기</span><span class="v" style="color:#9aa0a6">정보없음</span></div>`);   // 미상 명시
   if(!items.length) return;

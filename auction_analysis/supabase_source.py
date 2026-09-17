@@ -384,9 +384,15 @@ class SupabaseSource:
         return self.local is not None                    # 로컬엔 저장됨(나중에 flush)
 
     def cache_delete_many(self, cache_keys: list[str]) -> int:
-        """api_cache에서 cache_key 목록 삭제(갱신 무효화). 삭제 시도 수 반환."""
+        """api_cache에서 cache_key 목록 삭제(갱신 무효화). 삭제 시도 수 반환.
+        ★로컬 SQLite도 같이 지운다 — 예전엔 Supabase만 지워서 cache_get_many(로컬 우선)가 옛값을 되살렸다."""
         if not cache_keys:
             return 0
+        if self.local is not None:
+            try:
+                self.local.delete_many(cache_keys)
+            except Exception:
+                pass
         headers = dict(self._h)
         headers["Prefer"] = "return=minimal"
         n = 0
