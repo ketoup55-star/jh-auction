@@ -3848,8 +3848,9 @@ def _compute_brief(item_key: str) -> dict:
                     and "다가구" not in (purpose + usage)):
                 hh_disp, hh_label, hh_ok = "단독", "", True
             _hh_src = ("doc" if (un and doc.get("units") == un) else "api" if un else None)
-            # 쿼터 차단 중이라 표제부를 못 부른 집합건물은 'quota' 표식 → 20분 스윕이 쿼터 풀린 뒤 재계산(30일 TTL로 굳지 않게).
-            _quota = bool(_collective and not un and building.quota_blocked())
+            # 쿼터 차단 중이라 표제부/K-apt를 못 부른 집합건물은 'quota' 표식 → 20분 스윕이 쿼터 풀린 뒤 재계산(30일 TTL로 굳지 않게).
+            _quota = bool(_collective and not un and (building.quota_blocked()
+                                                      or (re.search(r"아파트", usage) and kapt.quota_blocked())))
             if need_hh:
                 if _quota:
                     out["quota"] = True
@@ -6107,11 +6108,13 @@ def _refresh_apt_detail(item_key: str, usage: str = "아파트") -> None:
         pass
 
 
-def _brief_recompute(keys: list, usage_by_key: dict = None, workers: int = 8, tag: str = "") -> dict:
+def _brief_recompute(keys: list, usage_by_key: dict = None, workers: int = 8, tag: str = "",
+                     addr_by_key: dict = None) -> dict:
     """무효화 → 재계산(병렬) → 아파트·오피스텔은 상세 단지정보 동기 → items 정렬컬럼 동기. 진행상황은 _brief_recomp."""
     import time as _tm
     keys = [k for k in dict.fromkeys(keys or []) if k]
     usage_by_key = usage_by_key or {}
+    addr_by_key = addr_by_key or {}
     st = _brief_recomp
     with _brief_recomp_lock:
         if st["running"]:
@@ -6141,9 +6144,20 @@ def _brief_recompute(keys: list, usage_by_key: dict = None, workers: int = 8, ta
             finally:
                 st["done"] += 1
         for i in range(0, len(keys), 40):
-            _purge_briefs(keys[i:i + 40])
+            batch = keys[i:i + 40]
+            # ★배치의 시군구 K-apt 목록을 먼저 순차로 채워 두면(대개 1~2개) 16스레드가 목록 락에 몰려 멈추지 않는다.
+            try:
+                _lawds = []
+                for k in batch:
+                    _a = (addr_by_key or {}).get(k)
+                    if _a and re.search(r"아파트", usage_by_key.get(k) or ""):
+                        _lawds.append(resolve_lawd(_a) or _sgg_geo_fallback(_a))
+                kapt.prefetch_lists(_lawds)
+            except Exception:
+                pass
+            _purge_briefs(batch)
             with _cf.ThreadPoolExecutor(max_workers=workers) as ex:
-                list(ex.map(one, keys[i:i + 40]))
+                list(ex.map(one, batch))
             _save_brief_cache()
         try:
             _sort_cols_backfill()          # items.households 즉시 동기(hh_ok만 복사·미통과는 NULL)
@@ -6207,7 +6221,7 @@ def require_admin_or_local(request: Request, sid: Optional[str] = Cookie(None)) 
 
 
 @app.post("/admin/brief_recompute")
-def admin_brief_recompute(scope: str = Query("bad", pattern="^(bad|collective|collective_missing|keys)$"), keys: str = "",
+def admin_brief_recompute(scope: str = Query("bad", pattern="^(bad|collective|collective_missing|nonapt_missing|apt_missing|keys)$"), keys: str = "",
                           limit: int = Query(0, ge=0, le=30000), workers: int = Query(8, ge=1, le=16),
                           _u: dict = Depends(require_admin_or_local)) -> dict:
     """세대수 brief 재계산(로컬 전용·백그라운드): scope=bad(틀린값만)|collective(진행중 집합건물 전부)|keys(직접)."""
@@ -6221,21 +6235,24 @@ def admin_brief_recompute(scope: str = Query("bad", pattern="^(bad|collective|co
         ks0 = [k for k in keys.split(",") if k]
         with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15,
                              autocommit=True) as c:
-            sel = c.execute("SELECT item_key, usage_name FROM items WHERE item_key = ANY(%s)", (ks0,)).fetchall()
+            sel = c.execute("SELECT item_key, usage_name, address FROM items WHERE item_key = ANY(%s)", (ks0,)).fetchall()
     else:
         with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15,
                              autocommit=True) as c:
             if scope == "bad":
-                q = f"""SELECT i.item_key, i.usage_name FROM api_cache c JOIN items i ON c.cache_key='brief:'||i.item_key
+                q = f"""SELECT i.item_key, i.usage_name, i.address FROM api_cache c JOIN items i ON c.cache_key='brief:'||i.item_key
                         WHERE {_COLLECTIVE_SQL} AND (c.data->>'available')='true' AND {_HH_BAD_SQL}
                         ORDER BY i.is_active DESC, c.updated_at"""
-            elif scope == "collective_missing":      # 새 규칙(hh_ok)으로 아직 계산되지 않은 것만(중단된 전량 작업 이어가기)
-                q = f"""SELECT i.item_key, i.usage_name FROM items i LEFT JOIN api_cache c ON c.cache_key='brief:'||i.item_key
-                        WHERE i.is_active AND {_COLLECTIVE_SQL}
-                          AND (c.data IS NULL OR coalesce(c.data->>'hh_ok','') = '')
+            elif scope in ("collective_missing", "nonapt_missing", "apt_missing"):
+                # 새 규칙(hh_ok)으로 아직 계산되지 않은 것만(중단된 전량 작업 이어가기). nonapt/apt = K-apt 일일한도 소진 시 분할 실행용.
+                _ufilter = ("AND i.usage_name !~ '아파트'" if scope == "nonapt_missing"
+                            else "AND i.usage_name ~ '아파트'" if scope == "apt_missing" else "")
+                q = f"""SELECT i.item_key, i.usage_name, i.address FROM items i LEFT JOIN api_cache c ON c.cache_key='brief:'||i.item_key
+                        WHERE i.is_active AND {_COLLECTIVE_SQL} {_ufilter}
+                          AND (c.data IS NULL OR coalesce(c.data->>'hh_ok','') = '' OR (c.data->>'quota')='true')
                         ORDER BY (i.usage_name ~ '아파트') DESC, (i.usage_name ~ '오피스텔') DESC, i.item_key"""
             else:
-                q = f"""SELECT i.item_key, i.usage_name FROM items i
+                q = f"""SELECT i.item_key, i.usage_name, i.address FROM items i
                         WHERE i.is_active AND {_COLLECTIVE_SQL}
                         ORDER BY (i.usage_name ~ '아파트') DESC, (i.usage_name ~ '오피스텔') DESC, i.item_key"""
             sel = c.execute(q).fetchall()
@@ -6243,7 +6260,8 @@ def admin_brief_recompute(scope: str = Query("bad", pattern="^(bad|collective|co
         sel = sel[:limit]
     ks = [r[0] for r in sel]
     ub = {r[0]: r[1] for r in sel}
-    threading.Thread(target=_brief_recompute, args=(ks, ub, workers, scope), daemon=True).start()
+    ab = {r[0]: r[2] for r in sel}
+    threading.Thread(target=_brief_recompute, args=(ks, ub, workers, scope, ab), daemon=True).start()
     return {"started": True, "scope": scope, "n": len(ks)}
 
 
@@ -6284,6 +6302,7 @@ def admin_brief_audit(_u: dict = Depends(require_admin_or_local)) -> dict:
     out["recompute"] = dict(_brief_recomp)
     try:
         out["building_api_quota_blocked"] = bool(building.quota_blocked())
+        out["kapt_api_quota_blocked"] = bool(kapt.quota_blocked())
     except Exception:
         out["building_api_quota_blocked"] = None
     return out

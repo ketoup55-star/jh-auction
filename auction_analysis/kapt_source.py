@@ -27,9 +27,16 @@ _LIST = "https://apis.data.go.kr/1613000/AptListService4/getSigunguAptList4"
 _BASIS = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusBassInfoV5"
 _DETAIL = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusDtlInfoV5"
 _UA = {"User-Agent": "Mozilla/5.0"}
-_KAPT_HEALTH = {"dead_warned": 0.0}   # 폐기응답 경보 스로틀(최근 경보 시각)
+_KAPT_HEALTH = {"dead_warned": 0.0, "quota_until": 0.0}   # 폐기응답 경보 스로틀·일일 한도 차단 해제 시각
 import threading as _threading
-_LIST_LOCK = _threading.Lock()         # 시군구 단지목록 페이지 순회 직렬화(병렬 재계산 시 429 방지)
+_LIST_LOCK = _threading.Lock()         # 시군구 단지목록 락 사전 보호
+
+
+def _next_midnight_ts() -> float:
+    """다음 자정+5분(로컬 시각) — data.go.kr 일일 트래픽은 자정에 리셋."""
+    import datetime as _dt
+    t = _dt.datetime.now().replace(hour=0, minute=5, second=0, microsecond=0) + _dt.timedelta(days=1)
+    return t.timestamp()
 
 
 def _norm(s: str) -> str:
@@ -135,17 +142,70 @@ class KaptSource:
         self._code_cache: dict[str, str | None] = {}   # (lawd|단지명) → kaptCode
         self._basis_cache: dict[str, dict | None] = {}  # kaptCode → 기본정보
         self._list_cache: dict[str, list] = {}          # lawd_cd → 시군구 단지목록(재사용)
+        self._list_locks: dict[str, object] = {}        # lawd_cd → 목록 순회 락(시군구별)
+        # ★목록 디스크 캐시(7일): 재시작마다 ~200시군구×최대 10페이지를 다시 받아 일일 한도를 태우던 것 방지(2026-09-17 실측: 재시작 7회 → 한도 소진).
+        self._list_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "kapt_lists.json")
+        self._list_saved_at = 0.0
+        try:
+            import json as _json
+            if os.path.exists(self._list_file) and time.time() - os.path.getmtime(self._list_file) < 7 * 86400:
+                with open(self._list_file, encoding="utf-8") as f:
+                    d = _json.load(f)
+                if isinstance(d, dict):
+                    self._list_cache.update({k: v for k, v in d.items() if isinstance(v, list) and v})
+        except Exception:
+            pass
+
+    def _save_lists(self) -> None:
+        """목록 캐시를 디스크에 저장(60초 디바운스, 베스트에포트)."""
+        if time.time() - self._list_saved_at < 60:
+            return
+        self._list_saved_at = time.time()
+        try:
+            import json as _json
+            tmp = self._list_file + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                _json.dump(self._list_cache, f, ensure_ascii=False)
+            os.replace(tmp, self._list_file)
+        except Exception:
+            pass
+
+    @staticmethod
+    def quota_blocked() -> bool:
+        """오늘 K-apt 일일 한도 소진 상태인가(자정 리셋)."""
+        return time.time() < _KAPT_HEALTH.get("quota_until", 0.0)
+
+    def prefetch_lists(self, lawd_cds) -> int:
+        """시군구 단지목록을 미리(순차·스로틀 하에) 채운다 — 병렬 재계산이 새 지역에 들어갈 때 멈추지 않게. 새로 받은 수 반환."""
+        n = 0
+        for lc in dict.fromkeys([c for c in (lawd_cds or []) if c]):
+            if lc not in self._list_cache:
+                if self._sigungu_list(lc):
+                    n += 1
+        return n
 
     def _get_json(self, url: str, params: dict) -> dict | None:
         """★재시도(2026-09-17): 서버 부하 구간에서 타임아웃/5xx가 나면 재시도 없이 None → K-apt 실패로 오인돼
         표제부 폴백(오독 위험)으로 흘렀다. 3회 재시도 + 실패 로그(10분 스로틀)."""
         last = ""
         from .api_throttle import throttle
+        if self.quota_blocked():                          # 오늘 일일 한도 소진 → 즉시 None(재시도·대기 없음)
+            return None
         for _try in range(4):
             try:
                 throttle()                                # 전역 초당 제한(429 방지)
                 r = httpx.get(url, params={**params, "serviceKey": self.key, "_type": "json"},
                               headers=_UA, timeout=25)
+                if r.status_code == 429 and "EXCEEDS_ERROR" in (r.text or "") and "PER_SECOND" not in (r.text or ""):
+                    # ★일일 요청 한도 초과(LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR) — 초당 제한과 다르다.
+                    #   실측(2026-09-17): 서버를 7번 재시작하며 시군구 목록(최대 10페이지)을 매번 다시 받아 목록 API 한도를 태웠다.
+                    #   오늘은 끝 → 자정 이후로 차단 표시, 호출측은 quota 표식을 남겨 스윕이 내일 다시 계산한다.
+                    _KAPT_HEALTH["quota_until"] = _next_midnight_ts()
+                    if time.time() - _KAPT_HEALTH.get("quota_warned", 0.0) > 600:
+                        _KAPT_HEALTH["quota_warned"] = time.time()
+                        print(f"[kapt] 공동주택 API 일일 한도 소진({url.rsplit('/', 1)[-1]}) → 자정까지 K-apt 미사용, "
+                              f"해당 물건은 quota 표식으로 내일 재계산", flush=True)
+                    return None
                 if r.status_code == 200:
                     j = r.json()
                     try:
@@ -219,7 +279,11 @@ class KaptSource:
         (XXXX1~9: 41591/93/95/97…)에 쪼개 담음 → 시코드가 비면 형제 sub코드를 합산해 누락 방지."""
         if lawd_cd in self._list_cache:
             return self._list_cache[lawd_cd]
-        with _LIST_LOCK:                    # ★같은 시군구 목록을 여러 스레드가 동시에 페이지 순회 → 429 폭주. 직렬화+캐시 재확인.
+        # ★시군구별 락: 같은 시군구는 한 스레드만 페이지 순회(429 폭주 방지), 다른 시군구는 병렬. (전역 락은 새 지역 진입 시
+        #   16스레드 전부가 한 목록 완성을 기다려 수 분 멈추던 실측 문제)
+        with _LIST_LOCK:
+            lk = self._list_locks.setdefault(lawd_cd, _threading.Lock())
+        with lk:
             if lawd_cd in self._list_cache:
                 return self._list_cache[lawd_cd]
             out = self._fetch_sigungu(lawd_cd)
@@ -232,6 +296,7 @@ class KaptSource:
                             out.append(it)
             if out:                             # 성공만 캐시(403 전파지연 시 재시도 허용)
                 self._list_cache[lawd_cd] = out
+                self._save_lists()
             return out
 
     def find_kapt_code(self, lawd_cd: str, apt_name: str, danji=None, bjd: str | None = None) -> str | None:
