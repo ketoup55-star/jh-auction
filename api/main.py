@@ -6096,6 +6096,10 @@ def _refresh_apt_detail(item_key: str, usage: str = "아파트") -> None:
         det = _complex_detail_for(cur) or _brief_as_detail(
             item_key, cur.get("complex") or _apt_name_from_addr(cur.get("address", "")))
         b = _brief_cache.get(item_key)
+        # K-apt 단지정보는 잡혔는데 세대수가 미기재(0.0→'')이고 brief(총괄표제부)엔 있으면 → 상세에 brief 값을 채워 목록=상세 유지.
+        if (isinstance(det, dict) and not str(det.get("households") or "").strip()
+                and isinstance(b, dict) and str(b.get("households") or "").isdigit()):
+            det = {**det, "households": b["households"]}
         if (re.search(r"아파트", usage or "") and isinstance(det, dict) and det.get("_src") != "건축물대장"
                 and isinstance(b, dict) and b.get("available")
                 and str(det.get("households") or "").isdigit()
@@ -10565,6 +10569,15 @@ def _apt_info_compute(item_key: str, months: int) -> dict:
     # 상세 단지정보는 실거래 유무와 무관하게 시도(시세 없어도 단지정보는 표시)
     out["complex_detail"] = _complex_detail_for(out) or _brief_as_detail(
         item_key, out.get("complex") or _apt_name_from_addr(address))
+    # K-apt 세대수 미기재(0.0→'')면 목록(brief)의 총괄표제부 값으로 보완 — 목록 121세대·상세 빈칸 불일치 방지.
+    try:
+        _cd = out.get("complex_detail")
+        if isinstance(_cd, dict) and not str(_cd.get("households") or "").strip():
+            _bh = (_brief_cache.get(item_key) or {}).get("households")
+            if str(_bh or "").isdigit():
+                out["complex_detail"] = {**_cd, "households": str(_bh)}
+    except Exception:
+        pass
     if not out.get("complex"):           # 단지 미매칭 시 폴백 이름으로 단지명/링크 채움
         out["complex"] = (out.get("complex_detail") or {}).get("name") or _apt_name_from_addr(address) or ""
     return out
