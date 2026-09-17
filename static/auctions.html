@@ -1682,6 +1682,18 @@ async function aibotSend(){
     setInterval(function(){ var n=performance.now(), lag=Math.round(n-last-50); last=n;
       if(lag>50){ J.o50++; if(lag>100)J.o100++; if(lag>150)J.o150++; if(lag>J.worst)J.worst=lag; } },50);
     try{ new PerformanceObserver(function(l){ l.getEntries().forEach(function(e){ if(e.duration>J.ltmax)J.ltmax=Math.round(e.duration); }); }).observe({entryTypes:['longtask']}); }catch(e){}
+    // 🔴가시 배지: 백그라운드 전송이 확장/차단기에 막혀도 사용자가 '숫자를 직접' 읽게. ?jank=1로 켜고 localStorage로 유지. 진단 후 제거.
+    try{ if(location.search.indexOf('jank')>=0) localStorage.setItem('__jb','1'); }catch(e){}
+    var _jb=false; try{ _jb=(localStorage.getItem('__jb')==='1')||location.search.indexOf('jank')>=0; }catch(e){ _jb=(location.search.indexOf('jank')>=0); }
+    if(_jb){ try{
+      var _bd=document.createElement('div');
+      _bd.style.cssText='position:fixed;left:10px;bottom:10px;z-index:2147483647;background:#111;color:#4caf50;font:bold 14px/1.25 monospace;padding:8px 12px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,.5);opacity:.95;pointer-events:none;';
+      _bd.textContent='렉감시 시작…';
+      (document.body||document.documentElement).appendChild(_bd);
+      setInterval(function(){ var c=(J.worst<50?'#4caf50':(J.worst<150?'#ff9800':'#f44336'));
+        _bd.style.color=c;
+        _bd.textContent='렉 최악:'+J.worst+'ms / 심함('+J.o150+'회) '+(document.querySelectorAll('tbody tr').length>0?'표':'카드'); }, 400);
+    }catch(e){} }
     function payload(){ var rows=document.querySelectorAll('tbody tr').length;
       return { worst:J.worst,o150:J.o150,o100:J.o100,o50:J.o50,ltmax:J.ltmax,
         rows:rows, imgs:document.querySelectorAll('img').length, dom:document.querySelectorAll('*').length,
