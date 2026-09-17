@@ -1682,45 +1682,9 @@ async function aibotSend(){
 }
 </script>
 <script src="/static/profile_setup.js"></script>
-<script>
-/* 🔴클라이언트 버벅 텔레메트리 — 사용자 실브라우저(포그라운드)의 이벤트루프 랙/롱태스크를 측정해
-   서버(/client_perf → slow_requests host='client')에 자동 기록. 서버·자동화브라우저(occluded)는
-   포그라운드 렌더 부하를 못 봐서, 실사용자 브라우저만이 진짜 버벅을 준다. 진단 완료 후 제거. */
-(function(){
-  try{
-    var J={worst:0,o150:0,o100:0,o50:0,ltmax:0,t0:Date.now()};
-    var last=performance.now();
-    setInterval(function(){ var n=performance.now(), lag=Math.round(n-last-50); last=n;
-      if(lag>50){ J.o50++; if(lag>100)J.o100++; if(lag>150)J.o150++; if(lag>J.worst)J.worst=lag; } },50);
-    try{ new PerformanceObserver(function(l){ l.getEntries().forEach(function(e){ if(e.duration>J.ltmax)J.ltmax=Math.round(e.duration); }); }).observe({entryTypes:['longtask']}); }catch(e){}
-    // 🔴가시 배지: 백그라운드 전송이 확장/차단기에 막혀도 사용자가 '숫자를 직접' 읽게. ?jank=1로 켜고 localStorage로 유지. 진단 후 제거.
-    try{ if(location.search.indexOf('jank')>=0) localStorage.setItem('__jb','1'); }catch(e){}
-    var _jb=false; try{ _jb=(localStorage.getItem('__jb')==='1')||location.search.indexOf('jank')>=0; }catch(e){ _jb=(location.search.indexOf('jank')>=0); }
-    if(_jb){ try{
-      var _bd=document.createElement('div');
-      _bd.style.cssText='position:fixed;left:10px;bottom:10px;z-index:2147483647;background:#111;color:#4caf50;font:bold 14px/1.25 monospace;padding:8px 12px;border-radius:10px;box-shadow:0 3px 10px rgba(0,0,0,.5);opacity:.95;pointer-events:none;';
-      _bd.textContent='렉감시 시작…';
-      (document.body||document.documentElement).appendChild(_bd);
-      setInterval(function(){ var c=(J.worst<50?'#4caf50':(J.worst<150?'#ff9800':'#f44336'));
-        _bd.style.color=c;
-        _bd.textContent='렉 최악:'+J.worst+'ms / 심함('+J.o150+'회) '+(document.querySelectorAll('tbody tr').length>0?'표':'카드'); }, 400);
-    }catch(e){} }
-    function payload(){ var rows=document.querySelectorAll('tbody tr').length;
-      return { worst:J.worst,o150:J.o150,o100:J.o100,o50:J.o50,ltmax:J.ltmax,
-        rows:rows, imgs:document.querySelectorAll('img').length, dom:document.querySelectorAll('*').length,
-        cpu:navigator.hardwareConcurrency||0, mem:navigator.deviceMemory||0,
-        view:(rows>0?'table':'card'), ua:(navigator.userAgent.match(/Chrome\/[\d.]+/)||[''])[0],
-        secs:Math.round((Date.now()-J.t0)/1000) }; }
-    function send(beacon){ try{ var b=JSON.stringify(payload());
-      if(beacon && navigator.sendBeacon){ navigator.sendBeacon('/client_perf', new Blob([b],{type:'application/json'})); }
-      else{ fetch('/client_perf',{method:'POST',headers:{'Content-Type':'application/json'},body:b,keepalive:true}).catch(function(){}); }
-    }catch(e){} }
-    [2000, 8000, 20000].forEach(function(t){ setTimeout(function(){ send(false); }, t); });  // 로드 즉시(2s)+8s+20s 확인전송(감시기 로드여부 즉시 판별)
-    setInterval(function(){ send(false); }, 20000);   // 이후 20초마다 누적 최악값
-    document.addEventListener('visibilitychange', function(){ if(document.hidden) send(true); });
-    window.addEventListener('pagehide', function(){ send(true); });
-  }catch(e){}
-})();
-</script>
+<!-- 🔴클라이언트 버벅 텔레메트리 제거(2026-09-17): setInterval(50ms) 드리프트로 랙을 재던 방식이
+     visibility 가드가 없어 '탭 백그라운드 throttle(최대 60초)'을 랙으로 허위기록 → slow_requests(host=client)
+     오염(하루 921건·평균21초)+?jank 배지 허위표시. 진짜 병목은 서버측(/auctions가 aptdemand compute=1의
+     2vCPU 점유로 6~30초 지연)이었고 컬럼화(5a833a3)로 해결. 실측 결과 앱 JS longtask는 0이라 이 감시기는 불필요. -->
 </body>
 </html>
