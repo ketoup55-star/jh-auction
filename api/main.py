@@ -6098,14 +6098,37 @@ def _refresh_apt_detail(item_key: str, usage: str = "아파트") -> None:
             _brief_cache[item_key] = b
             globals()["_brief_dirty"] = True
             auction_db.cache_save("brief:" + item_key, b)
-        if det == cur.get("complex_detail"):
-            return
+        # ★항상 저장: 메모리(_apt_cache)엔 이미 새 값이 있는데 DB 저장이 (부하로) 누락된 경우 '같다'고 건너뛰면 DB가 옛값으로 남아
+        #   목록≠상세가 재발한다(실측 82건, apt 행이 brief보다 오래됨). 업서트 1회 비용은 무시할 수준.
         cur = dict(cur)
         cur["complex_detail"] = det
         _apt_cache.remember(item_key, cur)
         auction_db.cache_save("apt:" + item_key, cur)
     except Exception:
         pass
+
+
+@app.post("/admin/apt_detail_refresh")
+def admin_apt_detail_refresh(scope: str = Query("differ", pattern="^(differ|keys)$"), keys: str = "",
+                             _u: dict = Depends(require_admin_or_local)) -> dict:
+    """상세 단지정보(apt: complex_detail)를 brief와 다시 맞춘다(brief 재계산 없이). scope=differ: 목록≠상세·상세 없음인 진행중 아파트."""
+    if scope == "keys":
+        ks = [k for k in keys.split(",") if k]
+    else:
+        import psycopg
+        with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15,
+                             autocommit=True) as c:
+            ks = [r[0] for r in c.execute("""
+                SELECT i.item_key FROM items i JOIN api_cache b ON b.cache_key='brief:'||i.item_key
+                  JOIN api_cache a ON a.cache_key='apt:'||i.item_key
+                 WHERE i.is_active AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
+                   AND (a.data->'complex_detail' IS NULL
+                        OR (b.data->>'households') IS DISTINCT FROM (a.data->'complex_detail'->>'households'))""").fetchall()]
+    done = 0
+    for k in ks:
+        _refresh_apt_detail(k, "아파트")
+        done += 1
+    return {"n": len(ks), "done": done}
 
 
 def _brief_recompute(keys: list, usage_by_key: dict = None, workers: int = 8, tag: str = "",
