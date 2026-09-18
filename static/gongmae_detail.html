@@ -521,7 +521,7 @@ function renderGmCases(xb, cardEl){
   cs.forEach(function(x){
     var p=(x.item_key||"").split("|");
     var cn=p.length>=3?(p[1]+"타경"+p[2]+(p[3]&&p[3]!=="1"?" 물번"+p[3]:"")):"-";
-    h+='<tr style="border-top:1px solid #eee"><td>'+cn+'</td><td>'+(x.sell_date||"-")+'</td><td>'+esc(x.address||"-")+'</td><td>'+(x.floor!=null?x.floor+"층":"-")+'</td><td>'+(x.area!=null?x.area+"㎡":"-")+'</td><td>'+won(x.appraisal)+'</td><td style="color:#c0392b">'+won(x.sale_price)+'</td><td>'+(x.sale_rate!=null?Math.round(x.sale_rate)+"%":"-")+'</td><td>'+((x.bid_count!=null&&x.bid_count!=="")?x.bid_count+"명":"-")+'</td><td>'+(x.sale_2nd?won(x.sale_2nd):"-")+'</td></tr>';
+    h+='<tr style="border-top:1px solid #eee"><td>'+cn+'</td><td>'+(String(x.sell_date||"-").slice(0,10))+'</td><td>'+esc(x.address||"-")+'</td><td>'+(x.floor!=null?x.floor+"층":"-")+'</td><td>'+(x.area!=null?x.area+"㎡":"-")+'</td><td>'+won(x.appraisal)+'</td><td style="color:#c0392b">'+won(x.sale_price)+'</td><td>'+(x.sale_rate!=null?Math.round(x.sale_rate)+"%":"-")+'</td><td>'+((x.bid_count!=null&&x.bid_count!=="")?x.bid_count+"명":"-")+'</td><td>'+(x.sale_2nd?won(x.sale_2nd):"-")+'</td></tr>';
   });
   h+='</table></div>'; box.innerHTML=h;
   box.querySelector(".ebtoggle").onclick=function(){ var t=box.querySelector(".ebtbl"); t.style.display=t.style.display==="none"?"block":"none"; };
