@@ -4560,6 +4560,8 @@ def _col_enrich_sync() -> None:
             FROM api_cache c WHERE c.cache_key='carexpbid:'||i.item_key AND (c.data->>'available')::bool AND (c.data->>'v')::int={_CAREXPBID_V}
               AND (c.data->>'expected_bid') ~ '^[0-9.]+$' AND i.expected_bid IS DISTINCT FROM (c.data->>'expected_bid')::numeric::bigint""",
         "UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
+        # 차익은 시세·예상낙찰가 둘 다 있을 때만 — 한쪽이 비면(오매칭 시세 제거 등) 옛 차익이 목록·보증금미상 필터에 남지 않게 비운다
+        "UPDATE items SET profit=NULL WHERE profit IS NOT NULL AND (est_price IS NULL OR expected_bid IS NULL)",
         # 유사거래 건수 — similar_index 블롭(jsonb) 전개 후 조인(변경분만). 舊 startup 블롭 방식 대체
         """UPDATE items i SET similar_count = kv.value::int
            FROM (SELECT key, value FROM api_cache, jsonb_each_text(data) WHERE cache_key='similar_index') kv
@@ -4672,10 +4674,18 @@ def _est_col_warm() -> None:
         #  둘 다 채움(molit 중복호출 0). NOT EXISTS 자가제외라 소량배치(400)가 백로그를 점진 드레인 + 신규 자동유지.
         #  aptneg 최근 마커(3일) 제외 — 실거래無 시군구는 _apt_trades가 빈결과를 캐시 안 해(3078행) 매 사이클 molit
         #  재호출 낭비 + top-400이 그 시군구로 클로깅돼 오래된 available이 도달 못하던 것 방지(3일마다만 재검).
-        cur.execute("""SELECT item_key FROM items i WHERE data_class='현황'
+        #  🔴2026-09-18: ①목록 진행물건(is_active)인데 data_class가 '현황'이 아닌 아파트·오피스텔 843건이 대상에서 빠져 있었다.
+        #  ②'est_price IS NULL'이면 매 사이클 다시 뽑아 — 실거래는 있는데 시세가 안 나오는 1,947건이 30분마다 재계산되며
+        #   400칸을 차지(실측: 1,171건이 하루 안에 또 계산됨) → 옛 캐시·신규 물건이 차례를 못 받았다.
+        #   → 대상 = apt: 캐시가 없거나 **현재 로직 버전(APT_VER) 미만**(로직을 고치면 옛 결과가 자동으로 다시 계산됨)
+        #          OR 시세 없음이면서 apt:를 3일 넘게 다시 안 본 것(새 실거래 반영은 3일마다).
+        cur.execute(f"""SELECT item_key FROM items i WHERE (i.is_active OR i.data_class='현황')
                        AND (usage_name ILIKE '%아파트%' OR usage_name ILIKE '%오피스텔%')
-                       AND (est_price IS NULL
-                            OR NOT EXISTS (SELECT 1 FROM api_cache c WHERE c.cache_key = 'apt:' || i.item_key))
+                       AND (NOT EXISTS (SELECT 1 FROM api_cache c WHERE c.cache_key = 'apt:' || i.item_key
+                                         AND CASE WHEN (c.data->>'v') ~ '^[0-9]+$' THEN (c.data->>'v')::int ELSE 0 END >= {APT_VER})
+                            OR (i.est_price IS NULL
+                                AND NOT EXISTS (SELECT 1 FROM api_cache c WHERE c.cache_key = 'apt:' || i.item_key
+                                                AND c.updated_at > now() - interval '3 days')))
                        AND NOT EXISTS (SELECT 1 FROM api_cache n WHERE n.cache_key = 'aptneg:' || i.item_key
                                        AND n.updated_at > now() - interval '3 days')
                        ORDER BY (i.sell_date_d >= now()::date) DESC NULLS LAST,
@@ -4684,46 +4694,119 @@ def _est_col_warm() -> None:
         keys = [r[0] for r in cur.fetchall()]
         if not keys:
             cur.close(); conn.close(); return
-
-        apt_rows = []   # (cache_key, apt_info) — apt: 캐시는 est_price처럼 '직접 SQL' 업서트. cache_save(REST 4s)는
-                        #  부하 시 유실돼 로컬SQLite에만 남고 Supabase 미반영→CloudType이 못 읽음(소량검증서 10건중 4건만 저장 확인).
-        neg_rows = []   # unavailable(실거래無 등) item_key → aptneg 마커. 매 사이클 molit 재호출·클로깅 방지(3일 후 재검).
-        def _one(k):
-            try:
-                _ai = _apt_info_compute(k, 12)
-                # 상세 apt_info 콜드(첫진입 2.3초) 제거 — 이미 계산한 결과를 apt: 영구캐시에도 저장(추가 molit 0).
-                #  endpoint(8702)와 동일 가드: available=True만 저장(쿼터 실패=available False → 미저장 → 다음 주기 재시도).
-                if isinstance(_ai, dict) and _ai.get("available") and _ai.get("v", 0) >= APT_VER:
-                    apt_rows.append(("apt:" + k, _ai))
-                elif isinstance(_ai, dict):
-                    neg_rows.append(k)   # available=False(실거래無 등) → aptneg 마커로 3일간 재시도 제외
-                v = _apt_est_value(_ai)
-                if v and v.get("price"):
-                    return (int(v["price"]), k)
-            except Exception:
-                pass
-            return None
-        vals = []
-        with _cf.ThreadPoolExecutor(max_workers=6) as ex:
-            for rv in ex.map(_one, keys):
-                if rv:
-                    vals.append(rv)
-        if vals:
-            cur.executemany("UPDATE items SET est_price=%s WHERE item_key=%s AND est_price IS NULL", vals)
-            cur.execute("UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid")
-        if apt_rows:    # apt: 직접 업서트(무손실) → CloudType이 즉시 읽어 상세 apt_info 콜드(2.3초) 제거
-            cur.executemany("INSERT INTO api_cache (cache_key, data) VALUES (%s, %s::jsonb) "
-                            "ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
-                            [(ck, _json.dumps(d, ensure_ascii=False)) for ck, d in apt_rows])
-        if neg_rows:    # aptneg 마커(updated_at만 갱신) — 3일간 SELECT서 제외해 molit 재호출·클로깅 방지. 3일 후 재검(신규 실거래·쿼터회복 반영)
-            cur.executemany("INSERT INTO api_cache (cache_key, data) VALUES (%s, '{\"available\": false}'::jsonb) "
-                            "ON CONFLICT (cache_key) DO UPDATE SET updated_at = now()",
-                            [("aptneg:" + k,) for k in neg_rows])
+        r = _apt_recompute_items(keys, cur)
         # 0건이어도 항상 로그 → 루프 가동 확인 + molit 쿼터소진(계산 0) 판별
-        print(f"[est_col] {len(keys)}건 시도 → est_price {len(vals)}건 · apt:예열 {len(apt_rows)}건 · neg {len(neg_rows)}건", flush=True)
+        print(f"[est_col] {len(keys)}건 시도 → est_price {r['priced']}건 · apt:예열 {r['saved']}건 · neg {r['neg']}건"
+              f" · 시세 비움 {r['cleared']}건", flush=True)
         cur.close(); conn.close()
     except Exception as e:
         print(f"[est_col] skip {str(e)[:60]}", flush=True)
+
+
+def _apt_recompute_items(keys: list, cur, workers: int = 6) -> dict:
+    """apt_info를 **현재 로직으로 다시 계산** → apt: 캐시(Supabase 직접 업서트 + 로컬 SQLite·디스크) + items.est_price/profit.
+    est_col 주기 작업과 /admin/apt_recompute 공용.
+    · apt: 는 available만 저장(쿼터 실패=미저장 → 다음 주기 재시도). unavailable은 aptneg 마커(3일 재시도 제외).
+    · est_price는 **덮어쓴다**. 가격이 안 나오면 est_price·profit을 비운다 — 옛 오매칭(다른 단지) 시세가 목록 차익에 남지 않게
+      (2026-09-18 match_apt 전수감사). 단 시군구 실거래 조회가 안 된 경우(reason 있음: 쿼터·코드 없음 등)는 기존 값 유지.
+      오피스텔은 비운 뒤 offi: 시세가 있으면 col_sync가 20분 안에 다시 채운다(offi:가 오피스텔 시세의 주인)."""
+    apt_rows, neg_rows, vals, clears = [], [], [], []
+
+    def _one(k):
+        try:
+            ai = _apt_info_compute(k, 12)
+        except Exception:
+            return
+        if not isinstance(ai, dict):
+            return
+        if ai.get("available") and ai.get("v", 0) >= APT_VER:
+            apt_rows.append(("apt:" + k, ai))
+        else:
+            neg_rows.append(k)
+        v = _apt_est_value(ai)
+        if v and v.get("price"):
+            vals.append((int(v["price"]), k, int(v["price"])))
+        elif ai.get("available") or "reason" not in ai:      # 실거래 풀은 받았는데 같은 단지·시세가 없음 → 비움
+            clears.append(k)
+
+    with _cf.ThreadPoolExecutor(max_workers=workers) as ex:
+        list(ex.map(_one, keys))
+    if apt_rows:    # apt: 직접 업서트(무손실) → CloudType이 즉시 읽어 상세 apt_info 콜드(2.3초) 제거
+        cur.executemany("INSERT INTO api_cache (cache_key, data) VALUES (%s, %s::jsonb) "
+                        "ON CONFLICT (cache_key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()",
+                        [(ck, _json.dumps(d, ensure_ascii=False)) for ck, d in apt_rows])
+        try:        # 이 서버의 로컬 SQLite(읽기 로컬우선)·디스크 캐시도 새 값으로 — 옛 값이 로컬에서 되살아나지 않게
+            auction_db.local.put_many(apt_rows, synced=1)
+        except Exception:
+            pass
+        for ck, d in apt_rows:
+            try:
+                _apt_cache.remember(ck[4:], d)
+            except Exception:
+                pass
+    if neg_rows:    # aptneg 마커(updated_at만 갱신) — 3일간 SELECT서 제외해 molit 재호출·클로깅 방지. 3일 후 재검(신규 실거래·쿼터회복 반영)
+        cur.executemany("INSERT INTO api_cache (cache_key, data) VALUES (%s, '{\"available\": false}'::jsonb) "
+                        "ON CONFLICT (cache_key) DO UPDATE SET updated_at = now()",
+                        [("aptneg:" + k,) for k in neg_rows])
+        for k in neg_rows:
+            try:
+                _apt_cache.pop(k, None)
+            except Exception:
+                pass
+        # 옛 로직(v<APT_VER) apt: 행은 지운다 — 새 로직으로는 같은 단지가 없다는 결과인데 옛 오매칭 행이 남으면, 버전을 안 보는
+        #  경로(상세 단지정보 동기 _refresh_apt_detail 등)가 옛 단지 이름으로 K-apt를 다시 조회해 틀린 단지정보를 되살린다.
+        #  (쿼터 실패로 unavailable이어도 v>=APT_VER인 정상 행은 남긴다)
+        stale = ["apt:" + k for k in neg_rows]
+        cur.execute("DELETE FROM api_cache WHERE cache_key = ANY(%s) AND "
+                    "CASE WHEN (data->>'v') ~ '^[0-9]+$' THEN (data->>'v')::int ELSE 0 END < %s", (stale, APT_VER))
+        try:
+            loc = auction_db.local.get_many(stale)
+            auction_db.local.delete_many([ck for ck, d in loc.items()
+                                          if not (isinstance(d, dict) and int(d.get("v") or 0) >= APT_VER)])
+        except Exception:
+            pass
+    if vals:
+        cur.executemany("UPDATE items SET est_price=%s WHERE item_key=%s AND est_price IS DISTINCT FROM %s", vals)
+    if clears:
+        cur.execute("UPDATE items SET est_price=NULL, profit=NULL WHERE item_key = ANY(%s) "
+                    "AND (est_price IS NOT NULL OR profit IS NOT NULL)", (clears,))
+    if vals or clears:
+        cur.execute("UPDATE items SET profit=est_price-expected_bid WHERE item_key = ANY(%s) AND est_price IS NOT NULL "
+                    "AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
+                    ([v[1] for v in vals],))
+    return {"tried": len(keys), "saved": len(apt_rows), "neg": len(neg_rows), "priced": len(vals), "cleared": len(clears)}
+
+
+_apt_rc: dict = {"running": False, "scope": "", "total": 0, "done": 0, "saved": 0, "neg": 0, "priced": 0, "cleared": 0,
+                 "started": None, "finished": None, "last_err": ""}
+
+
+def _apt_recompute_bulk(keys: list, scope: str) -> None:
+    import psycopg
+    import time as _t
+    _apt_rc.update({"running": True, "scope": scope, "total": len(keys), "done": 0, "saved": 0, "neg": 0, "priced": 0,
+                    "cleared": 0, "started": _t.strftime("%Y-%m-%d %H:%M:%S"), "finished": None, "last_err": ""})
+    try:
+        with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            c.execute("SET statement_timeout = '120s'")
+            cur = c.cursor()
+            for i in range(0, len(keys), 120):
+                try:
+                    r = _apt_recompute_items(keys[i:i + 120], cur)
+                    for f in ("saved", "neg", "priced", "cleared"):
+                        _apt_rc[f] += r[f]
+                except Exception as e:
+                    _apt_rc["last_err"] = str(e)[:120]
+                _apt_rc["done"] = min(len(keys), i + 120)
+                if (i // 120) % 5 == 0:
+                    print(f"[apt_recompute:{scope}] {_apt_rc['done']}/{len(keys)} saved={_apt_rc['saved']} "
+                          f"priced={_apt_rc['priced']} cleared={_apt_rc['cleared']}", flush=True)
+    except Exception as e:
+        _apt_rc["last_err"] = str(e)[:120]
+    finally:
+        _apt_rc["running"] = False
+        _apt_rc["finished"] = _t.strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[apt_recompute:{scope}] 완료 {_apt_rc}", flush=True)
 
 
 def _est_col_warm_loop() -> None:
@@ -7048,6 +7131,37 @@ def admin_statement_fill_status(_u: dict = Depends(require_admin_or_local)) -> d
     return dict(_stmt_fill)
 
 
+@app.post("/admin/apt_recompute")
+def admin_apt_recompute(scope: str = Query("keys", pattern="^(keys|stale)$"), keys: str = "",
+                        limit: int = Query(0, ge=0, le=50000), _u: dict = Depends(require_admin_or_local)) -> dict:
+    """아파트·오피스텔 apt_info(같은 단지 실거래·추정시세) 재계산(로컬 전용·백그라운드). 본체는 _apt_recompute_items.
+    scope=keys(직접) | stale(목록 물건 중 apt: 캐시가 없거나 APT_VER 미만 — 로직 수정 후 일괄 갱신)."""
+    if _IS_CLOUD:
+        raise HTTPException(400, "클라우드는 계산하지 않습니다(로컬 4011에서 실행).")
+    if _apt_rc["running"]:
+        return {"started": False, "reason": "이미 실행 중", "done": _apt_rc["done"], "total": _apt_rc["total"]}
+    if scope == "keys":
+        ks = [k for k in keys.split(",") if k]
+    else:
+        import psycopg
+        with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            c.execute("SET statement_timeout = '180s'")
+            ks = [r[0] for r in c.execute(f"""SELECT item_key FROM items i WHERE (i.is_active OR i.data_class='현황')
+                   AND (usage_name ILIKE '%아파트%' OR usage_name ILIKE '%오피스텔%')
+                   AND NOT EXISTS (SELECT 1 FROM api_cache c WHERE c.cache_key = 'apt:' || i.item_key
+                                    AND CASE WHEN (c.data->>'v') ~ '^[0-9]+$' THEN (c.data->>'v')::int ELSE 0 END >= {APT_VER})
+                   ORDER BY (i.sell_date_d >= now()::date) DESC NULLS LAST, i.sell_date_d ASC""").fetchall()]
+    if limit:
+        ks = ks[:limit]
+    threading.Thread(target=_apt_recompute_bulk, args=(ks, scope), daemon=True).start()
+    return {"started": True, "scope": scope, "n": len(ks)}
+
+
+@app.get("/admin/apt_recompute/status")
+def admin_apt_recompute_status(_u: dict = Depends(require_admin_or_local)) -> dict:
+    return dict(_apt_rc)
+
+
 @app.get("/admin/statement_audit")
 def admin_statement_audit(_u: dict = Depends(require_admin_or_local)) -> dict:
     """명세서 채우기 감사(검수 항목 고정): 남은 대상·처리 표식 집계·라벨 분포·표식↔행 정합(표식 n_tenants>0인데 행 0 = 불일치)."""
@@ -9131,7 +9245,13 @@ def apt_radius_map(item_key: str, band: float = 0, defer: bool = False) -> dict:
               "radius": 1000, "dong": dong, "prop_area": prop_area,
               "cur_area": round(target, 1), "bands": bands,
               "geo_ok": geo_ok, "complexes": complexes}
-    if geo_ok:
+    # 🔴재발방지(2026-09-18 개편 지역 지도 0건): 물건 시군구가 코드표에 없거나 실거래 풀을 하나도 못 받았으면
+    #  '빈 지도'를 3일 캐시로 굳히지 않는다(다음 조회에 다시 계산) + 로그로 드러낸다.
+    if not inv.get(lawd):
+        print(f"[aptmap] ⚠ 물건 시군구 코드 {lawd}가 코드표에 없음 → 지도 비어 보임(캐시 안 함) {item_key}", flush=True)
+    elif not pool_all:
+        print(f"[aptmap] ⚠ 시군구 {lawd} 실거래 풀 0건(조회 실패 추정) → 캐시 안 함 {item_key}", flush=True)
+    if geo_ok and inv.get(lawd) and pool_all:
         _aptmap_cache[ck] = result
         try:
             auction_db.cache_save(ck, result)
@@ -11323,7 +11443,9 @@ def _brief_as_detail(item_key: str, name: str):
             "elevator": b.get("elevator"), "_src": "건축물대장"}
 
 
-APT_VER = 8   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v8: 3개월 실거래 없으면 호가(유사층수 최저)-1000만원=추정시세, 호가도 없으면 산출불가=주인님 지정)
+APT_VER = 9   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v8: 3개월 실거래 없으면 호가(유사층수 최저)-1000만원=추정시세, 호가도 없으면 산출불가=주인님 지정)
+#   v9(2026-09-18): match_apt 오매칭 수정(다른 동·시도/시군구 이름 단지 혼입, 읍면 지번매칭 불능) — v8 캐시는 옛 매칭이라 전부 재계산 대상.
+#   est_col·col_sync·/admin/apt_recompute가 모두 'v >= APT_VER'만 인정하므로 올리기만 하면 옛 결과가 자동으로 밀려난다.
 
 
 def _apt_info_compute(item_key: str, months: int) -> dict:
