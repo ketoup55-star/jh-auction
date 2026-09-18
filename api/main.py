@@ -4402,11 +4402,18 @@ def _freshness_loop() -> None:
     서버 시작 시점의 최신 updated_at 이후 변경분만 감지(기존 캐시는 보존)."""
     import time as _t
     last = auction_db.max_updated_at() or ""
+    print(f"[freshness] 시작 워터마크 {last or '(조회 실패 — 90초 뒤 재시도)'}", flush=True)
+    _fails = 0
     while True:
         _t.sleep(90)
         try:
             if not last:
                 last = auction_db.max_updated_at() or ""
+                _fails += 1
+                if last:
+                    print(f"[freshness] 워터마크 확보 {last} ({_fails}회 재시도 후)", flush=True)
+                elif _fails % 20 == 0:
+                    print(f"[freshness] ⚠ 최신 갱신시각을 {_fails}회 연속 못 얻음 — 캐시 무효화가 멈춘 상태", flush=True)
                 continue
             keys, newest = auction_db.items_updated_since(last)
             if keys:
@@ -4574,6 +4581,10 @@ def _col_sync_loop() -> None:
             _statement_sweep()             # ★명세서→임차인 채우기 유지(새 법원 수집분도 20분 안에 권리분석 반영) — 2026-09-18
         except Exception as _e:
             print(f"[stmt_sweep] skip: {str(_e)[:80]}", flush=True)
+        try:
+            _stale_analysis_sweep()        # ★물건 갱신 뒤 옛 분석 캐시 재계산(freshness 루프 안전망) — 2026-09-18
+        except Exception as _e:
+            print(f"[stale_analysis] skip: {str(_e)[:80]}", flush=True)
         _t.sleep(1200)          # 20분마다 변경분 동기화
 
 
@@ -6410,31 +6421,32 @@ WITH s AS (
          --  …취소결정→허가취소)·HTML 조각·괄호 금액·앞뒤 공백 (실측 J05|2025|20385|1: '차순위매각허가결정'을 계속 잡던 공회전 수정)
          bool_or(res ~ '^(최고가)?매각허가결정$|취소결정|<|\(.*원\)|^\s|\s$')   AS raw_result
     FROM s GROUP BY item_key
-), sale AS (   -- 매각기일(금액 있는 행)만, 날짜순. 회차 = 금액이 떨어질 때만 +1, 금액이 오르면(재감정·새 주기) 신건부터 다시
-               -- 같은 날짜·같은 회차칸으로 병합된 행('810,000,000원 / 890,000,000원')은 앞 금액으로(정규화의 회차 계산과 동일)
-  SELECT item_key, id, rnd, sd, regexp_replace(substring(mp from '([0-9][0-9,]*)\s*원?\s*$'),',','','g')::numeric d
-    FROM s WHERE (mp ~ '^[0-9,]+원' OR mp ~ '^[0-9]+$') AND coalesce(substring(mp from '([0-9][0-9,]*)\s*원?\s*$'),'') ~ '[0-9]'
-), lagged AS (
-  SELECT *, lag(d) OVER (PARTITION BY item_key ORDER BY sd, id) prev FROM sale
-), seg AS (
-  SELECT *, sum(CASE WHEN prev IS NOT NULL AND d > prev THEN 1 ELSE 0 END) OVER (PARTITION BY item_key ORDER BY sd, id ROWS UNBOUNDED PRECEDING) sg
-    FROM lagged
-), num AS (
-  SELECT item_key, rnd,
-         1 + sum(CASE WHEN prev IS NOT NULL AND d < prev THEN 1 ELSE 0 END) OVER (PARTITION BY item_key, sg ORDER BY sd, id ROWS UNBOUNDED PRECEDING) n
-    FROM seg
-), rn_bad AS (
-  SELECT DISTINCT item_key FROM num WHERE rnd <> (CASE WHEN n <= 1 THEN '신건' ELSE n||'차' END)
+), cur_missing AS (   -- 목록의 현재 매각기일(오늘 이후·최저가 있음)이 표에 없음 → 정규화가 current로 채움
+  SELECT i.item_key FROM items i
+   WHERE i.is_active {extra} AND left(i.sell_date,10) ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'
+     AND left(i.sell_date,10) >= to_char((now() AT TIME ZONE 'Asia/Seoul')::date, 'YYYY-MM-DD')
+     AND coalesce(i.min_price,0) > 0
+     AND EXISTS (SELECT 1 FROM auction_schedule s2 WHERE s2.item_key=i.item_key)
+     AND NOT EXISTS (SELECT 1 FROM auction_schedule s2 WHERE s2.item_key=i.item_key
+                        AND left(s2.sell_date,10)=left(i.sell_date,10) AND coalesce(s2.round,'') <> '')
 )
-SELECT f.item_key,
-       concat_ws(',', CASE WHEN digits_only THEN 'digits' END, CASE WHEN blank_row THEN 'blank' END,
-                      CASE WHEN round_on_nonsale THEN 'round_nonsale' END, CASE WHEN sale_no_round THEN 'sale_noround' END,
-                      CASE WHEN decision_no_result THEN 'decision_noresult' END, CASE WHEN bad_date THEN 'date' END,
-                      CASE WHEN raw_result THEN 'result' END, CASE WHEN b.item_key IS NOT NULL THEN 'round_label' END) reasons
-  FROM flag f LEFT JOIN rn_bad b ON b.item_key = f.item_key
- WHERE digits_only OR blank_row OR round_on_nonsale OR sale_no_round OR decision_no_result OR bad_date OR raw_result
-    OR b.item_key IS NOT NULL
+SELECT item_key, string_agg(reasons, ',') reasons FROM (
+  SELECT f.item_key,
+         concat_ws(',', CASE WHEN digits_only THEN 'digits' END, CASE WHEN blank_row THEN 'blank' END,
+                        CASE WHEN round_on_nonsale THEN 'round_nonsale' END, CASE WHEN sale_no_round THEN 'sale_noround' END,
+                        CASE WHEN decision_no_result THEN 'decision_noresult' END, CASE WHEN bad_date THEN 'date' END,
+                        CASE WHEN raw_result THEN 'result' END) reasons
+    FROM flag f
+   WHERE digits_only OR blank_row OR round_on_nonsale OR sale_no_round OR decision_no_result OR bad_date OR raw_result
+  UNION ALL
+  SELECT item_key, 'current_missing' FROM cur_missing
+) z GROUP BY item_key
 """
+# 회차 라벨 검사는 SQL이 아니라 정규화와 '같은 함수'(schedule_norm.stored_rounds_wrong)로 한다 — 규칙을 두 군데 따로 쓰면
+#  한쪽만 바뀌었을 때 스윕이 같은 물건을 끝없이 다시 잡거나(공회전) 틀린 회차를 못 잡는다(2026-09-18 재진행 규칙 보완 때 실제 위험).
+_SCHED_ROWS_SQL = ("SELECT s.item_key, s.id, s.round, s.sell_date, s.min_price, s.result FROM auction_schedule s "
+                   "JOIN items i ON i.item_key=s.item_key WHERE i.is_active AND coalesce(s.round,'') <> '' {extra} "
+                   "ORDER BY s.item_key")
 
 
 def _sched_doc_rows(c, item_key: str):
@@ -6474,7 +6486,8 @@ def _schedule_normalize_item(c, item_key: str, use_doc: bool = True) -> str:
         return "error:doc"
     if not doc and not existing:
         return "empty"
-    rows = _schn.canonical_rows(doc or None, existing, doc_multi=multi)
+    _cur = c.execute("SELECT left(sell_date,10), min_price FROM items WHERE item_key=%s", (item_key,)).fetchone()
+    rows = _schn.canonical_rows(doc or None, existing, doc_multi=multi, current=_cur)
     if not rows:
         return "empty"                      # 정규화 결과 0행이면 기존 행을 지우지 않는다(안전)
     if _schn.rows_equal(existing, rows):
@@ -6554,8 +6567,21 @@ def _schedule_normalize_bulk(keys: list, workers: int = 6, tag: str = "bulk") ->
 
 
 def _schedule_noncanon_keys(c, limit: int = 0, extra: str = "") -> list:
-    q = _SCHED_NONCANON_SQL.format(extra=extra) + (" LIMIT %s" % int(limit) if limit else "")
-    return [(r[0], r[1]) for r in c.execute(q).fetchall()]
+    found: dict = {}
+    for k, rs in c.execute(_SCHED_NONCANON_SQL.format(extra=extra)).fetchall():
+        found.setdefault(k, set()).update(x for x in (rs or "").split(",") if x)
+    buf: list = []
+    cur = None
+    for k, i, rnd, sd, mp, res in c.execute(_SCHED_ROWS_SQL.format(extra=extra)).fetchall():
+        if k != cur:
+            if cur is not None and _schn.stored_rounds_wrong(buf):
+                found.setdefault(cur, set()).add("round_label")
+            cur, buf = k, []
+        buf.append({"id": i, "round": rnd, "sell_date": sd, "min_price": mp, "result": res})
+    if cur is not None and _schn.stored_rounds_wrong(buf):
+        found.setdefault(cur, set()).add("round_label")
+    out = [(k, ",".join(sorted(v))) for k, v in sorted(found.items())]
+    return out[:limit] if limit else out
 
 
 def _schedule_sweep(limit: int = 300) -> int:
@@ -6903,6 +6929,86 @@ def admin_statement_audit(_u: dict = Depends(require_admin_or_local)) -> dict:
                AND NOT EXISTS (SELECT 1 FROM api_cache b WHERE b.cache_key = 'analysis:'||substr(a.cache_key, 6))""").fetchone()[0]
     out["fill"] = dict(_stmt_fill)
     return out
+
+
+# ── 옛 분석 캐시 안전망 — 2026-09-18 ─────────────────────────────────────────────────────────────────────────
+#   freshness 루프(90초 워터마크)는 크롤러가 물건을 고치면 분석 캐시를 지운다. 그런데 items에 updated_at 인덱스가 없어
+#   REST 조회가 3초 제한(statement timeout)에 걸려 매번 실패했고, 실패를 삼켜 루프가 조용히 멈춰 있었다(실측: 오늘 재시작 뒤
+#   감지 0회, 진행중 340건 분석이 물건 갱신보다 오래됨 — 예: 면제 문구가 사라졌는데 '안전·매수양호').
+#   조치: ①인덱스 idx_items_updated_at 추가 ②조회 psycopg 우선 + 실패 로그 ③아래 20분 안전망 = 캐시 시각 < 물건 갱신 시각인
+#   진행중 물건의 분석을 지우고 다시 계산(지운 뒤 저장하므로 캐시 updated_at이 새로 찍혀 같은 물건을 반복하지 않음).
+_ana_recomp: dict = {"running": False, "tag": "", "total": 0, "done": 0, "err": 0, "started": None, "finished": None, "last_err": ""}
+_STALE_ANALYSIS_SQL = ("SELECT i.item_key FROM items i JOIN api_cache a ON a.cache_key = 'analysis:'||i.item_key "
+                       "WHERE i.is_active AND i.updated_at > a.updated_at ORDER BY i.updated_at DESC")
+
+
+def _recompute_analysis(keys: list, tag: str = "keys") -> int:
+    """분석 캐시 삭제(로컬+Supabase) → 재계산·저장(목록 buy_grade 단조 상향 포함). 처리 건수 반환."""
+    import time as _t
+    from auction_analysis.doc_analysis import evict_item
+    _ana_recomp.update({"running": True, "tag": tag, "total": len(keys), "done": 0, "err": 0,
+                        "started": _t.strftime("%Y-%m-%d %H:%M:%S"), "finished": None, "last_err": ""})
+    try:
+        for i in range(0, len(keys), 50):
+            chunk = keys[i:i + 50]
+            try:
+                auction_db.cache_delete_many(["analysis:" + k for k in chunk])
+            except Exception as e:
+                _ana_recomp["last_err"] = f"delete: {str(e)[:60]}"
+            for k in chunk:
+                try:
+                    evict_item(k)
+                    auction_analysis(k)
+                except Exception as e:
+                    _ana_recomp["err"] += 1
+                    _ana_recomp["last_err"] = f"{k}: {str(e)[:60]}"
+                _ana_recomp["done"] += 1
+    finally:
+        _ana_recomp["running"] = False
+        _ana_recomp["finished"] = _t.strftime("%Y-%m-%d %H:%M:%S")
+    return _ana_recomp["done"] - _ana_recomp["err"]
+
+
+def _stale_analysis_sweep(limit: int = 150) -> int:
+    """20분 주기(로컬 전용) 안전망: 물건이 분석 캐시보다 나중에 갱신된 진행중 물건을 재계산."""
+    if _IS_CLOUD or _ana_recomp["running"]:
+        return 0
+    rows = auction_db.query_pg(_STALE_ANALYSIS_SQL + " LIMIT %s", (limit,))
+    if rows is None:
+        print("[stale_analysis] 조회 실패(psycopg)", flush=True)
+        return 0
+    if not rows:
+        return 0
+    ks = [r["item_key"] for r in rows]
+    print(f"[STALE-ANALYSIS] 물건 갱신 뒤 분석 캐시가 옛 값인 진행중 {len(ks)}건 → 재계산", flush=True)
+    n = _recompute_analysis(ks, tag="sweep")
+    print(f"[stale_analysis] 완료 {n}/{len(ks)} err={_ana_recomp['err']}", flush=True)
+    return n
+
+
+@app.post("/admin/analysis_recompute")
+def admin_analysis_recompute(scope: str = Query("keys", pattern="^(keys|stale|unknown_power)$"), keys: str = "",
+                             _u: dict = Depends(require_admin_or_local)) -> dict:
+    """분석 캐시 재계산(로컬 전용·백그라운드). scope=keys | stale(물건 갱신 뒤 옛 캐시) | unknown_power(명세서 '대항력 미상' 임차인 보유)."""
+    if _IS_CLOUD:
+        raise HTTPException(400, "클라우드는 계산하지 않습니다(로컬 4011에서 실행).")
+    if _ana_recomp["running"]:
+        return {"started": False, "reason": "이미 실행 중", "done": _ana_recomp["done"], "total": _ana_recomp["total"]}
+    if scope == "keys":
+        ks = [k for k in keys.split(",") if k]
+    elif scope == "stale":
+        ks = [r["item_key"] for r in (auction_db.query_pg(_STALE_ANALYSIS_SQL) or [])]
+    else:
+        ks = [r["item_key"] for r in (auction_db.query_pg(
+            "SELECT DISTINCT t.item_key FROM item_tenants t JOIN items i ON i.item_key=t.item_key "
+            "WHERE i.is_active AND t.status LIKE %s", ("대항력 미상 %",)) or [])]
+    threading.Thread(target=_recompute_analysis, args=(ks, scope), daemon=True).start()
+    return {"started": True, "scope": scope, "n": len(ks)}
+
+
+@app.get("/admin/analysis_recompute/status")
+def admin_analysis_recompute_status(_u: dict = Depends(require_admin_or_local)) -> dict:
+    return dict(_ana_recomp)
 
 
 def _compute_similar(item_key: str):

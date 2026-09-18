@@ -120,6 +120,31 @@ class Canonical(unittest.TestCase):
         rows = N.canonical_rows(None, ex, TODAY)
         self.assertEqual([r["round"] for r in rows], ["신건", "신건", "2차", "2차", "3차"])
 
+    def test_restart_at_seen_price_keeps_that_round(self):
+        """변경 뒤 전에 나온 금액으로 재진행 → 그 금액의 회차 — 실측 A01|2025|102122|1(목록 기준 3차)."""
+        ex = [_ex("", "2025-08-20", "239,000,000원", "유찰", id=1), _ex("", "2025-09-24", "191,200,000원", "유찰", id=2),
+              _ex("", "2025-11-05", "152,960,000원", "유찰", id=3), _ex("", "2026-07-22", "32,078,000원", "변경", id=4),
+              _ex("", "2026-08-26", "191,200,000원", "유찰", id=5), _ex("", "2026-09-30", "152,960,000원", "진행", id=6)]
+        ex = [dict(r, round="x") for r in ex]
+        rows = N.canonical_rows(None, ex, TODAY)
+        self.assertEqual([r["round"] for r in rows], ["신건", "2차", "3차", "4차", "2차", "3차"])
+
+    def test_level_rounds_rules(self):
+        M = 1_000_000
+        self.assertEqual(N.level_rounds([193 * M, 135 * M, 135 * M, 94 * M]), [1, 2, 2, 3])            # 확인표
+        self.assertEqual(N.level_rounds([298 * M, 238 * M, 190 * M, 49 * M, 298 * M, 39 * M, 238 * M, 190 * M]),
+                         [1, 2, 3, 4, 1, 5, 2, 3])
+        self.assertEqual(N.level_rounds([2159 * M, 1511 * M, 1058 * M, 1795 * M, 1256 * M]), [1, 2, 3, 1, 2])  # 재감정
+        self.assertEqual(N.level_rounds([100_000_000, None, 80_000_000]), [1, 1, 2])
+        self.assertEqual(N.level_rounds([39_997_000, 39_996_800]), [1, 1])            # 반올림 차이는 같은 금액
+
+    def test_stored_rounds_wrong(self):
+        good = [_ex("신건", "2026-01-01", "100,000,000원", "유찰", id=1), _ex("2차", "2026-02-01", "80,000,000원", "", id=2),
+                _ex("", "2026-02-08", "매각결정기일", "허가", id=3)]
+        self.assertFalse(N.stored_rounds_wrong(good))
+        bad = [dict(good[0]), dict(good[1], round="3차"), dict(good[2])]
+        self.assertTrue(N.stored_rounds_wrong(bad))
+
     def test_price_reset_restarts_at_singeon(self):
         """재감정·새 경매 주기(금액 상승)는 신건부터 다시 — 실측 M01|2019|22106|1(2020 주기 → 2025 재감정)."""
         ex = [_ex("신건", "2020-04-06", "2,159,368,400원", "유찰", id=1),
@@ -204,6 +229,27 @@ class Canonical(unittest.TestCase):
         self.assertEqual(len([r for r in rows if r["sell_date"] >= "2026-08-01"]), 2)
         rows = N.canonical_rows(doc1, ex, TODAY, doc_multi=True)                          # 혼입 증거 있음 → 표준 저감률로 판정(780,288,000 제외)
         self.assertEqual([r["min_price"] for r in rows if r["sell_date"] == "2026-08-19"], ["728,064,000원"])
+
+    def test_current_sale_date_added_and_protected(self):
+        """목록의 현재(다음) 매각기일이 표에 없으면 추가하고, 문서 범위 가지치기로도 지우지 않는다 — 실측 1,124건."""
+        ex = [_ex("신건", "2026-08-31", "100,000,000원", "유찰", id=1)]
+        rows = N.canonical_rows(None, ex, TODAY, current=("2026-10-12", 80000000))
+        self.assertEqual([(r["round"], r["sell_date"], r["min_price"], r["result"]) for r in rows],
+                         [("신건", "2026-08-31", "100,000,000원", "유찰"), ("2차", "2026-10-12", "80,000,000원", "")])
+        # 문서 범위 안(문서 마지막 매각기일 11-02 이하)인데 문서에 없는 날짜여도 현재 매각기일이면 유지
+        doc = [{"date": "2026-08-31", "time": "", "kind": "매각기일", "place": "", "min_price": 100000000, "result": "유찰"},
+               {"date": "2026-11-02", "time": "", "kind": "매각기일", "place": "", "min_price": 80000000, "result": ""}]
+        rows = N.canonical_rows(doc, ex, TODAY, current=("2026-10-12", 80000000))
+        self.assertIn("2026-10-12", [r["sell_date"] for r in rows])
+
+    def test_current_not_added_when_past_or_present(self):
+        ex = [_ex("신건", "2026-08-31", "100,000,000원", "유찰", id=1)]
+        self.assertEqual(len(N.canonical_rows(None, ex, TODAY, current=("2026-07-07", 80000000))), 1)   # 지난 날짜(크롤러 미갱신 물건)
+        self.assertEqual(len(N.canonical_rows(None, ex, TODAY, current=("2026-08-31", 100000000))), 1)  # 이미 있음
+        self.assertEqual(len(N.canonical_rows(None, ex, TODAY, current=("2026-10-12", None))), 1)       # 최저가 없음
+        self.assertEqual(len(N.canonical_rows(None, ex, TODAY, current=None)), 1)
+        rows = N.canonical_rows(None, ex, TODAY, current=("2026-10-12", 80000000))
+        self.assertTrue(N.rows_equal(rows, N.canonical_rows(None, rows, TODAY, current=("2026-10-12", 80000000))))  # 멱등
 
     def test_time_suffix_stripped(self):
         ex = [_ex("신건", "2026-05-01 (10:30)", "100,000,000원", "진행", id=1)]

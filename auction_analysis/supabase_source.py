@@ -409,15 +409,27 @@ class SupabaseSource:
         return n
 
     def items_updated_since(self, ts: str, limit: int = 3000):
-        """updated_at > ts 인 물건의 item_key 목록 + 최신 updated_at. 크롤러 갱신 감지용."""
+        """updated_at > ts 인 물건의 item_key 목록 + 최신 updated_at. 크롤러 갱신 감지용.
+        psycopg 직접 우선 — REST(PostgREST 익명 역할)는 3초 제한이라 items(18.7만 행)가 커지자 매번 statement timeout(500)으로
+        실패했고 예외를 삼켜 freshness 루프가 조용히 멈춰 있었다(2026-09-18 실측, updated_at 인덱스도 없었음 → 인덱스 추가)."""
+        pg = self.query_pg("SELECT item_key, updated_at FROM items WHERE updated_at > %s::timestamptz "
+                           "ORDER BY updated_at LIMIT %s", (ts, limit))
+        if pg is not None:
+            if not pg:
+                return [], ts
+            nw = pg[-1]["updated_at"]
+            return [r["item_key"] for r in pg], (nw.isoformat() if hasattr(nw, "isoformat") else str(nw))
         keys, newest, off = [], ts, 0
         while off < limit:
             try:
                 r = self._get("items", {"select": "item_key,updated_at",
                                         "updated_at": f"gt.{ts}", "order": "updated_at.asc",
                                         "limit": "1000", "offset": str(off)})
+                if r.status_code not in (200, 206):
+                    print(f"[freshness] 갱신 조회 실패 http {r.status_code}: {r.text[:80]}", flush=True)
                 rows = r.json() if r.status_code in (200, 206) else []
-            except Exception:
+            except Exception as e:
+                print(f"[freshness] 갱신 조회 예외: {str(e)[:80]}", flush=True)
                 rows = []
             if not rows:
                 break
@@ -429,12 +441,19 @@ class SupabaseSource:
         return keys, newest
 
     def max_updated_at(self) -> str:
-        """현재 items의 최신 updated_at(없으면 빈 문자열)."""
+        """현재 items의 최신 updated_at(없으면 빈 문자열). psycopg 우선(items_updated_since 주석 참조), REST 폴백."""
+        pg = self.query_pg("SELECT max(updated_at) AS m FROM items")
+        if pg and pg[0].get("m") is not None:
+            m = pg[0]["m"]
+            return m.isoformat() if hasattr(m, "isoformat") else str(m)
         try:
             r = self._get("items", {"select": "updated_at", "order": "updated_at.desc", "limit": "1"})
+            if r.status_code not in (200, 206):
+                print(f"[freshness] 최신 갱신시각 조회 실패 http {r.status_code}: {r.text[:80]}", flush=True)
             rows = r.json() if r.status_code in (200, 206) else []
             return rows[0]["updated_at"] if rows else ""
-        except Exception:
+        except Exception as e:
+            print(f"[freshness] 최신 갱신시각 조회 예외: {str(e)[:80]}", flush=True)
             return ""
 
     def count(self, data_class: str = "현황") -> int:

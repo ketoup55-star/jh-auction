@@ -357,6 +357,11 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
     _ev_caution = elevator_caution(it.get("usage_name"), it.get("address"), _elev)
     if _ev_caution and risk == "안전":
         risk = "주의"
+    # 매각물건명세서상 전입일 미상 임차인(statement_fill 라벨 '대항력 미상') → 대항력을 판단할 수 없으므로 '안전'으로 단정하지 않는다.
+    #  (2026-09-18 실측: 이런 임차인이 있는 진행중 162건 중 123건이 '안전', 46건이 목록 '매수양호')
+    _unk_power = [t for t in tenants if (t.get("status_label") or "").startswith("대항력 미상")]
+    if _unk_power and risk == "안전":
+        risk = "주의"
 
     warnings: list[str] = []
     if assumed_total > 0:
@@ -367,6 +372,9 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
         warnings.append(_msg)
     if _ev_caution:
         warnings.append(_ev_caution)
+    if _unk_power:
+        _nm = ", ".join((t.get("name") or "") for t in _unk_power[:3]) + (f" 외 {len(_unk_power) - 3}명" if len(_unk_power) > 3 else "")
+        warnings.append(f"전입일 미상 임차인({_nm}) — 매각물건명세서로 대항력 판단 불가, 전입세대열람·현장 확인 필요")
     # 확약서(인수 면제)는 매수인에게 유리한 정보 → 경고(warnings)가 아닌 별도 waiver 필드로 노출(프런트가 ✓로 표시)
 
     return {

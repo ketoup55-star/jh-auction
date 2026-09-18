@@ -94,6 +94,51 @@ def _hm(s: str) -> str:
     return f"{int(m.group(1)):02d}:{m.group(2)}" if m else ""
 
 
+def level_rounds(prices: list) -> list[int]:
+    """매각기일 금액(시간순) → 회차 번호. 주인님 규칙(2026-09-18) '최저매각금액이 떨어질 때만 다음 회차' + 재진행·재감정 보완:
+      ① 처음 보는 더 낮은 금액 → 다음 회차(그보다 높은 금액 단계 수 + 1)
+      ② 같은 금액 → 같은 회차(미납 후 재매각 등)
+      ③ 전에 나온 금액으로 다시 오름 → 그 금액의 회차(변경·불허가 뒤 80% 가격으로 재진행 = 2차).
+         예전엔 '오르면 신건부터'라 A01|2025|102122|1(…10차 3,208만 변경 → 1억9,120만 재진행)이 신건·2차로 찍혀 목록(3차)과 어긋났음
+      ④ 처음 보는 금액으로 오름 → 재감정·새 주기 → 신건부터(M01|2019|22106|1: 2020 주기 → 2025 재감정)
+      금액 없는 행은 직전 회차. 원 단위 반올림 차이(±1,000원)는 같은 금액으로 본다."""
+    out: list[int] = []
+    levels: dict[int, int] = {}
+    last = None
+    for p in prices:
+        if p is None:
+            out.append(levels.get(last, 1) if last is not None else 1)
+            continue
+        hit = next((q for q in levels if abs(q - p) <= max(1000, p // 10000)), None)
+        if hit is not None:
+            n = levels[hit]
+        elif not levels:
+            levels, n = {p: 1}, 1
+        elif last is not None and p < last:
+            n = 1 + sum(1 for q in levels if q > p)
+            levels[p] = n
+        else:
+            levels, n = {p: 1}, 1
+        last = p
+        out.append(n)
+    return out
+
+
+def round_label(n: int) -> str:
+    return "신건" if n <= 1 else f"{n}차"
+
+
+def stored_rounds_wrong(rows: list[dict]) -> bool:
+    """저장된 기일현황 행(id 포함) → 매각기일 행의 회차 라벨이 level_rounds 규칙과 다르면 True.
+    20분 스윕의 탐지를 정규화와 '같은 함수'로 해서 두 규칙이 어긋나 공회전하는 일을 막는다."""
+    rs = sorted(rows, key=lambda r: (_ymd(str(r.get("sell_date") or "")), r.get("id") or 0))
+    sale = [r for r in rs if str(r.get("round") or "").strip() and _kind_from_row(r) == SALE_KIND]
+    if not sale:
+        return False
+    want = level_rounds([_price_of(r.get("min_price")) for r in sale])
+    return any(str(r.get("round") or "").strip() != round_label(n) for r, n in zip(sale, want))
+
+
 def parse_court_schedule_all(html: str) -> dict[str, list[dict]]:
     """법원 기일내역 HTML → {물건번호: [{date, time, kind, place, min_price(int|None), result}]} (표의 모든 물건번호).
     표 구조(실측): 헤더 7칸(물건번호·감정평가액·기일·기일종류·기일장소·최저매각가격·기일결과),
@@ -213,9 +258,12 @@ def _kind_from_row(r: dict) -> str:
 
 
 def canonical_rows(doc_rows: list[dict] | None, existing: list[dict], today: date | None = None,
-                   doc_multi: bool = False) -> list[dict]:
+                   doc_multi: bool = False, current: tuple | None = None) -> list[dict]:
     """정규화된 auction_schedule 행 목록(순서=시간순). existing 행의 낙찰 상세를 같은 날짜 매각 행에 붙인다.
-    doc_rows가 없으면 existing만으로(기존 행 재분류·재라벨). doc_multi = 문서에 물건번호가 여럿(다물건 사건)."""
+    doc_rows가 없으면 existing만으로(기존 행 재분류·재라벨). doc_multi = 문서에 물건번호가 여럿(다물건 사건).
+    current = (items.sell_date 'YYYY-MM-DD', items.min_price) — 목록의 현재(다음) 매각기일. 오늘 이후인데 표에 그 날짜 매각기일이
+    없으면 추가하고 어떤 가지치기 규칙으로도 지우지 않는다(2026-09-18 실측: 크롤러·명세서 회차표가 items만 갱신하고 기일현황 행은
+    안 넣어 진행중 1,124건이 '다음 매각기일'이 표에 없었음 — 입찰자에게 가장 중요한 행)."""
     today = today or date.today()
     ev: list[dict] = []           # {date,time,kind,min_price(int|None),result,src,sale...}
     if doc_rows:
@@ -256,6 +304,12 @@ def canonical_rows(doc_rows: list[dict] | None, existing: list[dict], today: dat
                                     and e["date"] <= doc_last_sale and e["date"] not in doc_sale_dates)]
         if doc_multi and doc_last_sale:
             ev = _prune_offchain(ev, doc_rows, doc_last_sale)
+    # 목록의 현재 매각기일(오늘 이후) 보장 — 가지치기 뒤에 넣어 어떤 규칙도 지우지 못하게
+    if current and current[0] and current[1]:
+        cd, cp = str(current[0])[:10], _num(current[1])
+        if cp and re.fullmatch(r"\d{4}-\d{2}-\d{2}", cd) and cd >= today.isoformat() \
+                and not any(e["date"] == cd and e["kind"] == SALE_KIND for e in ev):
+            ev.append({"date": cd, "time": "", "kind": SALE_KIND, "min_price": cp, "result": "", "src": "item", "label": None})
     # 문서 행의 빈 결과를 기존 행 결과로 보강(같은 날짜·같은 종류)
     for e in ev:
         if not e["result"]:
@@ -269,23 +323,13 @@ def canonical_rows(doc_rows: list[dict] | None, existing: list[dict], today: dat
     tstr = today.isoformat()
     ev = [e for e in ev if not (e["kind"] == SALE_KIND and not e["result"] and e["date"] < tstr and e["date"] not in ex_by_date)]
     ev.sort(key=lambda e: (e["date"], e["time"], 0 if e["kind"] == SALE_KIND else 1))
-    # 규칙 2: 회차 = 최저매각금액이 떨어질 때만 증가
+    # 규칙 2: 회차 = 최저매각금액이 떨어질 때만 증가(재진행·재감정 보완은 level_rounds 주석)
     rows: list[dict] = []
-    n, last_price = 0, None
+    _sale_rounds = iter(level_rounds([e["min_price"] for e in ev if e["kind"] == SALE_KIND]))
     for e in ev:
         if e["kind"] == SALE_KIND:
             p = e["min_price"]
-            if n == 0:
-                n, last_price = 1, p
-            elif p is not None:
-                if last_price is None:
-                    last_price = p           # 앞 행에 금액이 없었으면 같은 회차로 이어 붙임
-                elif p < last_price:
-                    n += 1                   # 규칙 2: 금액이 떨어질 때만 다음 회차
-                    last_price = p
-                elif p > last_price:
-                    n, last_price = 1, p     # 금액이 올라감 = 재감정·새 경매 주기 → 신건부터 다시(스피드옥션 표기와 동일)
-            rnd = "신건" if n <= 1 else f"{n}차"
+            rnd = round_label(next(_sale_rounds))
             row = {"round": rnd, "sell_date": e["date"], "min_price": e.get("label") or (fmt_won(p) if p else ""),
                    "result": e["result"], "sale_price": None, "sale_rate": None, "bid_count": None,
                    "sale_2nd_price": None, "winner_name": None}
