@@ -379,6 +379,35 @@ def _needs_yuchal(res: str) -> bool:
     return not _FILL_TERMINAL_RE.search(t)
 
 
+def current_row_add_ok(same_day: list, cp: int, anchor) -> bool:
+    """목록의 현재 매각기일(cp)을 기일현황에 새 행으로 넣어도 되나 — same_day = 그 날짜의 매각행 [(금액들, 결과)].
+    ① 그날 매각행이 없으면 넣는다(원래 보장).
+    ② 그날 같은 금액(±1,000원) 행이 있으면 안 넣는다.
+    ③ 그날 행이 전부 '변경'이고 목록 금액 = 감정가(anchor)면 넣는다 — 새 절차 신건. 법원 최신 기일내역 실측(2025타경1128·
+       2025타경51237): 같은 날 옛 절차 회차는 '변경', 감정가 새 행이 따로 있다.
+    ④ 그 밖(금액만 다름)은 넣지 않는다 — 2026-09-19 18건 대조 실측: 다물건 사건의 다른 물건 금액이 목록에 들어온 것
+       (A01|2025|939|3 감정 9.01억에 5.82억 등), 같은 날 행이 이미 있는데 다른 회차가 하나 더 생기는 것(I01|2025|8981|1)이
+       섞여 있어 목록 쪽을 믿고 넣으면 틀린 행이 생긴다. 이런 건은 문서·명세서로 따로 가린다."""
+    if not same_day:
+        return True
+    if any(p and abs(p - cp) <= _tol(cp) for ps, _ in same_day for p in ps):
+        return False
+    a = _num(anchor)
+    return bool(a) and abs(cp - a) <= _tol(a) and all(norm_result(r or "").startswith("변경") for _, r in same_day)
+
+
+def current_row_missing(rows: list[dict], sell_date, min_price, today: date | None = None, anchor=None) -> bool:
+    """저장된 기일현황에 목록의 현재 매각기일(오늘 이후) 행을 넣어야 하나 — 20분 스윕 탐지용. canonical_rows 보장과 같은
+    함수(current_row_add_ok)로 판단(규칙을 두 군데 쓰면 공회전)."""
+    cd, cp = str(sell_date or "")[:10], _num(min_price)
+    if not cp or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", cd) or cd < (today or date.today()).isoformat():
+        return False
+    same = [(_split_amounts(r.get("min_price")), r.get("result") or "") for r in rows
+            if _ymd(str(r.get("sell_date") or "")) == cd and str(r.get("round") or "").strip()
+            and _kind_from_row(r) == SALE_KIND]
+    return current_row_add_ok(same, cp, anchor)
+
+
 def yuchal_fill_targets(seq: list, tstr: str) -> list[int]:
     """[(날짜, 회차번호, 결과)] 매각기일 처리 순서 → '유찰'로 채울 위치. 규칙(주인님 2026-09-19): 다음 매각기일이 한 단계 아래
     (회차+1)면 그 단계는 유찰로 끝난 것 — 그 단계에 이미 유찰이 적힌 행이 있으면 그걸로 설명되므로 두고(같은 금액 기일변경 행 '변경'은
@@ -458,11 +487,15 @@ def canonical_rows(doc_rows: list[dict] | None, existing: list[dict], today: dat
         if doc_multi and doc_last_sale:
             ev = _prune_offchain(ev, doc_rows, doc_last_sale,
                                  keep_price=_num(current[1]) if (current and len(current) > 1 and current[1]) else None)
-    # 목록의 현재 매각기일(오늘 이후) 보장 — 가지치기 뒤에 넣어 어떤 규칙도 지우지 못하게
+    # 목록의 현재 매각기일(오늘 이후) 보장 — 가지치기 뒤에 넣어 어떤 규칙도 지우지 못하게.
+    #  🔴날짜만 보면 안 된다(2026-09-19 주인님 지적 2025타경1128): 같은 날 옛 절차의 '변경' 행(2차 11.68억)이 있다고 새 최저가
+    #   행(9/29 14.6억 — 법원 최신 기일내역과 일치)을 빼먹었다. 금액만 다르다고 다 넣으면 다른 물건 금액이 들어온다 → current_row_add_ok.
     if current and current[0] and current[1]:
         cd, cp = str(current[0])[:10], _num(current[1])
         if cp and re.fullmatch(r"\d{4}-\d{2}-\d{2}", cd) and cd >= today.isoformat() \
-                and not any(e["date"] == cd and e["kind"] == SALE_KIND for e in ev):
+                and current_row_add_ok([([e.get("min_price")], e.get("result") or "") for e in ev
+                                        if e["date"] == cd and e["kind"] == SALE_KIND],
+                                       cp, current[2] if len(current) > 2 else None):
             ev.append({"date": cd, "time": "", "kind": SALE_KIND, "min_price": cp, "result": "", "src": "item", "label": None})
     # 문서 행의 빈 결과를 기존 행 결과로 보강(같은 날짜·같은 종류). 매각기일은 금액이 맞는 조각의 결과만 — 같은 날 매각기일이
     #  둘(옛 절차 변경 + 재감정 신건)일 때 합쳐진 결과('유찰 / 변경')를 통째로 붙이면 돌릴 때마다 결과가 불어났다

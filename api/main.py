@@ -6663,7 +6663,7 @@ SELECT item_key, string_agg(reasons, ',') reasons FROM (
 """
 # 회차 라벨 검사는 SQL이 아니라 정규화와 '같은 함수'(schedule_norm.stored_rounds_wrong)로 한다 — 규칙을 두 군데 따로 쓰면
 #  한쪽만 바뀌었을 때 스윕이 같은 물건을 끝없이 다시 잡거나(공회전) 틀린 회차를 못 잡는다(2026-09-18 재진행 규칙 보완 때 실제 위험).
-_SCHED_ROWS_SQL = ("SELECT s.item_key, s.id, s.round, s.sell_date, s.min_price, s.result, i.appraisal_price FROM auction_schedule s "
+_SCHED_ROWS_SQL = ("SELECT s.item_key, s.id, s.round, s.sell_date, s.min_price, s.result, i.appraisal_price, i.sell_date, i.min_price FROM auction_schedule s "
                    "JOIN items i ON i.item_key=s.item_key WHERE (i.is_active OR i.data_class = '현황') AND coalesce(s.round,'') <> '' {extra} "
                    "ORDER BY s.item_key")
 
@@ -6791,18 +6791,22 @@ def _schedule_noncanon_keys(c, limit: int = 0, extra: str = "") -> list:
         found.setdefault(k, set()).update(x for x in (rs or "").split(",") if x)
     buf: list = []
     cur, cur_ap = None, None
-    for k, i, rnd, sd, mp, res, ap in c.execute(_SCHED_ROWS_SQL.format(extra=extra)).fetchall():
+    def _check(key, rows, ap, isd, imp):
+        if _schn.stored_rounds_wrong(rows, anchor=ap):
+            found.setdefault(key, set()).add("round_label")
+        if _schn.yuchal_fill_needed(rows):                    # 앞 기일 유찰 채우기(정규화와 같은 함수 규칙)
+            found.setdefault(key, set()).add("yuchal_fill")
+        if _schn.current_row_missing(rows, isd, imp, anchor=ap):   # 현재 매각기일 행 빠짐(2025타경1128, current_row_add_ok)
+            found.setdefault(key, set()).add("current_price_missing")
+    cur_isd = cur_imp = None
+    for k, i, rnd, sd, mp, res, ap, isd, imp in c.execute(_SCHED_ROWS_SQL.format(extra=extra)).fetchall():
         if k != cur:
-            if cur is not None and _schn.stored_rounds_wrong(buf, anchor=cur_ap):
-                found.setdefault(cur, set()).add("round_label")
-            if cur is not None and _schn.yuchal_fill_needed(buf):      # 앞 기일 유찰 채우기(정규화와 같은 함수 규칙)
-                found.setdefault(cur, set()).add("yuchal_fill")
-            cur, cur_ap, buf = k, ap, []
+            if cur is not None:
+                _check(cur, buf, cur_ap, cur_isd, cur_imp)
+            cur, cur_ap, cur_isd, cur_imp, buf = k, ap, isd, imp, []
         buf.append({"id": i, "round": rnd, "sell_date": sd, "min_price": mp, "result": res})
-    if cur is not None and _schn.stored_rounds_wrong(buf, anchor=cur_ap):
-        found.setdefault(cur, set()).add("round_label")
-    if cur is not None and _schn.yuchal_fill_needed(buf):
-        found.setdefault(cur, set()).add("yuchal_fill")
+    if cur is not None:
+        _check(cur, buf, cur_ap, cur_isd, cur_imp)
     out = [(k, ",".join(sorted(v))) for k, v in sorted(found.items())]
     return out[:limit] if limit else out
 

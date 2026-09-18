@@ -355,6 +355,42 @@ class YuchalFill(unittest.TestCase):
         self.assertTrue(N.rows_equal(N.canonical_rows(None, stored, TODAY), once))   # 두 번 돌려도 같음
 
 
+class CurrentRowByPrice(unittest.TestCase):
+    """현재 매각기일 보장은 날짜+금액으로(주인님 2026-09-19 2025타경1128): 같은 날 옛 절차 '변경' 행이 있어도 새 최저가 행을 넣는다.
+    법원 최신 기일내역(9/16 수집): 7/21 12.3억 변경 / 8/25 14.6억 유찰 / 9/29 11.68억 변경 / 9/29 14.6억 / 10/6 매각결정기일."""
+    EX = [_ex("신건", "2026-07-21", "1,230,000,000원", "변경", id=1), _ex("신건", "2026-08-25", "1,460,000,000원", "유찰", id=2),
+          _ex("2차", "2026-09-29", "1,168,000,000원", "변경", id=3)]
+    CUR = ("2026-09-29", 1_460_000_000, 1_460_000_000)
+
+    def test_adds_current_price_row(self):
+        self.assertTrue(N.current_row_missing(self.EX, *self.CUR[:2], today=TODAY, anchor=self.CUR[2]))
+        rows = N.canonical_rows(None, self.EX, TODAY, current=self.CUR)
+        got = [(r["round"], r["sell_date"], r["min_price"], r["result"]) for r in rows]
+        self.assertIn(("신건", "2026-09-29", "1,460,000,000원", ""), got)
+        self.assertIn(("2차", "2026-09-29", "1,168,000,000원", "변경"), got)       # 옛 절차 변경 행은 사실 그대로
+        stored = [dict(r, id=i + 1) for i, r in enumerate(rows)]
+        self.assertFalse(N.current_row_missing(stored, *self.CUR[:2], today=TODAY, anchor=self.CUR[2]))   # 정규화 뒤엔 안 잡힘(공회전 없음)
+
+    def test_rounding_and_digits_not_missing(self):   # ±1,000원·숫자만 표기는 같은 행으로 본다
+        self.assertFalse(N.current_row_missing([_ex("5차", "2026-09-29", "76,339,000원", "예정", id=1)], "2026-09-29", 76_340_000, today=TODAY))
+        self.assertFalse(N.current_row_missing([_ex("신건", "2026-10-02", "119000000", "", id=1)], "2026-10-02", 119_000_000, today=TODAY))
+
+    def test_other_object_price_not_added(self):   # 실측 A01|2025|939|3: 감정 9.01억인데 목록 5.82억(같은 사건 다른 물건 금액)
+        ex = [_ex("4차", "2026-08-19", "461,312,000원", "유찰", id=1), _ex("5차", "2026-09-22", "369,049,600원", "", id=2)]
+        cur = ("2026-09-22", 582_451_200, 901_000_000)
+        self.assertFalse(N.current_row_missing(ex, *cur[:2], today=TODAY, anchor=cur[2]))
+        got = [(r["sell_date"], r["min_price"]) for r in N.canonical_rows(None, ex, TODAY, current=cur)]
+        self.assertNotIn(("2026-09-22", "582,451,200원"), got)
+
+    def test_same_day_live_row_not_duplicated(self):   # 실측 I01|2025|8981|1: 같은 날 진행 행이 있으면 다른 금액 행을 더 넣지 않는다
+        ex = [_ex("신건", "2026-06-25", "220,000,000원", "유찰", id=1), _ex("신건", "2026-09-23", "220,000,000원", "", id=2)]
+        self.assertFalse(N.current_row_missing(ex, "2026-09-23", 154_000_000, today=TODAY, anchor=220_000_000))
+
+    def test_no_row_that_day_still_added(self):   # 그날 행이 아예 없으면 원래대로 넣는다
+        ex = [_ex("신건", "2026-08-25", "300,000,000원", "유찰", id=1)]
+        self.assertTrue(N.current_row_missing(ex, "2026-10-06", 240_000_000, today=TODAY, anchor=300_000_000))
+
+
 class SaStatus(unittest.TestCase):
     """목록 상태 글자 스피드옥션 양식 통일(주인님 2026-09-18) — 이미 양식이면 그대로, '진행'·% 없는 글자는 양식으로."""
     ROWS = [_ex("신건", "2026-06-01", "100,000,000원", "유찰"), _ex("2차", "2026-07-06", "80,000,000원", "유찰"),
