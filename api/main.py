@@ -8767,11 +8767,34 @@ _lawd_inv_cache = None
 
 
 def _lawd_inv() -> dict:
-    """LAWD_CD(5자리) → '시도 시군구[ 구]' 이름 (폐지코드 제외). 지오코딩 prefix용."""
+    """LAWD_CD(5자리) → '시도 시군구[ 구]' 이름 (폐지코드 제외) + 최신 법정동표(bjd_codes.tsv)에만 있는 새 시군구 코드.
+    🔴2026-09-18 주인님 지적(광주 광산구 신창7차부영: 같은 단지 12개월 40건인데 반경 1km 지도 0건): 옛 코드표(LAWD)만 써서
+    2026-07 개편 지역(전남광주통합특별시 12xxx·인천 제물포/영종/서해/검단·화성 4개 구·부천)의 새 코드가 없었다 →
+    물건의 시군구(새 코드)가 조회 대상에서 빠져 지도가 통째로 비었다(실측: 지도 캐시 있는 목록 아파트 중 115건).
+    새 코드는 최신 법정동표에서 시군구 이름을 만들어 넣는다(좌표 서비스는 새·옛 이름 모두 변환됨 확인)."""
     global _lawd_inv_cache
     if _lawd_inv_cache is None:
         from auction_analysis.lawd_codes import LAWD, _DEAD_CODES
-        _lawd_inv_cache = {c: n for n, c in LAWD.items() if c not in _DEAD_CODES}
+        inv = {c: n for n, c in LAWD.items() if c not in _DEAD_CODES}
+        try:
+            with open(os.path.join(_ROOT, "auction_analysis", "bjd_codes.tsv"), encoding="utf-8") as fh:
+                for line in fh:
+                    parts = line.rstrip("\n").split("\t")
+                    if len(parts) != 2 or len(parts[1]) < 5:
+                        continue
+                    c5 = parts[1][:5]
+                    if c5 in inv or c5 in _DEAD_CODES:
+                        continue
+                    sgg = []
+                    for t in parts[0].split():
+                        if re.search(r"(동|가|읍|면|리|로)$", t) or re.match(r"^\d", t):
+                            break
+                        sgg.append(t)
+                    if sgg:
+                        inv[c5] = " ".join(sgg)
+        except Exception as e:
+            print(f"[lawd_inv] 최신 법정동표 읽기 실패: {str(e)[:60]}", flush=True)
+        _lawd_inv_cache = inv
     return _lawd_inv_cache
 
 
@@ -8782,7 +8805,7 @@ def _sgg_centroids() -> dict:
         return _sgg_cent_cache
     try:
         c = auction_db.cache_get_many(["sgg_centroids"]).get("sgg_centroids")
-        if isinstance(c, dict) and c.get("v") == 1 and isinstance(c.get("d"), dict):
+        if isinstance(c, dict) and c.get("v") == 2 and isinstance(c.get("d"), dict):   # v2 = 개편 새 시군구 코드 포함(2026-09-18)
             _sgg_cent_cache = {k: tuple(v) for k, v in c["d"].items() if v}
             return _sgg_cent_cache
     except Exception:
@@ -8800,7 +8823,7 @@ def _sgg_centroids() -> dict:
     _save_geo_cache()
     _sgg_cent_cache = out
     try:
-        auction_db.cache_save("sgg_centroids", {"v": 1, "d": {k: list(v) for k, v in out.items()}})
+        auction_db.cache_save("sgg_centroids", {"v": 2, "d": {k: list(v) for k, v in out.items()}})
     except Exception:
         pass
     return out
