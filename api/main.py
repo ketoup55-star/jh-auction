@@ -9221,6 +9221,7 @@ def apt_radius_map(item_key: str, band: float = 0, defer: bool = False) -> dict:
     addr_prefix = pm.group(1) if pm else sigungu_prefix
     _geo_preload([(addr_prefix + " " + addr_jibun).strip(), addr])
     pc = (_geocode((addr_prefix + " " + addr_jibun).strip()) if addr_jibun else None) or _geocode(addr)
+    _pc_direct = pc
     if not pc:
         # 🔴2026-09-18: 블록 주소('화성시 새솔동 송산그린시티이에이비9블록 …')는 지번이 없어 좌표 변환 실패 → 같은 단지
         #  실거래가 18건인데 지도가 통째로 불가였다. 같은 단지 실거래(match_apt)의 법정동+지번으로 대신 찍는다.
@@ -9238,6 +9239,32 @@ def apt_radius_map(item_key: str, band: float = 0, defer: bool = False) -> dict:
                             break
         except Exception:
             pc = None
+    if not pc:
+        # 국토부 지번이 '가-'(미부여)인 신규 블록 단지(평택뉴비전엘크루·포레나루원시티 등)는 위 방법도 실패 →
+        #  K-apt 단지 도로명/지번 주소로 찍고, 물건 주소 키로도 좌표를 저장(클라우드는 K-apt 접속불가라 이 저장값을 쓴다).
+        try:
+            _nm = _apt_name_from_addr(addr)
+            _cd = kapt.complex_detail(lawd, _nm) if _nm else None
+            for _ka in ((_cd or {}).get("road_addr"), (_cd or {}).get("addr")):
+                if _ka:
+                    _geo_preload([_ka])
+                    pc = _geocode(_ka)
+                    if pc:
+                        break
+        except Exception:
+            pc = None
+        if not pc and addr_jibun and "-" in addr_jibun:
+            # 부번이 좌표 DB에 없는 필지(합필·말소 추정: '의정부 녹양동 106-21', '인제 원통리 732-14')는 본번으로 —
+            #  같은 번지 안이라 반경 1km 기준엔 충분(실측: 본번은 좌표 나옴)
+            _mq = f"{addr_prefix} {addr_jibun.split('-')[0]}"
+            _geo_preload([_mq])
+            pc = _geocode(_mq)
+    if pc and not _pc_direct:   # 대체 좌표를 물건 주소 키로도 저장 → 다음부터(클라우드 포함) 바로 찍는다
+        _geo_cache[addr] = list(pc)
+        try:
+            auction_db.cache_save("geo:" + addr, {"ll": list(pc)})
+        except Exception:
+            pass
     if not pc:
         return {"available": False, "reason": "물건 좌표 변환 실패"}
     target = float(band) if band else float(prop_area)

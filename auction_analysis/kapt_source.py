@@ -464,6 +464,8 @@ class KaptSource:
 
         out = {
             "name": g(b, "kaptName"),
+            "road_addr": g(b, "doroJuso"),         # 도로명 주소(블록 주소 물건 지도 좌표용 — 2026-09-18)
+            "addr": g(b, "kaptAddr"),              # 법정동 지번 주소
             "households": g(b, "kaptdaCnt"),       # 세대수
             "dongs": g(b, "kaptDongCnt"),          # 동수
             "approved": used_fmt,                  # 사용승인일(준공)
