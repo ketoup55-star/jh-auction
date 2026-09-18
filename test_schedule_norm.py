@@ -313,6 +313,48 @@ class Canonical(unittest.TestCase):
         self.assertEqual(rows[0]["result"], "진행")
 
 
+class SaStatus(unittest.TestCase):
+    """목록 상태 글자 스피드옥션 양식 통일(주인님 2026-09-18) — 이미 양식이면 그대로, '진행'·% 없는 글자는 양식으로."""
+    ROWS = [_ex("신건", "2026-06-01", "100,000,000원", "유찰"), _ex("2차", "2026-07-06", "80,000,000원", "유찰"),
+            _ex("3차", "2026-08-10", "64,000,000원", "진행")]
+
+    def test_already_sa_untouched(self):
+        for s in ("유찰 2회 (64%)", "신건 (100%)", "재매각 1회 (70%)", "재진행 (100%)", "변경 3회 (51%)"):
+            self.assertIsNone(N.sa_status_fix(s, self.ROWS, "2026-08-10", 64000000, 100000000, TODAY))
+
+    def test_progress_becomes_sa(self):
+        self.assertEqual(N.sa_status_fix("진행", self.ROWS, "2026-08-10", 64000000, 100000000, date(2026, 8, 1)), "유찰 2회 (64%)")
+        first = [_ex("신건", "2026-10-01", "100,000,000원", "진행")]
+        self.assertEqual(N.sa_status_fix("진행", first, "2026-10-01", 100000000, 100000000, TODAY), "신건 (100%)")
+
+    def test_count_without_percent(self):
+        # 기일현황이 있으면 머리 글자는 살리고 N회를 스피드옥션 정의(높은 가격 단계 수)로 다시 셈 — 원천 '유찰 9회'(누적 유찰 수)가
+        #  49%(2단계)와 어긋나던 것(실측 E02|2024|72020|1)
+        self.assertEqual(N.sa_status_fix("유찰 9회", self.ROWS, "2026-08-10", 64000000, 100000000, TODAY), "유찰 2회 (64%)")
+        self.assertEqual(N.sa_status_fix("재진행 1회", self.ROWS, "2026-07-06", 80000000, 100000000, TODAY), "재진행 1회 (80%)")
+        self.assertEqual(N.sa_status_fix("신건", self.ROWS, "2026-06-01", 100000000, 100000000, TODAY), "신건 (100%)")
+        # 기일현황이 없으면 원천 횟수에 %만
+        self.assertEqual(N.sa_status_fix("유찰 2회", [], "2026-08-10", 64000000, 100000000, TODAY), "유찰 2회 (64%)")
+
+    def test_count_fix_only_when_both_agree(self):
+        self.assertEqual(N.sa_count_fix("유찰 1회 (64%)", self.ROWS, "2026-08-10", 64000000, 100000000), "유찰 2회 (64%)")
+        self.assertIsNone(N.sa_count_fix("유찰 2회 (64%)", self.ROWS, "2026-08-10", 64000000, 100000000))
+
+    def test_blank_with_unpaid_is_resale(self):
+        rows = [_ex("신건", "2026-05-01", "100,000,000원", "매각"), _ex("", "2026-06-10", "대금지급기한", "미납"),
+                _ex("신건", "2026-07-01", "100,000,000원", "유찰"), _ex("2차", "2026-10-01", "80,000,000원", "")]
+        self.assertEqual(N.sa_status_fix("", rows, "2026-10-01", 80000000, 100000000, TODAY), "재매각 1회 (80%)")
+        self.assertEqual(N.sa_status_fix("진행", rows, "2026-10-01", 80000000, 100000000, TODAY), "유찰 1회 (80%)")   # 마이옥션 '진행' = 재매각 아님
+
+    def test_terminal_untouched(self):
+        self.assertIsNone(N.sa_status_fix("배당종결 3회 (34%) (34%)", self.ROWS, "2026-08-10", 34000000, 100000000, TODAY))
+        self.assertIsNone(N.sa_status_fix("매각", self.ROWS, "2026-08-10", 64000000, 100000000, TODAY))
+
+    def test_past_yuchal_head_kept(self):
+        rows = [_ex("신건", "2026-09-01", "100,000,000원", "유찰")]
+        self.assertEqual(N.sa_status_fix("유찰", rows, "2026-09-01", 100000000, 100000000, TODAY), "유찰 1회 (100%)")
+
+
 class CourtParse(unittest.TestCase):
     HTML = """<table><tr><th>물건번호</th><th>감정평가액</th><th>기일</th><th>기일종류</th><th>기일장소</th><th>최저매각가격</th><th>기일결과</th></tr>
     <tr><td rowspan="3">1</td><td rowspan="3">193,000,000원</td><td>2026.04.20(10:00)</td><td>매각기일</td><td>경매법정</td><td>193,000,000원</td><td>유찰</td></tr>

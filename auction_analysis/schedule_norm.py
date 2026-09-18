@@ -488,6 +488,148 @@ def canonical_rows(doc_rows: list[dict] | None, existing: list[dict], today: dat
     return merged
 
 
+_SA_HEAD_RE = re.compile(r"^\s*(신건|유찰|재진행|재매각|변경|정지)")
+SA_FORMAT_RE = re.compile(r"^(?:신건 \(100%\)|(?:재진행|재매각|변경|정지) \(100%\)|(?:유찰|재진행|재매각|변경|정지) \d+회 \(\d+%\))$")
+
+
+def _round_no(lab: str) -> int | None:
+    lab = (lab or "").strip()
+    if lab == "신건":
+        return 1
+    m = re.fullmatch(r"(\d+)차", lab)
+    return int(m.group(1)) if m else None
+
+
+def _sa_current(sale: list[dict], sell_date) -> dict:
+    """현재 회차 행 = 목록 매각기일의 매각 행(없으면 가장 늦은 매각 행)."""
+    sd = _ymd(str(sell_date or ""))
+    same = [r for r in sale if _ymd(str(r.get("sell_date") or "")) == sd]
+    return same[-1] if same else max(sale, key=lambda r: _ymd(str(r.get("sell_date") or "")))
+
+
+def _sa_steps(sale: list[dict], cur: dict, min_price=None, appraisal=None) -> int:
+    """스피드옥션 'N회' = 현재 최저가보다 높은 최저가 단계 수(derive_status와 같은 정의) — 단, **목록 감정가 이하**의 단계만 센다.
+    재감정으로 감정가가 바뀐 물건은 옛 절차의 더 높은 단계까지 세면 %와 어긋나기 때문(실측 A01|2025|102915|1: 15.5억 절차 →
+    재감정 2.45억 → 현재 8,028만: 전체로 세면 9회인데 2.45억 기준 33%=5단계). 같은 감정가로 다시 시작한 물건은 옛 단계가 그대로
+    새 절차 단계라 맞게 셈(E02|2024|72020|1: 2.49억 재시작 → 1.22억 = 2단계 49%). 목록 최저가 우선(표시 %와 같은 숫자)."""
+    seq = [p for p in (_price_of(r.get("min_price")) for r in sale) if p]
+    cp = _num(min_price) or _price_of(cur.get("min_price"))
+    if not cp or not seq:
+        return _round_no(str(cur.get("round"))) - 1
+    ap = _num(appraisal) or max(seq)
+    levels: list[int] = []
+    for p in sorted({p for p in seq if cp + _tol(p) < p <= ap + _tol(ap)}, reverse=True):
+        if not levels or abs(levels[-1] - p) > _tol(p):        # 원 단위 반올림 차이는 같은 단계
+            levels.append(p)
+    return len(levels)
+
+
+def sa_count_fix(label: str, rows: list[dict], sell_date: str, min_price, appraisal) -> str | None:
+    """이미 스피드옥션 양식인 'X N회 (P%)'의 N이 틀렸으면 고친 값, 아니면 None. 원천 글자라 보수적으로 — 스피드옥션 정의(높은 단계 수)와
+    기일현황 회차가 **같은 답**을 내는데 글자만 다를 때만 고친다(실측: '유찰 2회 (34%)'인데 34%=3단계·표도 4차)."""
+    m = re.fullmatch(r"(유찰|재진행|재매각|변경|정지) (\d+)회 \((\d+)%\)", (label or "").strip())
+    if not m:
+        return None
+    sale = [r for r in rows if _round_no(str(r.get("round") or "")) and _kind_from_row(r) == SALE_KIND]
+    if not sale:
+        return None
+    cur = _sa_current(sale, sell_date)
+    cp = _num(min_price) or _price_of(cur.get("min_price"))
+    if not cp:
+        return None
+    n_sa = _sa_steps(sale, cur, min_price, appraisal)
+    n_tab = _round_no(str(cur.get("round"))) - 1
+    n_lab = int(m.group(2))
+    if n_sa != n_tab or n_sa < 1 or n_lab == n_sa:
+        return None
+    mp, ap = _num(min_price), _num(appraisal)
+    pct = round(mp / ap * 100) if (mp and ap) else int(m.group(3))
+    if not (0 < pct <= 100):
+        return None
+    return f"{m.group(1)} {n_sa}회 ({pct}%)"
+
+
+def sa_status_fix(existing: str, rows: list[dict], sell_date: str, min_price, appraisal,
+                  today: date | None = None) -> str | None:
+    """목록 상태 글자가 스피드옥션 양식이 아니면 양식으로 바꾼 값, 이미 양식이거나 바꿀 근거가 없으면 None.
+    이미 양식인 글자('유찰 2회 (49%)' 등 — 스피드옥션 원천이거나 같은 식으로 만든 값)는 건드리지 않는다(기일현황 계산과 다른 3.85%는
+    대부분 표에 중간 회차가 빠진 원천 누락이라 원천 글자가 더 정확).
+      '유찰 2회'·'재진행 1회'(% 없음) → 횟수는 그대로 두고 % 붙임
+      '신건'(최저가=감정가) → '신건 (100%)'
+      '진행'(마이옥션 표기: 재매각·재진행이면 그렇게 적으므로 그 외 진행) → 기일현황으로 유찰 N회/신건만(미납 추정 안 함)
+      빈칸·'유찰'·'유찰 (70%)'·'재진행'(횟수 없음) 등 → 기일현황으로 계산"""
+    s = (existing or "").strip()
+    if SA_FORMAT_RE.match(s):
+        return None
+    if re.match(r"^(매각|낙찰|잔금|납부|배당|취하|취소|기각|각하|종결|완료|허가|불허)", s):
+        return None                                            # 종결·매각 상태는 목록 상태 양식 대상이 아님(분류 문제는 따로)
+    mp, ap = _num(min_price), _num(appraisal)
+    pct = round(mp / ap * 100) if (mp and ap) else None
+    m = re.fullmatch(r"(유찰|재진행|재매각|변경|정지)\s*(\d+)회", s)
+    if m:
+        # 원천 'N회'는 누적 유찰 수라 스피드옥션 'N회'(높은 가격 단계 수)와 다를 수 있다(실측 '유찰 9회'인데 49%=2단계) →
+        #  기일현황이 있으면 머리 글자만 살려 다시 계산, 없으면 원천 횟수에 %만 붙인다
+        calc = sa_status_label(rows, sell_date, min_price, appraisal, existing=m.group(1), today=today, use_unpaid=False)
+        if calc:
+            return calc if calc != s else None
+        if not (pct and 0 < pct <= 100 and int(m.group(2)) > 0):
+            return None
+        if pct == 100:                                         # 감정가 그대로 = 저감 단계 0(스피드옥션: '재진행 (100%)',
+            return "유찰 1회 (100%)" if m.group(1) == "유찰" else f"{m.group(1)} (100%)"   # 지난 기일 유찰만 '유찰 1회 (100%)')
+        return f"{m.group(1)} {int(m.group(2))}회 ({pct}%)"
+    if s == "신건" and pct == 100:
+        return "신건 (100%)"
+    new = sa_status_label(rows, sell_date, min_price, appraisal, existing=s, today=today, use_unpaid=(s == ""))
+    return new if (new and new != s) else None
+
+
+def sa_status_label(rows: list[dict], sell_date: str, min_price, appraisal, existing: str = "",
+                    today: date | None = None, use_unpaid: bool = True) -> str | None:
+    """목록 상태 글자를 스피드옥션 양식으로 — '유찰 2회 (49%)'·'신건 (100%)'·'재매각 1회 (70%)'·'재진행 (100%)'·'변경 3회 (51%)'.
+    스피드옥션 크롤러 derive_status와 같은 식(주인님 지시 2026-09-18 '목록도 스피드옥션 방식으로 통일' — 법원 수집분은 '진행'
+    ·'유찰 1회'(% 없음)·빈칸 등이 섞여 있었다):
+      N회 = 현재 최저가보다 높은 최저가 단계 수 = 정규화된 기일현황의 현재 회차 − 1(회차 규칙이 같다: 떨어질 때만 증가·재감정은 신건)
+      %   = 목록 최저가 ÷ 목록 감정가(목록 칸과 같은 숫자)
+      머리 = 기존 글자가 재진행·재매각·변경·정지면 유지(원천 상태) / 대금 미납 이력 → 재매각 / N>0 또는 지난 기일 유찰 → 유찰 / 그 외 신건
+      N=0이면 '신건 (100%)'(재진행·재매각·변경·정지는 '재진행 (100%)' 식), 지난 기일이 유찰이고 다음 저감 전이면 N=1.
+    rows = 정규화된 기일현황 행(round·sell_date·min_price·result). 현재 회차 = 목록 매각기일의 매각 행(없으면 마지막 매각 행).
+    매각기일 행이 없거나 종결 상태(매각·취하 등)면 None(건드리지 않음)."""
+    today = today or date.today()
+    sale = [r for r in rows if _round_no(str(r.get("round") or "")) and _kind_from_row(r) == SALE_KIND]
+    if not sale:
+        return None
+    cur = _sa_current(sale, sell_date)
+    n = _sa_steps(sale, cur, min_price, appraisal)
+    head_m = _SA_HEAD_RE.match(existing or "")
+    head = head_m.group(1) if head_m else ""
+    cur_res = norm_result(cur.get("result"), SALE_KIND)
+    cur_date = _ymd(str(cur.get("sell_date") or ""))
+    past_yuchal = cur_date < today.isoformat() and cur_res.startswith("유찰")
+    unpaid = use_unpaid and any("미납" in str(r.get("result") or "") for r in rows)
+    if head in ("재진행", "재매각", "변경", "정지"):
+        label = head
+    elif head == "유찰":
+        label, past_yuchal = "유찰", True                     # 원천이 '유찰'이라 적었으면 유찰(최소 1회)
+    elif unpaid:
+        label = "재매각"
+    elif n > 0 or past_yuchal:
+        label = "유찰"
+    else:
+        label = "신건"
+    disp = n if n > 0 else (1 if past_yuchal else 0)
+    if disp == 0:
+        return f"{label} (100%)" if label in ("재진행", "재매각", "변경", "정지") else "신건 (100%)"
+    mp, ap = _num(min_price), _num(appraisal)
+    if not ap:
+        ap = max((_price_of(r.get("min_price")) or 0) for r in sale) or None
+    if not mp:
+        mp = _price_of(cur.get("min_price"))
+    pct = round(mp / ap * 100) if (mp and ap) else None
+    if pct is None or pct <= 0 or pct > 100:
+        return None                                            # 금액이 이상하면 추정으로 만들지 않음
+    return f"{label} {disp}회 ({pct}%)"
+
+
 def rows_equal(a: list[dict], b: list[dict]) -> bool:
     keys = ("round", "sell_date", "min_price", "result", "sale_price", "sale_rate", "bid_count", "sale_2nd_price", "winner_name")
     if len(a) != len(b):

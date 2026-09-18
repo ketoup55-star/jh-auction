@@ -4634,6 +4634,7 @@ def _col_sync_loop() -> None:
             pass
         try:
             _schedule_sweep()              # ★기일현황 정규형 유지(크롤러가 덮어쓴 행·법원 신규 행 → 스피드옥션 양식+회차규칙으로) — 2026-09-18
+            _status_sa_sweep()             # ★목록 상태 글자 스피드옥션 양식 유지('진행'·% 없는 글자 → '유찰 N회 (P%)' 등) — 2026-09-18
         except Exception as _e:
             print(f"[sched_sweep] skip: {str(_e)[:80]}", flush=True)
         try:
@@ -6676,6 +6677,96 @@ def _schedule_sweep(limit: int = 300) -> int:
 
 
 _schedule_sweep._streak = 0
+
+
+# ── 목록 상태 글자 스피드옥션 양식 통일 — 2026-09-18 주인님 지시("목록도 스피드옥션 방식으로 전부 통일") ──
+#   법원·마이옥션 수집분은 '진행'·'유찰 1회'(% 없음)·빈칸 등이 섞여 있었고, items.is_active는 트리거(set_case_sort)가
+#   result 머리글자(신건|유찰|재진행|재매각)로 정하므로 '진행' 8,264건은 목록 기본 '진행물건'에서 아예 빠져 있었다.
+#   규칙은 schedule_norm.sa_status_fix(스피드옥션 크롤러 derive_status와 같은 식, 이미 양식인 글자는 안 건드림).
+#   updated_at은 올리지 않는다(올리면 옛 분석 재계산 스윕이 수천 건 몰림) — 상세 물건 캐시는 5분 TTL이라 곧 반영.
+_STATUS_SA_RE = r"^(신건 \(100%\)|(재진행|재매각|변경|정지) \(100%\)|(유찰|재진행|재매각|변경|정지) [0-9]+회 \([0-9]+%\))$"
+_status_sa: dict = {"running": False, "last": None}
+
+
+def _status_sa_run(keys: Optional[list] = None, dry: bool = False) -> dict:
+    """목록(현황) 물건 중 상태 글자가 스피드옥션 양식이 아닌 것 → 양식으로. keys 주면 그 물건만. 반환: target/changed/none/samples."""
+    import time as _t
+    import psycopg
+    out: dict = {"target": 0, "changed": 0, "none": 0, "samples": [], "dry": dry}
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return out
+    with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+        c.execute("SET statement_timeout = '180s'")
+        if keys:
+            rows = c.execute("SELECT item_key, coalesce(result,''), sell_date, min_price, appraisal_price FROM items "
+                             "WHERE item_key = ANY(%s)", (list(keys),)).fetchall()
+        else:
+            rows = c.execute("SELECT item_key, coalesce(result,''), sell_date, min_price, appraisal_price FROM items "
+                             "WHERE data_class='현황' OR is_active").fetchall()      # 양식 아닌 것 변환 + 양식인 것 N회 정정(아래)
+        out["target"] = len(rows)
+        if not rows:
+            return out
+        ks = [r[0] for r in rows]
+        sched: dict = {}
+        for i in range(0, len(ks), 1000):
+            for r in c.execute("SELECT item_key, round, sell_date, min_price, result FROM auction_schedule WHERE item_key = ANY(%s) "
+                               "ORDER BY item_key, left(sell_date,10), id", (ks[i:i + 1000],)).fetchall():
+                sched.setdefault(r[0], []).append({"round": r[1], "sell_date": r[2], "min_price": r[3], "result": r[4]})
+        upd = []
+        for k, res, sd, mp, ap in rows:
+            if _schn.SA_FORMAT_RE.match(res.strip()):
+                new = _schn.sa_count_fix(res, sched.get(k, []), sd, mp, ap)   # 스피드옥션 정의·기일표가 같은 답일 때만
+                if new is None:
+                    continue
+            else:
+                new = _schn.sa_status_fix(res, sched.get(k, []), sd, mp, ap)
+                if new is None:
+                    out["none"] += 1
+                    continue
+            upd.append((new, k, res))
+            if len(out["samples"]) < 15:
+                out["samples"].append([k, res, new])
+        out["changed"] = len(upd)
+        if dry or not upd:
+            return out
+        with _items_backfill_lock:                    # items UPDATE는 다른 백필 루프와 같은 락 아래(교착 방지)
+            with c.cursor() as cur:
+                for i in range(0, len(upd), 500):     # 크롤러가 그 사이 바꿨으면(result 달라짐) 건너뜀
+                    cur.executemany("UPDATE items SET result=%s WHERE item_key=%s AND coalesce(result,'')=%s", upd[i:i + 500])
+        _status_sa["last"] = {"at": _t.strftime("%Y-%m-%d %H:%M:%S"), "changed": len(upd), "none": out["none"]}
+    return out
+
+
+def _status_sa_sweep() -> int:
+    """20분 주기 유지 장치(로컬 전용): 크롤러가 '진행' 등 다른 양식을 다시 써도 스피드옥션 양식으로 되돌린다."""
+    if _IS_CLOUD or _status_sa["running"]:
+        return 0
+    _status_sa["running"] = True
+    try:
+        r = _status_sa_run()
+    except Exception as e:
+        print(f"[status_sa] 실패: {str(e)[:80]}", flush=True)
+        return 0
+    finally:
+        _status_sa["running"] = False
+    if r.get("changed"):
+        print(f"[STATUS-SA] 목록 상태 스피드옥션 양식으로 {r['changed']}건 (계산 불가 {r['none']}건) 예: {r['samples'][:3]}", flush=True)
+    return r.get("changed", 0)
+
+
+@app.post("/admin/status_sa")
+def admin_status_sa(keys: str = "", dry: int = Query(1, ge=0, le=1), _u: dict = Depends(require_admin_or_local)) -> dict:
+    """목록 상태 글자 스피드옥션 양식 통일(로컬 전용). dry=1(기본) 시험 계산만, dry=0 반영. keys 주면 그 물건만."""
+    if _IS_CLOUD:
+        raise HTTPException(400, "클라우드는 계산하지 않습니다(로컬 4011에서 실행).")
+    if _status_sa["running"]:
+        return {"started": False, "reason": "이미 실행 중"}
+    _status_sa["running"] = True
+    try:
+        return _status_sa_run([k for k in keys.split(",") if k] or None, dry=bool(dry))
+    finally:
+        _status_sa["running"] = False
 
 
 @app.post("/admin/schedule_normalize")
