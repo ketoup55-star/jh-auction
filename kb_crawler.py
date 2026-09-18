@@ -822,16 +822,100 @@ def _emd_tokens(addr: str) -> list[str]:
     return [t for t in re.findall(r"[가-힣]+(?:읍|면|동|리|가)", addr or "") if len(t) >= 2]
 
 
+_SIDO_SUFFIX = re.compile(r"(특별시|광역시|특별자치시|특별자치도|도)$")
+
+
+def _addr_parts(addr: str) -> tuple[str, str]:
+    """주소 → (시군구 키, 법정 읍면동). 광역 시도는 빼고 기초 시·군·구만 이어 붙인다.
+    '대전광역시 동구 용전동 1 …' → ('동구','용전동') / '경기도 고양시 일산동구 사리현동 …' → ('고양시일산동구','사리현동')
+    KB '경기도 고양시일산동구 백석동' → ('고양시일산동구','백석동') / 도로명 주소는 괄호 속 법정동('… (반포동, 반포자이)')."""
+    toks = (addr or "").split()
+    i = 1 if toks and _SIDO_SUFFIX.search(toks[0]) else 0
+    sgg = ""
+    while i < len(toks) and re.fullmatch(r"[가-힣]+(시|군|구)", toks[i]) and len(sgg) < 16:
+        sgg += toks[i]
+        i += 1
+    # 법정동: 시군구 바로 뒤 동·가·읍·면(읍면 주소는 KB도 읍면까지만 적음 — 괄호 속 '리'보다 우선) → 없으면 도로명 괄호 속 동
+    if i < len(toks) and re.fullmatch(r"[가-힣][가-힣0-9]*(동|가|읍|면)", toks[i]):
+        emd = toks[i]
+    else:
+        m = re.search(r"\(([가-힣][가-힣0-9]*(?:동|가|읍|면))\s*[,)]", addr or "")
+        emd = m.group(1) if m else ""
+    return sgg, emd
+
+
+_SIDO_CANON = [("서울", "서울"), ("부산", "부산"), ("대구", "대구"), ("인천", "인천"), ("광주", "광주전남"), ("대전", "대전"),
+               ("울산", "울산"), ("세종", "세종"), ("경기", "경기"), ("강원", "강원"), ("충청북", "충북"), ("충북", "충북"),
+               ("충청남", "충남"), ("충남", "충남"), ("전라북", "전북"), ("전북", "전북"), ("전라남", "광주전남"), ("전남", "광주전남"),
+               ("경상북", "경북"), ("경북", "경북"), ("경상남", "경남"), ("경남", "경남"), ("제주", "제주")]
+
+
+def _sido_family(addr: str) -> str:
+    """광역 시도 가족('전라북도'='전북특별자치도', '광주광역시'='전라남도'='전남광주통합특별시'). 시도 없는 주소는 ''(모름)."""
+    t = (addr or "").split()[:1]
+    if not t or not _SIDO_SUFFIX.search(t[0]):
+        return ""
+    return next((fam for p, fam in _SIDO_CANON if t[0].startswith(p)), t[0][:2])
+
+
+def _emd_base(e: str) -> str:
+    e = re.sub(r"[0-9]+(가|동)$", r"\1", e or "")        # 신흥동2가 → 신흥동가, 불광1동 → 불광동
+    return e[:-1] if e.endswith(("읍", "면")) else e    # 공도면 ↔ 공도읍(승격)
+
+
 def _region_match(our_addr: str, kb_bub: str) -> tuple[bool, bool]:
-    kb = re.sub(r"\s+", "", kb_bub or "")
-    sgg = _sigungu_tokens(our_addr)
-    emd = _emd_tokens(our_addr)
-    return (any(t in kb for t in sgg) if sgg else False,
-            any(t in kb for t in emd) if emd else False)
+    """(시군구 일치, 법정동 일치). 🔴2026-09-18 주인님 지적(대전 동구 용전동 신동아 → 유성구 관평동 '신동아파밀리에'):
+    예전엔 ①시군구 토큰에 '대전광역시'가 들어가 같은 광역시면 구가 달라도 통과 ②동 검사를 KB 주소+단지이름 글자에 대고 해서
+    주소의 '신동아'에서 뽑힌 '신동'이 단지이름 '신동아파밀리에'와 겹쳐 '같은 동'이 됐다. → 광역 시도는 빼고 기초 시군구끼리,
+    동은 KB 법정동 주소끼리만 비교. 행정구역 개편(인천 중구→제물포구 등)은 법정동이 같고 같은 광역권이면 같은 곳으로 본다."""
+    s1, e1 = _addr_parts(our_addr)
+    s2, e2 = _addr_parts(kb_bub)
+    emd_ok = bool(e1 and e2) and (e1 == e2 or _emd_base(e1) == _emd_base(e2))
+    f1, f2 = _sido_family(our_addr), _sido_family(kb_bub)
+    fam_ok = (f1 == f2) if (f1 and f2) else True          # 시도 없는 주소('거제시 …')는 시군구로만 판단
+    sgg_ok = fam_ok and (emd_ok or (bool(s1) and bool(s2) and _sgg_related(s1, s2, f1 or f2)))
+    return sgg_ok, emd_ok
+
+
+# 행정구역 개편(2026 인천 등): 옛 구 → 새 구. 같은 곳으로 본다(목록 주소는 옛 이름, KB는 새 이름인 경우).
+_RENAMED_SGG = {("인천", "서구"): ("서해구", "검단구"), ("인천", "중구"): ("제물포구", "영종구"), ("인천", "동구"): ("제물포구",)}
+
+
+def _sgg_related(s1: str, s2: str, fam: str) -> bool:
+    """같은 시군구이거나 구 신설(화성시 → 화성시동탄구)·개편(인천 서구 → 서해구)으로 이어지는 곳인가. 한쪽을 모르면 True."""
+    if not s1 or not s2 or s1 == s2 or s1.startswith(s2) or s2.startswith(s1):
+        return True
+    return any(fam == f and ((s1 == old and s2 in new) or (s2 == old and s1 in new)) for (f, old), new in _RENAMED_SGG.items())
+
+
+def _strong_name(name_kw: str, kb_name: str) -> bool:
+    """단지명이 고유하게 같은가(5자 이상, 한쪽이 다른 쪽을 포함). '○○아파트' 꼬리는 떼고 비교."""
+    nk = re.sub(r"(아파트|apt)$", "", _canon(name_kw))
+    nm = _canon(kb_name)
+    return bool(nk) and len(nk) >= 5 and (nk in nm or nm in nk)
+
+
+def region_clearly_wrong(our_addr: str, kb_bub: str, name_kw: str = "", kb_name: str = "") -> bool:
+    """이미 붙은 KB 단지가 **틀렸다는 증거가 분명한가**(재검사용 — 모르면 False로 둬서 맞는 매칭을 떼지 않음).
+    ①시도 가족이 다름 ②이어지지 않는 다른 시군구(개편·신설 아님)인데 법정동도 다르거나, 동을 모르고 이름도 고유하게 같지 않음
+    ③같은(이어지는) 시군구인데 법정동이 다르고 이름도 고유하게 같지 않음.
+    실측: 청주 흥덕구 복대동 두진하트리움 → 서원구 수곡동 두진하트리움 = 이름이 같아도 다른 단지(②), 화성시 오산동
+    동탄역반도유보라아이비파크5.0 → 화성시동탄구 여울동 같은 이름 = 같은 단지(구 신설)."""
+    s1, e1 = _addr_parts(our_addr)
+    s2, e2 = _addr_parts(kb_bub)
+    f1, f2 = _sido_family(our_addr), _sido_family(kb_bub)
+    if f1 and f2 and f1 != f2:
+        return True
+    emd_known = bool(e1 and e2)
+    emd_same = emd_known and (e1 == e2 or _emd_base(e1) == _emd_base(e2))
+    strong = _strong_name(name_kw, kb_name)
+    if not _sgg_related(s1, s2, f1 or f2):
+        return (emd_known and not emd_same) or (not emd_known and not strong)
+    return emd_known and not emd_same and not strong
 
 
 def _score(cand: dict, our_addr: str, name_kw: str) -> tuple[float, bool]:
-    bub = cand.get("BUBADDR", "") + " " + cand.get("HSCM_NM_EXT", "")
+    bub = cand.get("BUBADDR", "")          # 지역 검사는 KB 주소만(단지 이름 글자와 섞지 않음)
     sgg_ok, emd_ok = _region_match(our_addr, bub)
     nk, nm, tag = _canon(name_kw), _canon(cand.get("HSCM_NM", "")), _canon(cand.get("HSCM_TAG", ""))
     if nk and (nk in nm or nm in nk):
@@ -862,10 +946,10 @@ def match_address(address: str, n: int = 15) -> dict:
         log.info("매칭실패[단지명없음] 주소='%s'", (address or "")[:60])
         res["fail_reason"] = "단지명추출실패"
         return res
-    emd = _emd_tokens(address)
+    emd = _addr_parts(address)[1]
     keywords = _alias_variants(name)
     if emd:
-        keywords.append(f"{emd[-1]} {name}")
+        keywords.append(f"{emd} {name}")
     best, best_score, best_kw, best_region, total = None, -1.0, None, False, 0
     for kw in keywords:
         cands = kb_search(kw, n)
