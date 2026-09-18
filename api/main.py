@@ -4703,6 +4703,12 @@ def _est_col_warm() -> None:
         print(f"[est_col] skip {str(e)[:60]}", flush=True)
 
 
+def _apt_info_complete(ai) -> bool:
+    """캐시해도 되는 apt_info 결과인가 = 현재 버전 + (같은 단지 있음 또는 '같은 단지 없음'으로 끝까지 계산됨).
+    reason이 있는 결과(시군구 실거래 조회 실패·쿼터·코드 없음)는 일시 실패일 수 있어 저장하지 않는다."""
+    return isinstance(ai, dict) and ai.get("v", 0) >= APT_VER and bool(ai.get("available") or "reason" not in ai)
+
+
 def _apt_recompute_items(keys: list, cur, workers: int = 6) -> dict:
     """apt_info를 **현재 로직으로 다시 계산** → apt: 캐시(Supabase 직접 업서트 + 로컬 SQLite·디스크) + items.est_price/profit.
     est_col 주기 작업과 /admin/apt_recompute 공용.
@@ -4719,9 +4725,9 @@ def _apt_recompute_items(keys: list, cur, workers: int = 6) -> dict:
             return
         if not isinstance(ai, dict):
             return
-        if ai.get("available") and ai.get("v", 0) >= APT_VER:
-            apt_rows.append(("apt:" + k, ai))
-        else:
+        if _apt_info_complete(ai):
+            apt_rows.append(("apt:" + k, ai))   # '같은 단지 없음'도 완결 결과라 저장 — 없으면 상세를 열 때마다 계산(클라우드는 K-apt 접속불가로 몇 분 멈춤)
+        if not ai.get("available"):
             neg_rows.append(k)
         v = _apt_est_value(ai)
         if v and v.get("price"):
@@ -4748,7 +4754,10 @@ def _apt_recompute_items(keys: list, cur, workers: int = 6) -> dict:
         cur.executemany("INSERT INTO api_cache (cache_key, data) VALUES (%s, '{\"available\": false}'::jsonb) "
                         "ON CONFLICT (cache_key) DO UPDATE SET updated_at = now()",
                         [("aptneg:" + k,) for k in neg_rows])
+        saved = {ck[4:] for ck, _ in apt_rows}
         for k in neg_rows:
+            if k in saved:
+                continue
             try:
                 _apt_cache.pop(k, None)
             except Exception:
@@ -4765,11 +4774,14 @@ def _apt_recompute_items(keys: list, cur, workers: int = 6) -> dict:
                                           if not (isinstance(d, dict) and int(d.get("v") or 0) >= APT_VER)])
         except Exception:
             pass
+    # 오피스텔은 offi:(오피스텔 매매 실거래) 시세가 주인 — 있으면 여기서 덮어쓰거나 비우지 않는다(col_sync와 번갈아 바뀌지 않게)
+    no_offi = ("NOT EXISTS (SELECT 1 FROM api_cache o WHERE o.cache_key = 'offi:' || items.item_key "
+               "AND (o.data->>'v') = '2' AND (o.data->>'est') ~ '^[0-9.]+$')")
     if vals:
-        cur.executemany("UPDATE items SET est_price=%s WHERE item_key=%s AND est_price IS DISTINCT FROM %s", vals)
+        cur.executemany("UPDATE items SET est_price=%s WHERE item_key=%s AND est_price IS DISTINCT FROM %s AND " + no_offi, vals)
     if clears:
         cur.execute("UPDATE items SET est_price=NULL, profit=NULL WHERE item_key = ANY(%s) "
-                    "AND (est_price IS NOT NULL OR profit IS NOT NULL)", (clears,))
+                    "AND (est_price IS NOT NULL OR profit IS NOT NULL) AND " + no_offi, (clears,))
     if vals or clears:
         cur.execute("UPDATE items SET profit=est_price-expected_bid WHERE item_key = ANY(%s) AND est_price IS NOT NULL "
                     "AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
@@ -9191,6 +9203,23 @@ def apt_radius_map(item_key: str, band: float = 0, defer: bool = False) -> dict:
     _geo_preload([(addr_prefix + " " + addr_jibun).strip(), addr])
     pc = (_geocode((addr_prefix + " " + addr_jibun).strip()) if addr_jibun else None) or _geocode(addr)
     if not pc:
+        # 🔴2026-09-18: 블록 주소('화성시 새솔동 송산그린시티이에이비9블록 …')는 지번이 없어 좌표 변환 실패 → 같은 단지
+        #  실거래가 18건인데 지도가 통째로 불가였다. 같은 단지 실거래(match_apt)의 법정동+지번으로 대신 찍는다.
+        try:
+            from collections import Counter as _Ctr
+            _mt = match_apt(_res_trades(lawd, ctx.get("is_offi")), addr, area=prop_area, area_pct=0.05)
+            _spot = _Ctr((t.get("umd"), t.get("jibun")) for t in _mt["trades"] if t.get("umd") and t.get("jibun")).most_common(1)
+            if _spot:
+                (_u, _j), _n = _spot[0]
+                for _pref in dict.fromkeys([sigungu_prefix, _lawd_inv().get(lawd) or ""]):
+                    if _pref:
+                        _geo_preload([f"{_pref} {_u} {_j}"])
+                        pc = _geocode(f"{_pref} {_u} {_j}")
+                        if pc:
+                            break
+        except Exception:
+            pc = None
+    if not pc:
         return {"available": False, "reason": "물건 좌표 변환 실패"}
     target = float(band) if band else float(prop_area)
     # ★인접 시군구 병합 — 각 구의 실거래를 '그 구 이름'을 prefix로 지오코딩(다른 구로 잘못 찍히는 것 방지)
@@ -10953,12 +10982,12 @@ def auction_apt_info(item_key: str, months: int = Query(12, le=24)) -> dict:
             db = auction_db.cache_get_many(["apt:" + item_key]).get("apt:" + item_key)
         except Exception:
             db = None
-        if isinstance(db, dict) and db.get("available") and db.get("v", 0) >= APT_VER:
+        if _apt_info_complete(db):                  # '같은 단지 없음' 완결 결과도 캐시 인정(열 때마다 재계산 방지)
             out = db
             _apt_cache[item_key] = out
         else:                                       # ② 없음/옛버전 → 계산 → 메모리/디스크 + DB 저장
             out = _apt_info_compute(item_key, months)
-            if out.get("available"):            # 실패(molit 할당량 등) 결과는 캐시 안 함 → 다음에 재시도(캐시 오염 방지)
+            if _apt_info_complete(out):         # 실패(molit 할당량 등 reason 있음) 결과는 캐시 안 함 → 다음에 재시도(캐시 오염 방지)
                 _apt_cache.remember(item_key, out)
                 try:
                     auction_db.cache_save("apt:" + item_key, out)

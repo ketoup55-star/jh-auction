@@ -27,7 +27,9 @@ _LIST = "https://apis.data.go.kr/1613000/AptListService4/getSigunguAptList4"
 _BASIS = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusBassInfoV5"
 _DETAIL = "https://apis.data.go.kr/1613000/AptBasisInfoServiceV5/getAphusDtlInfoV5"
 _UA = {"User-Agent": "Mozilla/5.0"}
-_KAPT_HEALTH = {"dead_warned": 0.0, "quota_until": 0.0}   # 폐기응답 경보 스로틀·일일 한도 차단 해제 시각
+_KAPT_HEALTH = {"dead_warned": 0.0, "quota_until": 0.0, "down_until": 0.0}   # 폐기응답 경보 스로틀·일일 한도 차단 해제·접속불가 차단 해제 시각
+# 접속불가 차단기는 클라우드(CLOUD_READER)에서만 — 로컬은 9/17 세대수 수정대로 재시도를 끝까지 한다(일시 실패로 표제부 폴백 방지)
+_CONN_BREAKER = os.environ.get("CLOUD_READER", "0") in ("1", "true", "True")
 import threading as _threading
 _LIST_LOCK = _threading.Lock()         # 시군구 단지목록 락 사전 보호
 
@@ -191,6 +193,9 @@ class KaptSource:
         from .api_throttle import throttle
         if self.quota_blocked():                          # 오늘 일일 한도 소진 → 즉시 None(재시도·대기 없음)
             return None
+        if time.time() < _KAPT_HEALTH.get("down_until", 0.0):   # 연결 자체가 안 되는 중 → 즉시 None(아래 참고)
+            return None
+        _conn_fail = 0
         for _try in range(4):
             try:
                 throttle()                                # 전역 초당 제한(429 방지)
@@ -233,6 +238,14 @@ class KaptSource:
                 break
             except Exception as e:                        # 타임아웃·연결오류 → 재시도
                 last = f"{type(e).__name__}"
+                if _CONN_BREAKER and isinstance(e, (httpx.ConnectTimeout, httpx.ConnectError)):
+                    # 🔴2026-09-18 CloudType에서 K-apt 접속이 안 됨(ConnectTimeout) → 호출마다 25초×4회 재시도, 시군구 목록은
+                    #  여러 페이지라 상세 요청 하나가 몇 분씩 멈췄다. 연결이 두 번 연달아 안 되면 10분간 K-apt를 건너뛴다
+                    #  (단지정보는 건축물대장 폴백, 로컬 주기작업이 K-apt로 채운 캐시를 클라우드가 읽는다).
+                    _conn_fail += 1
+                    if _conn_fail >= 2:
+                        _KAPT_HEALTH["down_until"] = time.time() + 600
+                        break
                 time.sleep(1.0 + _try)
         if time.time() - _KAPT_HEALTH.get("fail_warned", 0.0) > 600:
             _KAPT_HEALTH["fail_warned"] = time.time()

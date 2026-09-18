@@ -85,5 +85,27 @@ class TestMatchApt(unittest.TestCase):
         self.assertEqual((r["match_by"], len(r["trades"]), len(r["same_area"]), r["area_matched"]), ("지번", 2, 1, True))
 
 
+class TestAptInfoCacheRule(unittest.TestCase):
+    """'같은 단지 없음'도 완결 결과라 캐시(없으면 상세를 열 때마다 계산 — 클라우드는 K-apt 접속불가로 몇 분 멈췄다),
+    reason 있는 결과(시군구 실거래 조회 실패·쿼터)와 옛 버전은 캐시하지 않는다."""
+
+    def setUp(self):
+        import ast
+        import os
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "api", "main.py"), encoding="utf-8").read()
+        ns = {"APT_VER": 9}
+        for node in ast.parse(src).body:
+            if isinstance(node, ast.FunctionDef) and node.name == "_apt_info_complete":
+                exec(ast.get_source_segment(src, node), ns)
+        self.f = ns["_apt_info_complete"]
+
+    def test_rule(self):
+        self.assertTrue(self.f({"available": True, "v": 9}))
+        self.assertTrue(self.f({"available": False, "v": 9, "complex": "중계청구3차"}))      # 같은 단지 없음(완결)
+        self.assertFalse(self.f({"available": False, "v": 9, "reason": "해당 시군구 아파트 실거래 없음"}))
+        self.assertFalse(self.f({"available": True, "v": 8}))                              # 옛 매칭
+        self.assertFalse(self.f(None))
+
+
 if __name__ == "__main__":
     unittest.main()
