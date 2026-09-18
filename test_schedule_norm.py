@@ -132,11 +132,54 @@ class Canonical(unittest.TestCase):
     def test_level_rounds_rules(self):
         M = 1_000_000
         self.assertEqual(N.level_rounds([193 * M, 135 * M, 135 * M, 94 * M]), [1, 2, 2, 3])            # 확인표
-        self.assertEqual(N.level_rounds([298 * M, 238 * M, 190 * M, 49 * M, 298 * M, 39 * M, 238 * M, 190 * M]),
-                         [1, 2, 3, 4, 1, 5, 2, 3])
+        # A01|2025|102337|1: 07-22에 감정가 새 시작(2억9,800만)과 옛 절차 변경(3,999만)이 함께 → 되돌아간 행을 그날 마지막으로
+        seq = [("d1", 298 * M), ("d2", 238 * M), ("d3", 190 * M), ("d4", 49 * M), ("d5", 298 * M), ("d5", 39 * M),
+               ("d6", 238 * M), ("d7", 190 * M)]
+        order, rounds = N.order_and_rounds(seq)
+        self.assertEqual(order, [0, 1, 2, 3, 5, 4, 6, 7])
+        self.assertEqual(rounds, [1, 2, 3, 4, 1, 5, 2, 3])
+        # 같은 날 신건·2차가 연달아(되돌아간 행 아님) → 원래 순서 — L05|2024|55405|1
+        order, rounds = N.order_and_rounds([("d1", 33392000), ("d1", 22674000), ("d2", 15872000)])
+        self.assertEqual((order, rounds), ([0, 1, 2], [1, 2, 3]))
         self.assertEqual(N.level_rounds([2159 * M, 1511 * M, 1058 * M, 1795 * M, 1256 * M]), [1, 2, 3, 1, 2])  # 재감정
         self.assertEqual(N.level_rounds([100_000_000, None, 80_000_000]), [1, 1, 2])
         self.assertEqual(N.level_rounds([39_997_000, 39_996_800]), [1, 1])            # 반올림 차이는 같은 금액
+
+    def test_return_to_top_price_starts_new_procedure(self):
+        """감정가(첫 가격)로 되돌아가면 새 절차의 신건 — 실측 B03|2023|105977|17(목록 '재진행 1회 (70%)' = 2차)."""
+        M = 1_000
+        seq = [104000, 83200, 66560, 53248, 42598, 42598, 42598, 104000, 72800]
+        self.assertEqual(N.level_rounds([p * M for p in seq]), [1, 2, 3, 4, 5, 5, 5, 1, 2])
+        # 같은 날짜에 옛 절차 변경(낮은 금액)과 새 시작(감정가)이 함께 적힌 경우 — 실측 J04|2024|38904|1
+        ex = [_ex("", "2026-05-01", "80,000,000원", "유찰", id=1), _ex("", "2026-06-01", "14,049,000원", "유찰", id=2),
+              _ex("", "2026-07-13", "80,000,000원", "변경", id=3), _ex("", "2026-07-13", "9,834,000원", "변경", id=4),
+              _ex("", "2026-08-24", "56,000,000원", "유찰", id=5), _ex("", "2026-09-28", "39,200,000원", "진행", id=6)]
+        ex = [dict(r, round="x") for r in ex]
+        rows = N.canonical_rows(None, [dict(r) for r in ex], TODAY)
+        got = [(r["round"], r["sell_date"], r["min_price"]) for r in rows]
+        self.assertEqual(got, [("신건", "2026-05-01", "80,000,000원"), ("2차", "2026-06-01", "14,049,000원"),
+                               ("3차", "2026-07-13", "9,834,000원"), ("신건", "2026-07-13", "80,000,000원"),
+                               ("2차", "2026-08-24", "56,000,000원"), ("3차", "2026-09-28", "39,200,000원")])
+        self.assertFalse(N.stored_rounds_wrong([dict(r, round=g[0], id=i) for i, (r, g) in enumerate(zip(
+            [{"sell_date": g[1], "min_price": g[2], "result": ""} for g in got], got))]))
+
+    def test_top_return_ignored_when_old_chain_continues(self):
+        """같은 날 감정가 재시작(변경)과 옛 절차 유찰이 있고, 다음 가격이 옛 절차의 80%면 재시작 없었던 것 — A02|2024|58545|1."""
+        seq = [("d1", 5618480000), ("d2", 4494784000), ("d3", 4494784000), ("d4", 3595827000), ("d5", 2876662000),
+               ("d6", 2876662000), ("d6", 5618480000), ("d7", 2301330000)]
+        order, rounds = N.order_and_rounds(seq)
+        self.assertEqual(rounds, [1, 2, 2, 3, 4, 4, 1, 5])
+
+    def test_appraisal_anchor_marks_reappraisal_as_new(self):
+        """재감정으로 감정가가 내려간 경우 — 현재 감정가와 같은 금액의 행 = 새 절차 신건(실측 E05|2025|52292|1)."""
+        ex = [_ex("x", "2026-03-05", "170,000,000원", "유찰", id=1), _ex("x", "2026-04-16", "119,000,000원", "유찰", id=2),
+              _ex("x", "2026-05-28", "83,300,000원", "유찰", id=3), _ex("x", "2026-07-09", "170,000,000원", "변경", id=4),
+              _ex("x", "2026-07-09", "58,310,000원", "변경", id=5), _ex("x", "2026-09-14", "145,000,000원", "유찰", id=6),
+              _ex("x", "2026-10-19", "101,500,000원", "", id=7)]
+        rows = N.canonical_rows(None, ex, TODAY, current=("2026-10-19", 101500000, 145000000))
+        self.assertEqual([(r["round"], r["sell_date"]) for r in rows][-2:], [("신건", "2026-09-14"), ("2차", "2026-10-19")])
+        stored = [dict(r, id=i) for i, r in enumerate(rows)]
+        self.assertFalse(N.stored_rounds_wrong(stored, anchor=145000000))
 
     def test_stored_rounds_wrong(self):
         good = [_ex("신건", "2026-01-01", "100,000,000원", "유찰", id=1), _ex("2차", "2026-02-01", "80,000,000원", "", id=2),
@@ -250,6 +293,18 @@ class Canonical(unittest.TestCase):
         self.assertEqual(len(N.canonical_rows(None, ex, TODAY, current=None)), 1)
         rows = N.canonical_rows(None, ex, TODAY, current=("2026-10-12", 80000000))
         self.assertTrue(N.rows_equal(rows, N.canonical_rows(None, rows, TODAY, current=("2026-10-12", 80000000))))  # 멱등
+
+    def test_chain_prune_keeps_current_list_price(self):
+        """다물건 사건 사슬 가지치기가 목록의 현재 최저가 행은 지우지 않는다 — 실측 L01|2025|6453|1: 문서엔 30% 저감 한 번뿐인데
+        그다음 20% 저감된 목록 현재가(09-11 15.6억)를 다른 물건 행으로 오인해 지웠다. 같은 날 사슬 밖 금액(혼입)은 여전히 제외."""
+        doc = [{"date": "2026-06-19", "time": "09:55", "kind": "매각기일", "place": "", "min_price": 2788503260, "result": "유찰"},
+               {"date": "2026-07-31", "time": "09:55", "kind": "매각기일", "place": "", "min_price": 1951953000, "result": ""}]
+        ex = [_ex("신건", "2026-06-19", "2,788,503,260원", "유찰", id=1), _ex("2차", "2026-07-31", "1,951,953,000원", "유찰", id=2),
+              _ex("3차", "2026-09-11", "1,561,563,000원", "진행", id=3), _ex("3차", "2026-09-11", "999,000,000원", "진행", id=4)]
+        rows = N.canonical_rows(doc, ex, TODAY, doc_multi=True, current=("2026-09-11", 1561563000, 2788503260))
+        got = [(r["round"], r["sell_date"], r["min_price"]) for r in rows]
+        self.assertIn(("3차", "2026-09-11", "1,561,563,000원"), got)
+        self.assertNotIn("999,000,000원", [r["min_price"] for r in rows])
 
     def test_time_suffix_stripped(self):
         ex = [_ex("신건", "2026-05-01 (10:30)", "100,000,000원", "진행", id=1)]

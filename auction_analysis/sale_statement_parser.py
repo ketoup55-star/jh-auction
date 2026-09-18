@@ -46,6 +46,56 @@ def _dedouble(s: str) -> str:
     return "\n".join(out)
 
 
+_HAN_DIGIT = {"일": "1", "이": "2", "삼": "3", "사": "4", "오": "5", "육": "6", "칠": "7", "팔": "8", "구": "9"}
+_SMALL_UNIT = {"천": 1000, "백": 100, "십": 10}
+_BIG_UNIT = {"억": 100_000_000, "만": 10_000}
+
+
+def won_amounts(text: str) -> list[int]:
+    """명세서 금액 칸 → 금액(원) 목록. 숫자 표기('50,000,000원')와 한글 단위('8,000만원'·'3억1천5백만원'·'1억 5,000만원'·
+    '월 50만원'·'오천만원')를 모두 읽는다. 한 칸에 금액이 둘 이상이면('155,000,000 157,000,000' 증액, '3,500만원(월 30만원)')
+    각각 돌려준다(호출측이 최댓값 등 선택).
+    🔴2026-09-18 실측: 예전엔 칸의 숫자만 뽑아 10만 미만을 버려 '8,000만원'(→8000)·'3억1천5백만원'(→3·1·5)이 통째로 버려졌고,
+      명세서에 보증금이 적힌 임차인이 '보증금 미상'으로 들어갔다(G01|2025|51805|1 김윤경 8,000만원, J01|2025|742|1 장도석
+      3억1천5백만원) — 상세 화면 임차인 카드에 보증금·인수예상액이 안 나오고 보증금 미상 판정에도 잘못 걸렸다."""
+    t = (text or "").replace(",", "")
+    t = re.sub(r"([일이삼사오육칠팔구])(?=\s*[천백십만억])", lambda m: _HAN_DIGIT[m.group(1)], t)
+    out: list[int] = []
+    st = {"total": 0.0, "group": 0.0, "big": None, "on": False}
+
+    def flush():
+        v = st["total"] + st["group"]
+        if st["on"] and v:
+            out.append(int(round(v)))
+        st.update(total=0.0, group=0.0, big=None, on=False)
+
+    prev_end = 0
+    for m in re.finditer(r"(\d+(?:\.\d+)?)\s*([천백십]?)\s*([만억]?)", t):
+        n, small, big = float(m.group(1)), m.group(2), m.group(3)
+        if t[prev_end:m.start()].strip():                   # 앞 금액과 사이에 글자('원'·괄호 등)가 있으면 다른 금액
+            flush()                                         #  ('8,000만원 (2023.4.3. 등기)'의 2023을 나머지로 붙이지 않게)
+        prev_end = m.end()
+        if not small and not big:                           # 단위 없는 숫자
+            if st["on"] and st["big"] and n < _BIG_UNIT[st["big"]]:
+                st["group"] += n                            # '1억 50,000,000원'의 나머지
+                flush()
+            else:
+                flush()
+                st.update(total=n, on=True)
+                flush()
+            continue
+        if big and st["on"] and st["big"] and _BIG_UNIT[big] >= _BIG_UNIT[st["big"]]:
+            flush()                                         # 같은·더 큰 큰단위가 다시 나오면 새 금액('3,500만원 30만원')
+        st["group"] += n * (_SMALL_UNIT[small] if small else 1)
+        st["on"] = True
+        if big:
+            st["total"] += st["group"] * _BIG_UNIT[big]
+            st["group"] = 0.0
+            st["big"] = big
+    flush()
+    return out
+
+
 def clean_summary(s: str) -> str:
     """명세서 요약 텍스트 정리:
     ① 전자문서 다운로드 워터마크('개인정보유출주의 … 다운로드일시 …') 제거 — doubled/정상 형태 모두.
@@ -209,11 +259,12 @@ def parse_sale_statement(pdf_bytes: bytes) -> dict:
                 last_source = source_n
 
             # 보증금: 칸에 금액이 둘 이상 적힌 경우('155,000,000 157,000,000' 증액 등)가 있어 숫자를 통째로 이으면
-            #  '155000000157000000'(bigint 초과·INSERT 실패, 2026-09-18 실측 6건) → 금액 단위(10만↑) 숫자 중 최댓값
-            _deps = [int(x.replace(",", "")) for x in re.findall(r"[0-9][0-9,]*", get("deposit"))]
-            _deps = [n for n in _deps if n >= 100_000]
+            #  '155000000157000000'(bigint 초과·INSERT 실패, 2026-09-18 실측 6건) → 금액 단위(10만↑) 중 최댓값.
+            #  한글 단위('8,000만원'·'3억1천5백만원')도 won_amounts가 읽는다.
+            _deps = [n for n in won_amounts(get("deposit")) if n >= 100_000]
             dep = str(max(_deps)) if _deps else ""
-            rnt = re.sub(r"[^0-9]", "", get("rent"))         # 차임(월세): 순수숫자(빈칸이면 전세)
+            _rents = [n for n in won_amounts(get("rent")) if n >= 1_000]   # 차임(월세): '월 50만원'도(빈칸·없음이면 전세)
+            rnt = str(max(_rents)) if _rents else ""
             dem = get("demand")
             dem_date = parse_date_kr(dem)
             # 배당요구일이 배당요구종기를 넘기면 '무효'(배당 못 받음) → demanded_distribution=False

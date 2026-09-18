@@ -152,6 +152,22 @@ class LocalCache:
             pass
         return out
 
+    def unsynced_with_prefix(self, prefix: str) -> dict:
+        """아직 Supabase로 안 올라간(synced=0) 로컬 값 중 prefix로 시작하는 것 {key: value}.
+        목록 매수판정이 Supabase를 기준으로 읽되, 로컬에만 있는 최신값은 이것으로 덮어쓴다(2026-09-18)."""
+        out = {}
+        try:
+            c = _conn(self.path)
+            for k, v in c.execute("SELECT k,v FROM kv WHERE synced=0 AND k LIKE ?", (prefix + "%",)):
+                try:
+                    out[k] = json.loads(v)
+                except Exception:
+                    pass
+            c.close()
+        except Exception:
+            pass
+        return out
+
     def mark_synced(self, keys) -> None:
         keys = list(keys)
         if not keys:

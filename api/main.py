@@ -355,11 +355,63 @@ _type_filter_cache: dict = {}          # name -> (ts, set(item_key))
 _APT_EXCL_TENANTS = ("한국토지주택공사", "주택도시보증공사", "서울보증보험")
 
 
-def _apt_deposit_unknown_compute() -> set:
-    """[백필 전용·무거움] 아파트 물건 중 '대항력 + 확정없음 + 배당없음 + 보증금미상(0/없음)' 임차인이 있고,
-    제외기관(LH·HUG·SGI) 임차인이 없으며, 인수사항(임차인·등기 status에 '인수')이 없는 물건.
-    소스 = item_tenants/item_rights 테이블(크롤러 구조화·정확).
-    ※ analysis: api_cache는 PDF폴백이라 확정/배당/보증금 필드가 누락돼 오탐 발생 → 사용하지 않음."""
+def _apt_deposit_unknown_compute():
+    """[백필 전용] 아파트 물건 중 '대항력 + 확정없음 + 배당없음 + 보증금미상(0/없음)' 임차인이 있고, 아래에 해당하지 않는 물건.
+    제외: 보증기관(LH·HUG·SGI) 임차인 / 금액이 잡힌 인수사항(임차인 인수액·등기 '인수') /
+      🔴주인님 규칙(2026-09-18): ①임차인 중 한 명이라도 배당(배당요구일·배당금·배당 판정)이 있으면 ②임차인 중 보증금이 적힌
+      사람이 있으면 ③전세권이 등기돼 있거나 전세권자 임차인이 있으면 → 보증금 미상이 아님.
+      (실측: E01|2024|78797|1 강영호 전액배당인데 같은 호 전입자 배종훈 때문에, A02|2025|51300|1 전세권자 정병모가 있는데 전입자
+       김경옥 때문에 보증금미상으로 잡혔음 — 진행중 14건 중 5건이 이런 오분류)
+    현황은 차익(시세−기준가) 3,000만원 이상만(기존 설계), 과거(매각완료)는 속성만.
+    ⚠️DB 직접 조회(psycopg) — 예전 REST 페이징은 3초 제한에 걸려 빈 결과를 돌려줬고, 그러면 필터 목록이 통째로 지워졌다.
+    조회 실패 시 None(호출측이 기존 값을 유지)."""
+    rows = auction_db.query_pg(
+        "SELECT i.item_key, i.data_class, i.min_price, i.sale_price, i.result FROM items i "
+        "WHERE i.usage_name ILIKE %s "
+        "AND EXISTS (SELECT 1 FROM item_tenants t WHERE t.item_key=i.item_key AND t.has_opposing_power "
+        "            AND t.fixed_date IS NULL AND t.dividend_date IS NULL AND coalesce(t.deposit,0)=0) "
+        "AND NOT EXISTS (SELECT 1 FROM item_tenants t WHERE t.item_key=i.item_key AND ("
+        "     t.name ~ %s "
+        "  OR (t.status LIKE %s AND coalesce(t.assume_amount,0) > 0) "
+        "  OR t.dividend_date IS NOT NULL OR coalesce(t.dividend_amount,0) > 0 "
+        "  OR coalesce(t.status,'') ~ '^(전액배당|일부배당|미배당금)' "
+        "  OR coalesce(t.deposit,0) > 0 OR coalesce(t.tenant_right,'') LIKE %s)) "
+        "AND NOT EXISTS (SELECT 1 FROM item_rights r WHERE r.item_key=i.item_key AND "
+        "     (coalesce(r.status,'') LIKE %s OR coalesce(r.right_type,'') LIKE %s))",
+        ("%아파트%", "|".join(_APT_EXCL_TENANTS), "%인수%", "%전세권%", "%인수%", "%전세권%"))
+    if rows is None:
+        print("[col_sync] ⚠ 보증금미상 계산 조회 실패 — 기존 값 유지", flush=True)
+        return None
+    base_of: dict = {}; dc_of: dict = {}
+    for x in rows:
+        res = x.get("result") or ""
+        mn = _to_int(x.get("min_price")); sp = _to_int(x.get("sale_price"))
+        if ("매각" in res) and ("재매각" not in res):
+            base = sp or mn
+        elif (("재매각" in res) or ("재진행" in res)) and sp:
+            base = sp
+        else:
+            base = mn
+        dc_of[x["item_key"]] = x.get("data_class")
+        if base:
+            base_of[x["item_key"]] = base
+    match: set = {k for k, dc in dc_of.items() if dc and dc != "현황"}      # 과거(매각완료)는 차익 미적용 — 주인님 지시
+    cur = [k for k, dc in dc_of.items() if dc == "현황" and k in base_of]   # 현황만 차익(시세−기준가) 적용
+    for i in range(0, len(cur), 150):
+        ch = cur[i:i + 150]
+        try:
+            ests = auction_apt_ests(",".join(ch), compute=False)
+        except Exception:
+            ests = {}
+        for k in ch:
+            v = ests.get(k)
+            if isinstance(v, dict) and v.get("price") and (v["price"] - base_of[k]) >= _DEPOSIT_MIN_PROFIT:
+                match.add(k)
+    return match
+
+
+def _apt_deposit_unknown_compute_rest_old() -> set:
+    """(보관용·미사용) 예전 REST 페이징 버전 — 3초 제한에 걸려 빈 결과로 필터를 지우던 것. 참고용으로만 남김."""
     # 1) 아파트 item_key 집합(현황+과거 매각완료 — 유형필터를 과거 물건에도 적용, 주인님 요청)
     apts: set = set()
     off = 0
@@ -655,14 +707,14 @@ def _sort_cols_backfill_locked(dburl: str) -> bool:
             n1 += r1b.rowcount
             # ★집합건물(진행중)인데 brief가 타당성 표식(hh_ok)이 없거나 실패면 정렬 컬럼을 비운다 — 틀린 값으로 정렬되느니 빈칸.
             r1c = c.execute("""UPDATE items i SET households = NULL
-                FROM api_cache ac WHERE ac.cache_key = 'brief:'||i.item_key AND i.is_active AND i.households IS NOT NULL
+                FROM api_cache ac WHERE ac.cache_key = 'brief:'||i.item_key AND (i.is_active OR i.data_class = '현황') AND i.households IS NOT NULL
                   AND i.usage_name ~ '아파트|오피스텔|다세대|연립|도시형|빌라'
                   AND (ac.data->>'available')='true' AND coalesce(ac.data->>'hh_ok','') <> 'true'""")
             n1 += r1c.rowcount
             # ★brief 행이 아예 없는(무효화·미계산) 진행중 집합건물의 정렬값도 비운다 — 옛 brief 복사본(예: 교대금호어울림 0세대)이
             #   brief 삭제 뒤에도 items에 남아 '세대수 적은순' 1위로 나오던 실측 사례. 재계산되면 r1b가 다시 채운다.
             r1d = c.execute("""UPDATE items i SET households = NULL
-                WHERE i.is_active AND i.households IS NOT NULL
+                WHERE (i.is_active OR i.data_class = '현황') AND i.households IS NOT NULL
                   AND i.usage_name ~ '아파트|오피스텔|다세대|연립|도시형|빌라'
                   AND NOT EXISTS (SELECT 1 FROM api_cache ac WHERE ac.cache_key = 'brief:'||i.item_key)""")
             n1 += r1d.rowcount
@@ -724,6 +776,21 @@ def _filter_cols_backfill() -> None:
         for lab, ks in _zone_build().items():
             for k in ks:
                 zone_of[k] = lab
+        # 🔴계산 실패 판별(2026-09-18): 세 계산은 REST 페이징이라 3초 제한에 걸리면 조용히 빈 집합을 돌려줬고, 아래 '전부 지우고
+        #  다시 채움'이 필터 목록을 통째로 지웠다(실측: 오늘 새벽까지 로그에 over85=0/deposit=0/senior=0 반복 → 85㎡초과·
+        #  보증금미상·선순위임차권 필터가 비어 있었음). None(조회 실패)이거나, 지금 컬럼에 50건 이상 있는데 0건이 나오면 실패로
+        #  보고 그 컬럼은 건드리지 않는다(기존 값 유지).
+        _cur_cnt = auction_db.query_pg("SELECT count(*) FILTER (WHERE over85_ok) AS o, count(*) FILTER (WHERE deposit_unknown) AS d, "
+                                       "count(*) FILTER (WHERE senior_lease_ok) AS s, count(*) FILTER (WHERE zone IS NOT NULL) AS z FROM items")
+        _cc = _cur_cnt[0] if _cur_cnt else {"o": 0, "d": 0, "s": 0, "z": 0}
+        _valid = {}
+        for _col, _new, _k in (("over85_ok", over85, "o"), ("deposit_unknown", deposit, "d"),
+                               ("senior_lease_ok", senior, "s"), ("zone", zone_of, "z")):
+            _ok = _new is not None and not (len(_new) == 0 and (_cc.get(_k) or 0) >= 50)
+            _valid[_col] = _ok
+            if not _ok:
+                print(f"[col_sync] ⚠ {_col} 계산 {'실패' if _new is None else '0건'}(기존 {_cc.get(_k)}건) — 조회 실패로 보고 기존 값 유지", flush=True)
+        over85 = over85 or set(); deposit = deposit or set(); senior = senior or set()
         allk = set(fuel_of) | set(brand_of) | set(ok) | set(inv) | over85 | deposit | senior | set(zone_of)
         rows = [(k, fuel_of.get(k), brand_of.get(k), (k in ok), inv.get(k),
                  (k in over85) or None, (k in deposit) or None, (k in senior) or None, zone_of.get(k)) for k in allk]
@@ -741,13 +808,18 @@ def _filter_cols_backfill() -> None:
             # ① 안정 컬럼: 신규(invest_amount NULL)만
             cur.execute("""UPDATE items i SET fuel=_fcb.fuel, brand=_fcb.brand, car_ok=_fcb.car_ok, invest_amount=_fcb.invest_amount
                            FROM _fcb WHERE i.item_key=_fcb.item_key AND i.invest_amount IS NULL""")
-            # ② 멤버십 컬럼: full 재동기 — 옛 멤버 clear 후 현재 멤버 set(한 트랜잭션이라 외부는 중간상태 안 봄)
-            cur.execute("UPDATE items SET over85_ok=NULL, deposit_unknown=NULL, senior_lease_ok=NULL, zone=NULL WHERE over85_ok IS NOT NULL OR deposit_unknown IS NOT NULL OR senior_lease_ok IS NOT NULL OR zone IS NOT NULL")
-            cur.execute("""UPDATE items i SET over85_ok=_fcb.over85_ok, deposit_unknown=_fcb.deposit_unknown, senior_lease_ok=_fcb.senior_lease_ok, zone=_fcb.zone
-                           FROM _fcb WHERE i.item_key=_fcb.item_key AND (_fcb.over85_ok OR _fcb.deposit_unknown OR _fcb.senior_lease_ok OR _fcb.zone IS NOT NULL)""")
-            _mem = cur.rowcount
+            # ② 멤버십 컬럼: full 재동기 — 옛 멤버 clear 후 현재 멤버 set(한 트랜잭션이라 외부는 중간상태 안 봄). 실패로 판정된 컬럼은 제외.
+            _mem = 0
+            for _col in ("over85_ok", "deposit_unknown", "senior_lease_ok", "zone"):
+                if not _valid.get(_col):
+                    continue
+                cur.execute(f"UPDATE items SET {_col}=NULL WHERE {_col} IS NOT NULL")
+                _cond = f"_fcb.{_col} IS NOT NULL" if _col == "zone" else f"_fcb.{_col}"
+                cur.execute(f"UPDATE items i SET {_col}=_fcb.{_col} FROM _fcb WHERE i.item_key=_fcb.item_key AND {_cond}")
+                _mem += cur.rowcount
             conn.commit()
-            print(f"[col_sync] 필터컬럼 재동기: 멤버십 {_mem}행 set (over85={len(over85)}/deposit={len(deposit)}/senior={len(senior)}/zone={len(zone_of)})", flush=True)
+            print(f"[col_sync] 필터컬럼 재동기: 멤버십 {_mem}행 set (over85={len(over85)}/deposit={len(deposit)}/senior={len(senior)}/zone={len(zone_of)})"
+                  + ("" if all(_valid.values()) else f" · 유지된 컬럼 {[c for c, v in _valid.items() if not v]}"), flush=True)
         finally:
             conn.close()
     except Exception as e:
@@ -1356,37 +1428,35 @@ def _apt_over85_compute() -> set:
     기준가 = 목록 표시와 동일(낙찰=낙찰가, 재매각/재진행=이전낙찰가, 그 외=최저가)."""
     import re as _re
     base_of: dict = {}; dc_of: dict = {}   # item_key -> 기준가(원) + data_class(과거 매각완료는 차익 미적용)
-    off = 0
-    while True:
-        r = auction_db._get("items", {"select": "item_key,area_text,min_price,sale_price,result,data_class", "order": "item_key",
-                                       "usage_name": "ilike.*아파트*",
-                                       "limit": "1000", "offset": str(off)})
-        rows = r.json() if r.status_code in (200, 206) else []
-        for x in rows:
-            m = _re.search(r"전용\s*([0-9.]+)", x.get("area_text") or "")
-            if not m:
+    # ⚠️DB 직접 조회(psycopg) — REST 페이징은 3초 제한에 걸려 빈 결과(0건)를 돌려줬다(2026-09-18 실측: 로그 over85=0 반복,
+    #  필터컬럼이 보호 장치로 옛 값에 멈춰 새 물건이 안 들어감). 조회 실패 시 None(호출측이 기존 값 유지).
+    rows = auction_db.query_pg("SELECT item_key, area_text, min_price, sale_price, result, data_class FROM items "
+                               "WHERE usage_name ILIKE %s", ("%아파트%",))
+    if rows is None:
+        print("[col_sync] ⚠ 85㎡초과 계산 조회 실패 — 기존 값 유지", flush=True)
+        return None
+    for x in rows:
+        m = _re.search(r"전용\s*([0-9.]+)", x.get("area_text") or "")
+        if not m:
+            continue
+        try:
+            if float(m.group(1)) <= 85:
                 continue
-            try:
-                if float(m.group(1)) <= 85:
-                    continue
-            except ValueError:
-                continue
-            k = x.get("item_key")
-            if not k:
-                continue
-            res = x.get("result") or ""
-            mn = _to_int(x.get("min_price")); sp = _to_int(x.get("sale_price"))
-            if ("매각" in res) and ("재매각" not in res):          # 낙찰
-                base = sp or mn
-            elif (("재매각" in res) or ("재진행" in res)) and sp:    # 재매각/재진행
-                base = sp
-            else:                                                  # 신건/유찰
-                base = mn
-            if base:
-                base_of[k] = base; dc_of[k] = x.get("data_class")
-        if len(rows) < 1000:
-            break
-        off += 1000
+        except ValueError:
+            continue
+        k = x.get("item_key")
+        if not k:
+            continue
+        res = x.get("result") or ""
+        mn = _to_int(x.get("min_price")); sp = _to_int(x.get("sale_price"))
+        if ("매각" in res) and ("재매각" not in res):          # 낙찰
+            base = sp or mn
+        elif (("재매각" in res) or ("재진행" in res)) and sp:    # 재매각/재진행
+            base = sp
+        else:                                                  # 신건/유찰
+            base = mn
+        if base:
+            base_of[k] = base; dc_of[k] = x.get("data_class")
     keys = list(base_of.keys())
     if not keys:
         return set()
@@ -1473,75 +1543,45 @@ def _apt_senior_lease_keys() -> set:
     그 임차인의 보증금이 시세(est)보다 3,000만원 이상 낮은 물건.
     소스 = item_tenants 테이블(크롤러 구조화 데이터; 배당요구일 dividend_date 정확·커버리지 넓음).
     ※ analysis: api_cache는 PDF폴백이라 배당요구일이 누락돼 오탐 발생 → 사용하지 않음."""
-    # 1) 아파트 item_key + data_class(현황+과거 — 과거 매각완료는 차익 미적용)
-    apts: set = set(); dc_of: dict = {}
-    off = 0
-    while True:
-        r = auction_db._get("items", {"select": "item_key,data_class", "order": "item_key",
-                                       "usage_name": "ilike.*아파트*",
-                                       "limit": "1000", "offset": str(off)})
-        rows = r.json() if r.status_code in (200, 206) else []
-        for x in rows:
-            if x.get("item_key"):
-                apts.add(x["item_key"]); dc_of[x["item_key"]] = x.get("data_class")
-        if len(rows) < 1000:
-            break
-        off += 1000
-    if not apts:
-        return set()
-    # 2) item_tenants: 대항력O + 전입O + 확정O + 배당요구일 없음 → item_key별 최대 보증금(인수 리스크 큰 값)
-    cand: dict = {}
-    off = 0
-    while True:
-        r = auction_db._get("item_tenants",
-                            {"select": "item_key,deposit,move_in_date,fixed_date,dividend_date",
-                             "has_opposing_power": "eq.true",
-                             "move_in_date": "not.is.null", "fixed_date": "not.is.null",
-                             "dividend_date": "is.null",
-                             "limit": "1000", "offset": str(off)})
-        rows = r.json() if r.status_code in (200, 206) else []
-        for x in rows:
-            k = x.get("item_key")
-            if k not in apts:
-                continue
-            dep = _to_int(x.get("deposit"))
-            if dep:
-                cand[k] = max(cand.get(k, 0), dep)
-        if len(rows) < 1000:
-            break
-        off += 1000
+    # ⚠️DB 직접 조회(psycopg) — REST 페이징은 3초 제한에 걸려 빈 결과(0건)를 돌려줬다(2026-09-18 실측: 로그 senior=0 반복,
+    #  필터컬럼이 보호 장치로 옛 값에 멈춰 새 물건이 안 들어감). 조회 실패 시 None(호출측이 기존 값 유지).
+    # 1)+2) 아파트(현황+과거) 임차인 중 대항력O + 전입O + 확정O + 배당요구일 없음 → item_key별 최대 보증금(인수 리스크 큰 값)
+    rows = auction_db.query_pg(
+        "SELECT t.item_key, t.deposit, i.data_class FROM item_tenants t JOIN items i ON i.item_key=t.item_key "
+        "WHERE i.usage_name ILIKE %s AND t.has_opposing_power AND t.move_in_date IS NOT NULL "
+        "AND t.fixed_date IS NOT NULL AND t.dividend_date IS NULL", ("%아파트%",))
+    if rows is None:
+        print("[col_sync] ⚠ 선순위임차권 계산 조회 실패 — 기존 값 유지", flush=True)
+        return None
+    cand: dict = {}; dc_of: dict = {}
+    for x in rows:
+        k = x.get("item_key")
+        if not k:
+            continue
+        dc_of[k] = x.get("data_class")
+        dep = _to_int(x.get("deposit"))
+        if dep:
+            cand[k] = max(cand.get(k, 0), dep)
     if not cand:
         return set()
     # 2.5) 임차인 혼재 제외: 한 물건의 임차인들이 전입일도 서로 다르고(2종↑) + 보증금도 서로 다르면(2종↑) 제외.
     #   (작은 보증금 임차인만 보고 '시세보다 한참 낮은 선순위'로 잡히지만, 전입·보증금이 다른 거액 임차인이
     #    섞인 혼재 상황이라 깨끗한 단일 선순위가 아님 → 배제)
-    cand_list = list(cand.keys())
-    excl: set = set()
-    for i in range(0, len(cand_list), 100):
-        ch = cand_list[i:i + 100]
-        inlist = ",".join('"' + str(k).replace('"', '') + '"' for k in ch)
-        per: dict = {}   # item_key -> {"mv": set(전입일), "dp": set(보증금)}
-        try:
-            tr = auction_db._get("item_tenants",
-                                 {"select": "item_key,move_in_date,deposit",
-                                  "item_key": f"in.({inlist})", "limit": "5000"})
-            for x in (tr.json() if tr.status_code in (200, 206) else []):
-                k = x.get("item_key")
-                if k is None:
-                    continue
-                d = per.setdefault(k, {"mv": set(), "dp": set()})
-                if x.get("move_in_date"):
-                    d["mv"].add(x.get("move_in_date"))
-                dp = _to_int(x.get("deposit"))
-                if dp:
-                    d["dp"].add(dp)
-        except Exception:
-            pass
-        for k, d in per.items():
-            if len(d["mv"]) > 1 and len(d["dp"]) > 1:   # 전입 다름 AND 보증금 다름 → 혼재
-                excl.add(k)
-    for k in excl:
-        cand.pop(k, None)
+    trs = auction_db.query_pg("SELECT item_key, move_in_date, deposit FROM item_tenants WHERE item_key = ANY(%s)", (list(cand),))
+    if trs is None:
+        print("[col_sync] ⚠ 선순위임차권 혼재 조회 실패 — 기존 값 유지", flush=True)
+        return None
+    per: dict = {}   # item_key -> {"mv": set(전입일), "dp": set(보증금)}
+    for x in trs:
+        d = per.setdefault(x["item_key"], {"mv": set(), "dp": set()})
+        if x.get("move_in_date"):
+            d["mv"].add(str(x.get("move_in_date")))
+        dp = _to_int(x.get("deposit"))
+        if dp:
+            d["dp"].add(dp)
+    for k, d in per.items():
+        if len(d["mv"]) > 1 and len(d["dp"]) > 1:   # 전입 다름 AND 보증금 다름 → 혼재
+            cand.pop(k, None)
     if not cand:
         return set()
     # 3) 시세(est) − 보증금 ≥ 3,000만원 (현황만; 과거 매각완료는 차익 미적용=속성만)
@@ -2002,13 +2042,32 @@ def _grade_buckets(force: bool = False) -> dict:
     # ⚠️수만 키를 한 번에 넘기면 대부분 누락된다(실측: 1,000키 요청 → 140개만 반환).
     #  위 brief 조회와 동일하게 100개씩 청크로 나눠 받아야 ㉯가 캐시를 실제로 읽는다.
     #  (이 청크를 빼먹어서 analysis를 12,500건 예열하고도 일치율이 안 올랐음 — 2026-07-20)
+    # 🔴목록 판정은 Supabase(api_cache) 값을 기준으로 읽는다(2026-09-18 주인님 승인). 예전엔 로컬 SQLite 우선이라, 클라우드가
+    #  상세 조회 때 Supabase에만 쓴 분석을 못 보고 로컬의 옛 값(판정 없음)으로 폴백해 목록이 어긋났다(실측 8건 — 예
+    #  A02|2024|61978|1: Supabase '위험'·목록 '매수양호' 이틀). 로컬에만 있고 아직 안 올라간(synced=0) 값은 로컬이 최신이라 그것을 쓴다.
+    #  Supabase 조회 실패 시에만 옛 방식(로컬 우선)으로 폴백.
     _an_cache: dict = {}
     _ak = list(res)
-    for _i in range(0, len(_ak), 100):
+    _sup = db.query_pg("SELECT cache_key, data->>'risk_level' AS risk FROM api_cache WHERE cache_key = ANY(%s)",
+                       (["analysis:" + k for k in _ak],))
+    if _sup is not None:
+        for _r in _sup:
+            _an_cache[_r["cache_key"]] = {"risk_level": _r["risk"]}
         try:
-            _an_cache.update(db.cache_get_many(["analysis:" + k for k in _ak[_i:_i + 100]]) or {})
+            if db.local is not None:
+                for _lk, _lv in db.local.unsynced_with_prefix("analysis:").items():
+                    if isinstance(_lv, dict):
+                        _an_cache[_lk] = {"risk_level": _lv.get("risk_level")}
         except Exception:
             pass
+        print(f"[buy_grade] 분석 판정 Supabase 기준 {len(_sup)}건 조회", flush=True)
+    else:
+        print("[buy_grade] ⚠ Supabase 분석 조회 실패 — 로컬 우선으로 폴백", flush=True)
+        for _i in range(0, len(_ak), 100):
+            try:
+                _an_cache.update(db.cache_get_many(["analysis:" + k for k in _ak[_i:_i + 100]]) or {})
+            except Exception:
+                pass
     _RMAP = {"안전": "매수양호", "주의": "매수검토", "위험": "매수금지"}
     _an_hit = _an_miss = _an_norisk = 0
     for k in res:
@@ -6257,7 +6316,7 @@ def _apt_detail_sync(limit: int = 200) -> int:
             ks = [r[0] for r in c.execute("""
                 SELECT i.item_key FROM items i JOIN api_cache b ON b.cache_key='brief:'||i.item_key
                   JOIN api_cache a ON a.cache_key='apt:'||i.item_key
-                 WHERE i.is_active AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
+                 WHERE (i.is_active OR i.data_class = '현황') AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
                    AND (a.data->'complex_detail' IS NULL
                         OR (b.data->>'households') IS DISTINCT FROM (a.data->'complex_detail'->>'households'))
                  LIMIT %s""", (limit,)).fetchall()]
@@ -6307,12 +6366,12 @@ def admin_brief_recompute(scope: str = Query("bad", pattern="^(bad|collective|co
                 _ufilter = ("AND i.usage_name !~ '아파트'" if scope == "nonapt_missing"
                             else "AND i.usage_name ~ '아파트'" if scope == "apt_missing" else "")
                 q = f"""SELECT i.item_key, i.usage_name, i.address FROM items i LEFT JOIN api_cache c ON c.cache_key='brief:'||i.item_key
-                        WHERE i.is_active AND {_COLLECTIVE_SQL} {_ufilter}
+                        WHERE (i.is_active OR i.data_class = '현황') AND {_COLLECTIVE_SQL} {_ufilter}
                           AND (c.data IS NULL OR coalesce(c.data->>'hh_ok','') = '' OR (c.data->>'quota')='true')
                         ORDER BY (i.usage_name ~ '아파트') DESC, (i.usage_name ~ '오피스텔') DESC, i.item_key"""
             else:
                 q = f"""SELECT i.item_key, i.usage_name, i.address FROM items i
-                        WHERE i.is_active AND {_COLLECTIVE_SQL}
+                        WHERE (i.is_active OR i.data_class = '현황') AND {_COLLECTIVE_SQL}
                         ORDER BY (i.usage_name ~ '아파트') DESC, (i.usage_name ~ '오피스텔') DESC, i.item_key"""
             sel = c.execute(q).fetchall()
     if limit:
@@ -6346,17 +6405,17 @@ def admin_brief_audit(_u: dict = Depends(require_admin_or_local)) -> dict:
                    sum(CASE WHEN (c.data->>'hh_ok')='true' THEN 1 ELSE 0 END) hh_ok,
                    sum(CASE WHEN (c.data->>'households') ~ '^[0-9]+$' THEN 1 ELSE 0 END) has_hh
               FROM api_cache c JOIN items i ON c.cache_key='brief:'||i.item_key
-             WHERE i.is_active AND {_COLLECTIVE_SQL} AND (c.data->>'available')='true'
+             WHERE (i.is_active OR i.data_class = '현황') AND {_COLLECTIVE_SQL} AND (c.data->>'available')='true'
              GROUP BY 1""").fetchall()
         out["active_brief"] = {r[0]: {"n": r[1], "le1": r[2], "bad": r[3], "hh_ok": r[4], "has_hh": r[5]} for r in rows}
         r2 = c.execute("""
             SELECT count(*) FILTER (WHERE (b.data->>'households') IS DISTINCT FROM (a.data->'complex_detail'->>'households')) AS differ,
                    count(*) AS n
               FROM items i JOIN api_cache b ON b.cache_key='brief:'||i.item_key JOIN api_cache a ON a.cache_key='apt:'||i.item_key
-             WHERE i.is_active AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
+             WHERE (i.is_active OR i.data_class = '현황') AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
                AND a.data->'complex_detail' IS NOT NULL""").fetchone()
         out["list_vs_detail_apt"] = {"differ": r2[0], "n": r2[1]}
-        r3 = c.execute(f"""SELECT count(*) FROM items i WHERE i.is_active AND i.households <= 1 AND {_COLLECTIVE_SQL}""").fetchone()
+        r3 = c.execute(f"""SELECT count(*) FROM items i WHERE (i.is_active OR i.data_class = '현황') AND i.households <= 1 AND {_COLLECTIVE_SQL}""").fetchone()
         out["items_households_le1"] = r3[0]
     out["recompute"] = dict(_brief_recomp)
     try:
@@ -6381,7 +6440,7 @@ def admin_apt_detail_refresh(scope: str = Query("differ", pattern="^(differ|keys
             ks = [r[0] for r in c.execute("""
                 SELECT i.item_key FROM items i JOIN api_cache b ON b.cache_key='brief:'||i.item_key
                   JOIN api_cache a ON a.cache_key='apt:'||i.item_key
-                 WHERE i.is_active AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
+                 WHERE (i.is_active OR i.data_class = '현황') AND i.usage_name ~ '아파트' AND (b.data->>'available')='true'
                    AND (a.data->'complex_detail' IS NULL
                         OR (b.data->>'households') IS DISTINCT FROM (a.data->'complex_detail'->>'households'))""").fetchall()]
     done = 0
@@ -6408,7 +6467,7 @@ _SCHED_SEL = ("SELECT " + ",".join(_SCHED_COLS) + " FROM auction_schedule WHERE 
 _SCHED_NONCANON_SQL = r"""
 WITH s AS (
   SELECT s.id, s.item_key, coalesce(s.round,'') rnd, coalesce(s.sell_date,'') sd, coalesce(s.min_price,'') mp, coalesce(s.result,'') res
-    FROM auction_schedule s JOIN items i ON i.item_key=s.item_key WHERE i.is_active {extra}
+    FROM auction_schedule s JOIN items i ON i.item_key=s.item_key WHERE (i.is_active OR i.data_class = '현황') {extra}
 ), flag AS (
   SELECT item_key,
          bool_or(mp ~ '^[0-9]+$')                                   AS digits_only,   -- 법원 크롤러 insert(원 표기 없음)
@@ -6423,7 +6482,7 @@ WITH s AS (
     FROM s GROUP BY item_key
 ), cur_missing AS (   -- 목록의 현재 매각기일(오늘 이후·최저가 있음)이 표에 없음 → 정규화가 current로 채움
   SELECT i.item_key FROM items i
-   WHERE i.is_active {extra} AND left(i.sell_date,10) ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'
+   WHERE (i.is_active OR i.data_class = '현황') {extra} AND left(i.sell_date,10) ~ '^[0-9]{{4}}-[0-9]{{2}}-[0-9]{{2}}$'
      AND left(i.sell_date,10) >= to_char((now() AT TIME ZONE 'Asia/Seoul')::date, 'YYYY-MM-DD')
      AND coalesce(i.min_price,0) > 0
      AND EXISTS (SELECT 1 FROM auction_schedule s2 WHERE s2.item_key=i.item_key)
@@ -6444,8 +6503,8 @@ SELECT item_key, string_agg(reasons, ',') reasons FROM (
 """
 # 회차 라벨 검사는 SQL이 아니라 정규화와 '같은 함수'(schedule_norm.stored_rounds_wrong)로 한다 — 규칙을 두 군데 따로 쓰면
 #  한쪽만 바뀌었을 때 스윕이 같은 물건을 끝없이 다시 잡거나(공회전) 틀린 회차를 못 잡는다(2026-09-18 재진행 규칙 보완 때 실제 위험).
-_SCHED_ROWS_SQL = ("SELECT s.item_key, s.id, s.round, s.sell_date, s.min_price, s.result FROM auction_schedule s "
-                   "JOIN items i ON i.item_key=s.item_key WHERE i.is_active AND coalesce(s.round,'') <> '' {extra} "
+_SCHED_ROWS_SQL = ("SELECT s.item_key, s.id, s.round, s.sell_date, s.min_price, s.result, i.appraisal_price FROM auction_schedule s "
+                   "JOIN items i ON i.item_key=s.item_key WHERE (i.is_active OR i.data_class = '현황') AND coalesce(s.round,'') <> '' {extra} "
                    "ORDER BY s.item_key")
 
 
@@ -6486,7 +6545,7 @@ def _schedule_normalize_item(c, item_key: str, use_doc: bool = True) -> str:
         return "error:doc"
     if not doc and not existing:
         return "empty"
-    _cur = c.execute("SELECT left(sell_date,10), min_price FROM items WHERE item_key=%s", (item_key,)).fetchone()
+    _cur = c.execute("SELECT left(sell_date,10), min_price, appraisal_price FROM items WHERE item_key=%s", (item_key,)).fetchone()
     rows = _schn.canonical_rows(doc or None, existing, doc_multi=multi, current=_cur)
     if not rows:
         return "empty"                      # 정규화 결과 0행이면 기존 행을 지우지 않는다(안전)
@@ -6571,14 +6630,14 @@ def _schedule_noncanon_keys(c, limit: int = 0, extra: str = "") -> list:
     for k, rs in c.execute(_SCHED_NONCANON_SQL.format(extra=extra)).fetchall():
         found.setdefault(k, set()).update(x for x in (rs or "").split(",") if x)
     buf: list = []
-    cur = None
-    for k, i, rnd, sd, mp, res in c.execute(_SCHED_ROWS_SQL.format(extra=extra)).fetchall():
+    cur, cur_ap = None, None
+    for k, i, rnd, sd, mp, res, ap in c.execute(_SCHED_ROWS_SQL.format(extra=extra)).fetchall():
         if k != cur:
-            if cur is not None and _schn.stored_rounds_wrong(buf):
+            if cur is not None and _schn.stored_rounds_wrong(buf, anchor=cur_ap):
                 found.setdefault(cur, set()).add("round_label")
-            cur, buf = k, []
+            cur, cur_ap, buf = k, ap, []
         buf.append({"id": i, "round": rnd, "sell_date": sd, "min_price": mp, "result": res})
-    if cur is not None and _schn.stored_rounds_wrong(buf):
+    if cur is not None and _schn.stored_rounds_wrong(buf, anchor=cur_ap):
         found.setdefault(cur, set()).add("round_label")
     out = [(k, ",".join(sorted(v))) for k, v in sorted(found.items())]
     return out[:limit] if limit else out
@@ -6635,7 +6694,7 @@ def admin_schedule_normalize(scope: str = Query("noncanon", pattern="^(noncanon|
         if scope == "keys":
             ks = [k for k in keys.split(",") if k]
         elif scope == "active":
-            ks = [r[0] for r in c.execute("SELECT i.item_key FROM items i WHERE i.is_active AND EXISTS "
+            ks = [r[0] for r in c.execute("SELECT i.item_key FROM items i WHERE (i.is_active OR i.data_class = '현황') AND EXISTS "
                                           "(SELECT 1 FROM auction_schedule s WHERE s.item_key=i.item_key) ORDER BY i.item_key").fetchall()]
         else:
             ks = [k for k, _ in _schedule_noncanon_keys(c)]
@@ -6672,7 +6731,7 @@ def admin_schedule_audit(_u: dict = Depends(require_admin_or_local)) -> dict:
         out["by_reason"] = cnt
         out["samples"] = sample
         r = c.execute("SELECT count(*) FILTER (WHERE EXISTS (SELECT 1 FROM auction_schedule s WHERE s.item_key=i.item_key)), count(*) "
-                      "FROM items i WHERE i.is_active").fetchone()
+                      "FROM items i WHERE (i.is_active OR i.data_class = '현황')").fetchone()
         out["active_with_schedule"] = r[0]
         out["active"] = r[1]
     out["normalize"] = dict(_sched_norm)
@@ -6690,7 +6749,7 @@ _stmt_fill: dict = {"running": False, "tag": "", "total": 0, "done": 0, "filled"
                     "finished": None, "last_err": ""}
 _STMT_TARGET_SQL = """
 SELECT i.item_key FROM items i
- WHERE i.is_active
+ WHERE (i.is_active OR i.data_class = '현황')
    AND EXISTS (SELECT 1 FROM media m WHERE m.item_key=i.item_key AND m.kind='매각물건명세서' AND m.r2_key IS NOT NULL)
    AND NOT EXISTS (SELECT 1 FROM item_tenants t WHERE t.item_key=i.item_key)
    AND NOT EXISTS (SELECT 1 FROM api_cache c WHERE c.cache_key = 'stmt:'||i.item_key)
@@ -6939,11 +6998,30 @@ def admin_statement_audit(_u: dict = Depends(require_admin_or_local)) -> dict:
 #   진행중 물건의 분석을 지우고 다시 계산(지운 뒤 저장하므로 캐시 updated_at이 새로 찍혀 같은 물건을 반복하지 않음).
 _ana_recomp: dict = {"running": False, "tag": "", "total": 0, "done": 0, "err": 0, "started": None, "finished": None, "last_err": ""}
 _STALE_ANALYSIS_SQL = ("SELECT i.item_key FROM items i JOIN api_cache a ON a.cache_key = 'analysis:'||i.item_key "
-                       "WHERE i.is_active AND i.updated_at > a.updated_at ORDER BY i.updated_at DESC")
+                       "WHERE (i.is_active OR i.data_class = '현황') AND i.updated_at > a.updated_at ORDER BY i.updated_at DESC")
 
 
-def _recompute_analysis(keys: list, tag: str = "keys") -> int:
-    """분석 캐시 삭제(로컬+Supabase) → 재계산·저장(목록 buy_grade 단조 상향 포함). 처리 건수 반환."""
+# 명세서 차임(월세)을 한글 단위('월 40만원')로 적은 칸을 예전 파서가 숫자만 이어 '40'원으로 저장한 캐시(2026-09-18 실측:
+#  analysis 40명·docsummary 119명, 상세 화면 '월세 140원'). 파서는 고쳤고(sale_statement_parser.won_amounts), 이미 저장된
+#  캐시는 이 조회로 찾아 docrents:/docsummary:/analysis:를 지우고 다시 계산한다(scope=stmt_rents). 월세 1만원 미만은 실제로 없다.
+_TINY_RENT_SQL = """
+SELECT substr(cache_key, strpos(cache_key, ':') + 1) AS item_key FROM api_cache a
+ WHERE a.cache_key LIKE %s AND jsonb_typeof(a.data->'rents') = 'array'
+   AND EXISTS (SELECT 1 FROM jsonb_array_elements(a.data->'rents') t WHERE (t->>'rent') ~ '^[0-9]+$' AND (t->>'rent')::bigint BETWEEN 1 AND 9999)
+UNION
+SELECT substr(cache_key, strpos(cache_key, ':') + 1) FROM api_cache a
+ WHERE a.cache_key LIKE %s AND jsonb_typeof(a.data->'tenants') = 'array'
+   AND EXISTS (SELECT 1 FROM jsonb_array_elements(a.data->'tenants') t WHERE (t->>'rent') ~ '^[0-9]+$' AND (t->>'rent')::bigint BETWEEN 1 AND 9999)
+UNION
+SELECT substr(cache_key, strpos(cache_key, ':') + 1) FROM api_cache a
+ WHERE a.cache_key LIKE %s AND jsonb_typeof(a.data->'tenant_rents') = 'array'
+   AND EXISTS (SELECT 1 FROM jsonb_array_elements(a.data->'tenant_rents') t WHERE (t->>'rent') ~ '^[0-9]+$' AND (t->>'rent')::bigint BETWEEN 1 AND 9999)"""
+_TINY_RENT_PARAMS = ("docrents:%", "analysis:%", "docsummary:%")
+
+
+def _recompute_analysis(keys: list, tag: str = "keys", extra_prefixes: tuple = ()) -> int:
+    """분석 캐시 삭제(로컬+Supabase) → 재계산·저장(목록 buy_grade 단조 상향 포함). 처리 건수 반환.
+    extra_prefixes: 함께 지울 캐시 접두어(예: 'docrents','docsummary' — 명세서 파싱값을 다시 읽게)."""
     import time as _t
     from auction_analysis.doc_analysis import evict_item
     _ana_recomp.update({"running": True, "tag": tag, "total": len(keys), "done": 0, "err": 0,
@@ -6952,7 +7030,8 @@ def _recompute_analysis(keys: list, tag: str = "keys") -> int:
         for i in range(0, len(keys), 50):
             chunk = keys[i:i + 50]
             try:
-                auction_db.cache_delete_many(["analysis:" + k for k in chunk])
+                auction_db.cache_delete_many(["analysis:" + k for k in chunk]
+                                             + [p + ":" + k for p in extra_prefixes for k in chunk])
             except Exception as e:
                 _ana_recomp["last_err"] = f"delete: {str(e)[:60]}"
             for k in chunk:
@@ -6987,23 +7066,32 @@ def _stale_analysis_sweep(limit: int = 150) -> int:
 
 
 @app.post("/admin/analysis_recompute")
-def admin_analysis_recompute(scope: str = Query("keys", pattern="^(keys|stale|unknown_power)$"), keys: str = "",
-                             _u: dict = Depends(require_admin_or_local)) -> dict:
-    """분석 캐시 재계산(로컬 전용·백그라운드). scope=keys | stale(물건 갱신 뒤 옛 캐시) | unknown_power(명세서 '대항력 미상' 임차인 보유)."""
+def admin_analysis_recompute(scope: str = Query("keys", pattern="^(keys|stale|unknown_power|stmt_rents)$"), keys: str = "",
+                             docs: int = Query(0, ge=0, le=1), _u: dict = Depends(require_admin_or_local)) -> dict:
+    """분석 캐시 재계산(로컬 전용·백그라운드). scope=keys | stale(물건 갱신 뒤 옛 캐시) | unknown_power(명세서 '대항력 미상' 임차인 보유)
+    | stmt_rents(명세서 월세를 한글 단위 오독으로 1만원 미만 저장한 캐시 — docrents/docsummary도 지움). docs=1: keys에도 docrents/docsummary 삭제."""
     if _IS_CLOUD:
         raise HTTPException(400, "클라우드는 계산하지 않습니다(로컬 4011에서 실행).")
     if _ana_recomp["running"]:
         return {"started": False, "reason": "이미 실행 중", "done": _ana_recomp["done"], "total": _ana_recomp["total"]}
+    extra: tuple = ()
     if scope == "keys":
         ks = [k for k in keys.split(",") if k]
+        extra = ("docrents", "docsummary") if docs else ()
     elif scope == "stale":
         ks = [r["item_key"] for r in (auction_db.query_pg(_STALE_ANALYSIS_SQL) or [])]
+    elif scope == "stmt_rents":
+        rows = auction_db.query_pg(_TINY_RENT_SQL, _TINY_RENT_PARAMS)
+        if rows is None:
+            raise HTTPException(500, "대상 조회 실패")
+        ks = sorted({r["item_key"] for r in rows})
+        extra = ("docrents", "docsummary")
     else:
         ks = [r["item_key"] for r in (auction_db.query_pg(
             "SELECT DISTINCT t.item_key FROM item_tenants t JOIN items i ON i.item_key=t.item_key "
-            "WHERE i.is_active AND t.status LIKE %s", ("대항력 미상 %",)) or [])]
-    threading.Thread(target=_recompute_analysis, args=(ks, scope), daemon=True).start()
-    return {"started": True, "scope": scope, "n": len(ks)}
+            "WHERE (i.is_active OR i.data_class = '현황') AND t.status LIKE %s", ("대항력 미상 %",)) or [])]
+    threading.Thread(target=_recompute_analysis, args=(ks, scope, extra), daemon=True).start()
+    return {"started": True, "scope": scope, "n": len(ks), "keys": ks[:50]}
 
 
 @app.get("/admin/analysis_recompute/status")

@@ -109,6 +109,7 @@
   .sv-status.gone{color:var(--muted);}              /* 소멸 */
   .sv-status.keep{color:var(--hotred);}             /* 인수/대항력있음 */
   .sv-status.own{color:var(--hotblue);}             /* 이전(소유권) */
+  .sv-status.unk{color:#b26a00;}                    /* 대항력 미상(전입일 미상 — 명세서로 판단 불가) */
   .sv-gun{font-size:12px;color:var(--muted);margin-top:2px;font-weight:400;}
   .sv-total{display:flex;justify-content:space-between;padding:11px 13px;
     font-weight:700;font-size:13px;background:#fafbfc;}
@@ -1019,7 +1020,9 @@ async function loadAnalysis(attempt){
           ${t.waiver?`<div class="sv-cmt" style="color:var(--safe,#1a7f4b)">✓ 말소동의·대항력 포기 확약서 제출 → 미배당 보증금은 낙찰자가 인수하지 않습니다</div>`:''}
           ${t.comment?`<div class="sv-cmt">${esc(t.comment.replace(/\s*\[명세서\]\s*$/,''))}</div>`:notes.map(n=>`<div class="sv-cmt">※ ${n}</div>`).join('')}
         </div>
-        <div class="sv-r"><div class="sv-status ${t.has_opposing_power?'keep':'gone'}">${t.has_opposing_power?'대항 있음':'대항 없음'}</div></div>
+        <div class="sv-r">${/^대항력\s*미상/.test(t.status_label||'')
+          ? `<div class="sv-status unk">대항 미상</div>`       /* 전입일 미상 — '대항 없음'으로 단정하지 않음(라벨과 어긋나던 것) */
+          : `<div class="sv-status ${t.has_opposing_power?'keep':'gone'}">${t.has_opposing_power?'대항 있음':'대항 없음'}</div>`}</div>
       </div>`;}).join('')
       :`<div class="sv-note">· 매각물건명세서·현황조사서상 조사된 임차내역이 없습니다.</div>`}
     ${d.deposit_total?`<div class="sv-total"><span>보증금합계</span><b>${wonF(d.deposit_total)}</b></div>`:''}

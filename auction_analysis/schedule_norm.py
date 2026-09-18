@@ -101,42 +101,149 @@ def level_rounds(prices: list) -> list[int]:
       ③ 전에 나온 금액으로 다시 오름 → 그 금액의 회차(변경·불허가 뒤 80% 가격으로 재진행 = 2차).
          예전엔 '오르면 신건부터'라 A01|2025|102122|1(…10차 3,208만 변경 → 1억9,120만 재진행)이 신건·2차로 찍혀 목록(3차)과 어긋났음
       ④ 처음 보는 금액으로 오름 → 재감정·새 주기 → 신건부터(M01|2019|22106|1: 2020 주기 → 2025 재감정)
+      ⑤ 떨어졌다가 그 절차의 첫 가격(감정가)으로 되돌아감 → 새 절차의 신건(옛 회차는 버림). 예전엔 ③으로 처리해 그 뒤 30% 저감
+         가격을 옛 회차 사이에 끼워 한 칸 더 셈(실측 B03|2023|105977|17: 1억400만 재진행 → 7,280만이 3차로, 목록은 2차)
       금액 없는 행은 직전 회차. 원 단위 반올림 차이(±1,000원)는 같은 금액으로 본다."""
-    out: list[int] = []
-    levels: dict[int, int] = {}
-    last = None
-    for p in prices:
+    st = _RoundState()
+    return [st.step(p) for p in prices]
+
+
+def _tol(p: int) -> int:
+    return max(1000, p // 10000)
+
+
+class _RoundState:
+    """level_rounds 규칙의 상태 기계(금액 하나씩 넣으면 회차를 돌려줌).
+    anchor = 목록의 현재 감정가: 그 금액의 행은 현재 절차의 신건(재감정으로 감정가가 내려간 경우 — 실측 E05|2025|52292|1:
+    1억7,000만 재진행 뒤 재감정 1억4,500만이 '떨어진 2차'로 잡히던 것)."""
+
+    def __init__(self, anchor=None):
+        self.levels: dict[int, int] = {}
+        self.top = None
+        self.last = None
+        self.anchor = anchor
+
+    def is_top_return(self, p) -> bool:
+        return (p is not None and self.top is not None and self.last is not None
+                and abs(p - self.top) <= _tol(self.top) and self.last < self.top - _tol(self.top))
+
+    def is_anchor_start(self, p) -> bool:
+        return bool(p is not None and self.anchor and abs(p - self.anchor) <= _tol(p) and self.top is not None
+                    and abs(self.top - p) > _tol(p) and self.last is not None and abs(self.last - p) > _tol(p))
+
+    def step(self, p, allow_restart: bool = True) -> int:
         if p is None:
-            out.append(levels.get(last, 1) if last is not None else 1)
-            continue
-        hit = next((q for q in levels if abs(q - p) <= max(1000, p // 10000)), None)
-        if hit is not None:
-            n = levels[hit]
-        elif not levels:
-            levels, n = {p: 1}, 1
-        elif last is not None and p < last:
-            n = 1 + sum(1 for q in levels if q > p)
-            levels[p] = n
+            return self.levels.get(self.last, 1) if self.last is not None else 1
+        hit = next((q for q in self.levels if abs(q - p) <= _tol(p)), None)
+        if not self.levels or (allow_restart and self.is_top_return(p)) or self.is_anchor_start(p):
+            self.levels, self.top, n = {p: 1}, p, 1          # 첫 행 / ⑤ 첫 가격으로 되돌아감 / 현재 감정가 = 새 절차 신건
+        elif hit is not None:
+            n = self.levels[hit]
+        elif self.last is not None and p < self.last:
+            n = 1 + sum(1 for q in self.levels if q > p)
+            self.levels[p] = n
         else:
-            levels, n = {p: 1}, 1
-        last = p
-        out.append(n)
-    return out
+            self.levels, self.top, n = {p: 1}, p, 1          # ④ 처음 보는 금액으로 오름 = 재감정
+        self.last = p
+        return n
+
+
+def order_and_rounds(sale: list, anchor=None) -> tuple:
+    """[(날짜, 금액)] 시간순 → (처리 순서 인덱스 목록, 인덱스별 회차). 같은 날짜에 '그 절차의 첫 가격으로 되돌아간 행'과 다른
+    행이 함께 있으면 되돌아간 행을 그날 마지막에 둔다(옛 절차의 변경 행 먼저 → 새 절차 신건). 그 외에는 원래 순서 그대로
+    (실측 L05|2024|55405|1: 같은 날 신건·2차가 연달아 적힌 경우 원래 순서가 맞음)."""
+    st = _RoundState(anchor)
+    order: list[int] = []
+    rounds = [1] * len(sale)
+    i = 0
+    while i < len(sale):
+        j = i
+        while j < len(sale) and sale[j][0] == sale[i][0]:
+            j += 1
+        grp = list(range(i, j))
+        if len(grp) > 1:
+            # 새 절차 시작 행(첫 가격 복귀·현재 감정가 = 재감정)은 그날 마지막 — 먼저 두면 옛 절차 행까지 '신건'이 돼 한 행으로
+            #  합쳐지고 탐지와 어긋나 20분마다 공회전(실측 A01|2025|102915|1: 04-08 2.45억 재감정 + 7.96억 옛 절차 변경)
+            back = [g for g in grp if st.is_top_return(sale[g][1]) or st.is_anchor_start(sale[g][1])]
+            if back:
+                grp = [g for g in grp if g not in back] + back
+        nxt = next((sale[x][1] for x in range(j, len(sale)) if sale[x][1] is not None), None)
+        for g in grp:
+            p = sale[g][1]
+            allow = True
+            if st.is_top_return(p) and nxt is not None:
+                # 되돌아간 뒤 다음 가격이 새 절차의 저감 단계(그 가격의 80%·70% 1~3단계)가 아니고 옛 절차의 저감 단계로 이어지면
+                #  재시작이 실제로 없었던 것(실측 A02|2024|58545|1: 08-24 옛 절차 28.8억 유찰 + 56.2억 재시작 '변경' → 다음 23.0억 = 28.8억×0.8)
+                def _fits(base, val, ks):
+                    return any(abs(val - base * r ** k) <= max(_tol(val), val * 0.002) for r in (0.8, 0.7) for k in ks)
+                new_fit = _fits(p, nxt, (0, 1, 2, 3))
+                old_fit = st.last is not None and _fits(st.last, nxt, (0, 1, 2))
+                allow = new_fit or not old_fit
+            rounds[g] = st.step(p, allow_restart=allow)
+            order.append(g)
+        i = j
+    return order, rounds
 
 
 def round_label(n: int) -> str:
     return "신건" if n <= 1 else f"{n}차"
 
 
-def stored_rounds_wrong(rows: list[dict]) -> bool:
+def stored_rounds_wrong(rows: list[dict], anchor=None) -> bool:
     """저장된 기일현황 행(id 포함) → 매각기일 행의 회차 라벨이 level_rounds 규칙과 다르면 True.
     20분 스윕의 탐지를 정규화와 '같은 함수'로 해서 두 규칙이 어긋나 공회전하는 일을 막는다."""
     rs = sorted(rows, key=lambda r: (_ymd(str(r.get("sell_date") or "")), r.get("id") or 0))
     sale = [r for r in rs if str(r.get("round") or "").strip() and _kind_from_row(r) == SALE_KIND]
     if not sale:
         return False
-    want = level_rounds([_price_of(r.get("min_price")) for r in sale])
-    return any(str(r.get("round") or "").strip() != round_label(n) for r, n in zip(sale, want))
+    # 합쳐진 행('A원 / B원')은 금액별로 풀어서 계산(정규화가 두 건을 따로 처리한 것과 같게) — 풀린 조각들의 회차가 서로 다르면
+    #  합쳐질 이유가 없던 것이므로 불일치로 본다
+    seq, owner = [], []
+    for idx, r in enumerate(sale):
+        for p in _split_amounts(r.get("min_price")):
+            seq.append((_ymd(str(r.get("sell_date") or "")), p))
+            owner.append(idx)
+    _, want = order_and_rounds(seq, anchor=_num(anchor) if anchor else None)
+    per_row: dict[int, set] = {}
+    for o, n in zip(owner, want):
+        per_row.setdefault(o, set()).add(round_label(n))
+    return any(per_row.get(i) != {str(r.get("round") or "").strip()} for i, r in enumerate(sale))
+
+
+def _split_amounts(mp) -> list:
+    """'245,000,000원 / 796,160,000원' → [245000000, 796160000]. 합쳐진 표기가 아니면 [금액 하나]."""
+    s = str(mp or "")
+    if _MERGED_AMT_RE.match(s):
+        return [int(x.replace(",", "")) for x in re.findall(r"[0-9][0-9,]*", s)]
+    return [_price_of(s)]
+
+
+def _amount_hit(p, mp) -> bool:
+    """금액 p가 행의 최저가 표기(합쳐진 표기면 그 조각 중 하나)와 같은가."""
+    return p is not None and any(a is not None and abs(a - p) <= _tol(p) for a in _split_amounts(mp))
+
+
+def _ex_result_for(e: dict, ex_rows: list, sole: bool) -> str:
+    """기존 행에서 이벤트 e의 결과. 매각기일은 금액이 맞는 행(합쳐진 행이면 금액·결과를 짝지은 조각)의 결과.
+    금액이 맞는 행이 없으면 그날 매각기일이 e 하나(sole)일 때만 금액 하나짜리 행의 결과를 쓴다(기존 동작)."""
+    fallback = ""
+    for r in ex_rows:
+        if _kind_from_row(r) != e["kind"] or not r.get("result"):
+            continue
+        if e["kind"] != SALE_KIND:
+            return norm_result(r.get("result"), e["kind"])
+        amts = _split_amounts(r.get("min_price"))
+        parts = [x.strip() for x in str(r.get("result")).split(" / ")]
+        p = e.get("min_price")
+        for i, a in enumerate(amts):
+            if p is not None and a is not None and abs(a - p) <= _tol(p):
+                if len(amts) == 1:
+                    return norm_result(r.get("result"), e["kind"])
+                if len(parts) == len(amts):
+                    return norm_result(parts[i], e["kind"])
+        if not fallback and len(amts) == 1:
+            fallback = norm_result(r.get("result"), e["kind"])
+    return fallback if sole else ""
 
 
 def parse_court_schedule_all(html: str) -> dict[str, list[dict]]:
@@ -176,10 +283,13 @@ def parse_court_schedule(html: str, obj_no: str | int = "1") -> list[dict]:
     return parse_court_schedule_all(html).get(str(obj_no or "1").strip(), [])
 
 
-def _prune_offchain(ev: list[dict], doc_rows: list[dict], doc_last_sale: str) -> list[dict]:
+def _prune_offchain(ev: list[dict], doc_rows: list[dict], doc_last_sale: str, keep_price: int | None = None) -> list[dict]:
     """다물건 사건: 문서 뒤 날짜의 기존 매각기일 행 중 이 물건의 가격 사슬에 안 맞는 것(다른 물건번호 행 혼입) 제외.
     사슬 = 문서의 매각기일 금액들에서 확정된 저감률(20%/30%, 전 구간 동일할 때만)로 마지막 금액에서 이어지는 금액,
     또는 이미 이 물건 것으로 확정된 금액(재진행)·신건 금액(새 주기). 저감률을 확정 못 하면 아무것도 지우지 않는다.
+    keep_price = 목록(items)의 현재 최저가 — 이 물건의 금액이 확실하므로 사슬 판정과 무관하게 남긴다
+    (2026-09-18 실측 L01|2025|6453|1: 문서엔 30% 저감 한 번뿐이라 사슬을 30%로만 보고, 그다음 20% 저감된 목록의 현재
+     최저가 15.6억 행을 다른 물건 행으로 오인해 지웠다).
     (2026-09-18 실측 A01|2025|939|1: 08-19에 728,064,000·780,288,000·461,312,000 세 행 — 뒤 둘은 물건 2·3의 행)"""
     prices = [r["min_price"] for r in sorted(doc_rows, key=lambda r: (r["date"], r.get("time") or ""))
               if r["kind"] == SALE_KIND and r.get("min_price")]
@@ -204,7 +314,7 @@ def _prune_offchain(ev: list[dict], doc_rows: list[dict], doc_last_sale: str) ->
     mx, last = max(prices), prices[-1]
 
     def _fits(p: int) -> bool:
-        if p in accepted or abs(p - mx) <= 1:
+        if p in accepted or abs(p - mx) <= 1 or (keep_price and abs(p - keep_price) <= 1):
             return True
         for r in rs:
             exp = last
@@ -303,39 +413,51 @@ def canonical_rows(doc_rows: list[dict] | None, existing: list[dict], today: dat
         ev = [e for e in ev if not (e.get("src") == "ex" and e["kind"] == SALE_KIND and doc_last_sale
                                     and e["date"] <= doc_last_sale and e["date"] not in doc_sale_dates)]
         if doc_multi and doc_last_sale:
-            ev = _prune_offchain(ev, doc_rows, doc_last_sale)
+            ev = _prune_offchain(ev, doc_rows, doc_last_sale,
+                                 keep_price=_num(current[1]) if (current and len(current) > 1 and current[1]) else None)
     # 목록의 현재 매각기일(오늘 이후) 보장 — 가지치기 뒤에 넣어 어떤 규칙도 지우지 못하게
     if current and current[0] and current[1]:
         cd, cp = str(current[0])[:10], _num(current[1])
         if cp and re.fullmatch(r"\d{4}-\d{2}-\d{2}", cd) and cd >= today.isoformat() \
                 and not any(e["date"] == cd and e["kind"] == SALE_KIND for e in ev):
             ev.append({"date": cd, "time": "", "kind": SALE_KIND, "min_price": cp, "result": "", "src": "item", "label": None})
-    # 문서 행의 빈 결과를 기존 행 결과로 보강(같은 날짜·같은 종류)
+    # 문서 행의 빈 결과를 기존 행 결과로 보강(같은 날짜·같은 종류). 매각기일은 금액이 맞는 조각의 결과만 — 같은 날 매각기일이
+    #  둘(옛 절차 변경 + 재감정 신건)일 때 합쳐진 결과('유찰 / 변경')를 통째로 붙이면 돌릴 때마다 결과가 불어났다
+    #  (2026-09-18 실측 I02|2025|10682|1: '변경 / 유찰 / 변경')
+    n_sale_on: dict[str, int] = {}
+    for e in ev:
+        if e["kind"] == SALE_KIND:
+            n_sale_on[e["date"]] = n_sale_on.get(e["date"], 0) + 1
     for e in ev:
         if not e["result"]:
-            for r in ex_by_date.get(e["date"], []):
-                if _kind_from_row(r) == e["kind"] and r.get("result"):
-                    e["result"] = norm_result(r.get("result"), e["kind"])
-                    break
+            e["result"] = _ex_result_for(e, ex_by_date.get(e["date"], []), sole=n_sale_on.get(e["date"], 0) <= 1)
     # 규칙 4: 결과 없는 매각결정기일은 제외. 기타 종류 제외.
     ev = [e for e in ev if not (e["kind"] == "매각결정기일" and not e["result"]) and e["kind"] != "기타"]
     # 문서 스냅샷에만 있는 '지난 매각기일인데 결과 없음'(그 뒤 기일변경으로 사라진 행)은 제외 — 기존 행에 그 날짜가 있으면 유지
     tstr = today.isoformat()
     ev = [e for e in ev if not (e["kind"] == SALE_KIND and not e["result"] and e["date"] < tstr and e["date"] not in ex_by_date)]
     ev.sort(key=lambda e: (e["date"], e["time"], 0 if e["kind"] == SALE_KIND else 1))
-    # 규칙 2: 회차 = 최저매각금액이 떨어질 때만 증가(재진행·재감정 보완은 level_rounds 주석)
+    # 규칙 2: 회차 = 최저매각금액이 떨어질 때만 증가(재진행·재감정 보완은 level_rounds 주석). 같은 날 '감정가로 되돌아간 행'은
+    #  그날 마지막(order_and_rounds) — 실측 J04|2024|38904|1: 07-13에 8,000만 새 시작과 983만(옛 절차 변경)이 함께 적힘
+    _sale = [e for e in ev if e["kind"] == SALE_KIND]
+    _anchor = _num(current[2]) if (current and len(current) > 2 and current[2]) else None
+    _order, _rnds = order_and_rounds([(e["date"], e["min_price"]) for e in _sale], anchor=_anchor)
+    for _pos, _g in enumerate(_order):
+        _sale[_g]["_rnd"], _sale[_g]["_pos"] = _rnds[_g], _pos
+    ev.sort(key=lambda e: (e["date"], 0 if e["kind"] == SALE_KIND else 1, e.get("_pos", 0), e["time"]))
     rows: list[dict] = []
-    _sale_rounds = iter(level_rounds([e["min_price"] for e in ev if e["kind"] == SALE_KIND]))
     for e in ev:
         if e["kind"] == SALE_KIND:
             p = e["min_price"]
-            rnd = round_label(next(_sale_rounds))
+            rnd = round_label(e["_rnd"])
             row = {"round": rnd, "sell_date": e["date"], "min_price": e.get("label") or (fmt_won(p) if p else ""),
                    "result": e["result"], "sale_price": None, "sale_rate": None, "bid_count": None,
                    "sale_2nd_price": None, "winner_name": None}
-            # 규칙 5: 낙찰 상세 부착(같은 날짜의 기존 매각 행)
+            # 규칙 5: 낙찰 상세 부착(같은 날짜의 기존 매각 행). 그날 매각기일이 둘 이상이면 금액이 맞는 행에만(변경된 옛 절차 행에
+            #  낙찰가가 붙지 않게)
+            sole = n_sale_on.get(e["date"], 0) <= 1
             for r in ex_by_date.get(e["date"], []):
-                if r.get("sale_price"):
+                if r.get("sale_price") and (sole or _amount_hit(p, r.get("min_price"))):
                     for k in ("sale_price", "sale_rate", "bid_count", "sale_2nd_price", "winner_name"):
                         row[k] = r.get(k)
                     if not row["result"]:

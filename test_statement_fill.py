@@ -144,5 +144,33 @@ class BuildRows(unittest.TestCase):
         self.assertEqual([r["id"] for r in upd], [1])
 
 
+class WonAmounts(unittest.TestCase):
+    """명세서 금액 칸의 한글 단위 — 2026-09-18 실측: '8,000만원'·'3억1천5백만원'이 통째로 버려져 보증금 미상으로 들어갔다
+    (G01|2025|51805|1 김윤경, J01|2025|742|1 장도석). 숫자만 있던 칸의 기존 결과는 그대로여야 한다."""
+
+    def test_korean_units(self):
+        from auction_analysis.sale_statement_parser import won_amounts as W
+        self.assertEqual(W("8,000만원"), [80_000_000])
+        self.assertEqual(W("3억1천5백만원"), [315_000_000])
+        self.assertEqual(W("1억 5,000만원"), [150_000_000])
+        self.assertEqual(W("2억 3천만원"), [230_000_000])
+        self.assertEqual(W("1.5억"), [150_000_000])
+        self.assertEqual(W("일금 삼천만원"), [30_000_000])
+        self.assertEqual(W("월 50만원"), [500_000])
+
+    def test_digits_unchanged(self):
+        from auction_analysis.sale_statement_parser import won_amounts as W
+        self.assertEqual(W("금 125,000,000원"), [125_000_000])
+        self.assertEqual(W("155,000,000 157,000,000"), [155_000_000, 157_000_000])
+        self.assertEqual(W("미상"), [])
+        self.assertEqual(W(""), [])
+
+    def test_amount_boundaries(self):
+        from auction_analysis.sale_statement_parser import won_amounts as W
+        self.assertEqual(W("3,500만원(월세 30만원)"), [35_000_000, 300_000])
+        self.assertEqual(max(x for x in W("8,000만원 (2023.4.3. 임차권등기)") if x >= 100_000), 80_000_000)   # 날짜가 붙지 않게
+        self.assertEqual(max(W("1억원(2억원으로 증액)")), 200_000_000)
+
+
 if __name__ == "__main__":
     unittest.main()
