@@ -1,60 +1,51 @@
 {
  "items": [
   {
+   "keyword": "부동산 세금",
+   "title": "[‘절세 노하우’ 세무상담] 2026년 종합부동산세 개편안에 따른 기본공제 조정과 부부 공동명의 활용법 - intn.co.kr",
+   "link": "https://www.intn.co.kr/news/articleView.html?idxno=2053431",
+   "image": "http://www.intn.co.kr/news/thumbnail/202609/2053431_739024_5957_v150.jpg",
+   "source": "intn.co.kr",
+   "published": "2026-09-18T09:00:00+09:00",
+   "has_time": true
+  },
+  {
    "keyword": "부동산 정책",
-   "title": "한국부동산원 “주택공급, 이제는 실행의 시간”... 500가구 미만 핀셋 지원 하겠다 - 하우징타임즈",
-   "link": "https://www.housingtimes.co.kr/news/articleView.html?idxno=2488",
-   "image": "https://cdn.housingtimes.co.kr/news/thumbnail/202609/2488_3177_954_v150.jpg",
-   "source": "하우징타임즈",
-   "published": "2026-09-17T09:05:00+09:00",
+   "title": "李대통령, 오늘 오전 기자회견…부동산 정책·파병 입장 주목 - v.daum.net",
+   "link": "https://v.daum.net/v/20260918060300038",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/18/sbscnbc/20260918064807919atff.jpg",
+   "source": "v.daum.net",
+   "published": "2026-09-18T06:03:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "서울집값 오르는데 “폭락도 대비”…이 대통령 오늘 무슨 말할까 - thescoop.co.kr",
+   "link": "https://www.thescoop.co.kr/news/articleView.html?idxno=311639",
+   "image": "https://cdn.thescoop.co.kr/news/thumbnail/202609/311639_229048_1042_v150.jpg",
+   "source": "thescoop.co.kr",
+   "published": "2026-09-18T04:26:27+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "\"86주 연속 서울 집값 상승\"…과거엔 '이것' 나오자 꺾였다 - 뉴시스",
+   "link": "https://www.newsis.com/view/NISX20260917_0003794038",
+   "image": "https://img1.newsis.com/2026/09/17/NISI20260917_0002242392_web.jpg",
+   "source": "뉴시스",
+   "published": "2026-09-18T01:50:00+09:00",
    "has_time": true
   },
   {
    "keyword": "아파트 경매",
-   "title": "실거래 풍부한 행신역 아파트 국평 4억대, 수도권 아파트 추천 경매 6선 - 땅집고",
-   "link": "https://realty.chosun.com/site/data/html_dir/2026/09/16/2026091603149.html",
-   "image": "https://image.chosun.com/sitedata/image/202609/16/2026091603143_0.jpg",
-   "source": "땅집고",
-   "published": "2026-09-17T06:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "[서미숙의 집수다] '토허구역+대출규제 확대' 11개월…내몰리는 임차인들 - 연합뉴스",
-   "link": "https://www.yna.co.kr/amp/view/AKR20260916186100003",
-   "image": "https://img4.yna.co.kr/photo/yna/YH/2026/09/13/PYH2026091308360001300_P4.jpg",
-   "source": "연합뉴스",
-   "published": "2026-09-17T05:31:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "\"사내대출 5억, 회사 찬스\" 삼성맨 움직였다...'이 동네' 집값 후끈 - 머니투데이 - 머니투데이",
-   "link": "https://www.mt.co.kr/estate/2026/09/17/2026091414151120202",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/09/2026091414151120202_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-09-17T05:01:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "[사설] 고금리에 발목 잡힌 주택공급, 획일적 대출규제 손봐야 - 대한경제",
-   "link": "https://www.dnews.co.kr/uhtml/view.jsp?idxno=202609161625496450375",
-   "image": "http://image.dnews.co.kr/uhtml/images/common/dnews.png?v=202211",
-   "source": "대한경제",
-   "published": "2026-09-17T04:00:14+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "집값 못잡고 청약 문턱만 낮췄다... 청약통장 줄줄이 해지 - 금강일보",
-   "link": "https://www.ggilbo.com/news/articleView.html?idxno=1181431",
-   "image": "https://cdn.ggilbo.com/news/photo/202609/1181431_1033904_2311.png",
-   "source": "금강일보",
-   "published": "2026-09-17T01:00:00+09:00",
+   "title": "소형 아파트 경매, 신중하게 접근해야[이주현의 경매 길라잡이] - donga.com",
+   "link": "https://www.donga.com/news/amp/all/20260917/134691047/2",
+   "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/09/17/134692826.1.jpg",
+   "source": "donga.com",
+   "published": "2026-09-18T00:30:00+09:00",
    "has_time": true
   }
  ],
- "count": 6,
- "date": "2026-09-17"
+ "count": 5,
+ "date": "2026-09-18"
 }
