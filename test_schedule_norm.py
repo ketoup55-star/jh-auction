@@ -313,6 +313,48 @@ class Canonical(unittest.TestCase):
         self.assertEqual(rows[0]["result"], "진행")
 
 
+class YuchalFill(unittest.TestCase):
+    """앞 기일 유찰 채우기(주인님 2026-09-19): 다음 매각기일 최저가가 한 단계 내려갔으면 지난 앞 기일은 유찰.
+    실측 1,269행 — 빈칸·진행·예정·변경·재진행 N회가 기일이 지나도 남아 있었다."""
+
+    def _norm(self, ex, current=None):
+        return [(r["round"], r["sell_date"], r["result"]) for r in N.canonical_rows(None, ex, TODAY, current=current)]
+
+    def test_fill_pending_results(self):
+        for res in ("", "진행", "예정", "변경", "재진행 11회", "재매각 2회", "미진행"):
+            ex = [_ex("신건", "2026-09-03", "278,000,000원", res, id=1), _ex("2차", "2026-10-15", "222,400,000원", "", id=2)]
+            self.assertEqual(self._norm(ex), [("신건", "2026-09-03", "유찰"), ("2차", "2026-10-15", "")], res)
+
+    def test_keep_confirmed_results(self):   # 매각·불허가 등 확정 결과는 그대로(다음 기일이 내려갔어도)
+        for res in ("매각", "불허가", "허가", "미납", "취하", "정지", "유찰"):
+            ex = [_ex("신건", "2026-08-03", "200,000,000원", res, id=1), _ex("2차", "2026-09-30", "160,000,000원", "", id=2)]
+            self.assertEqual(self._norm(ex)[0][2], N.norm_result(res, N.SALE_KIND), res)
+
+    def test_no_fill_on_restart_or_future(self):
+        # 재감정 신건으로 다시 시작(회차가 1로) — 유찰이 아님(실측 A01|2025|101733|1: 2차 28.5억 변경 → 신건 17.8억)
+        ex = [_ex("신건", "2026-06-10", "3,560,000,000원", "유찰", id=1), _ex("2차", "2026-07-22", "2,848,000,000원", "변경", id=2),
+              _ex("신건", "2026-08-26", "1,780,000,000원", "", id=3)]
+        cur = ("2026-08-26", 1_780_000_000, 1_780_000_000)          # (목록 매각기일, 최저가, 감정가=새 감정) — 정규화가 받는 값
+        self.assertEqual(self._norm(ex, cur)[1:], [("2차", "2026-07-22", "변경"), ("신건", "2026-08-26", "")])
+        # 앞 기일이 아직 안 지났으면(오늘 이후) 채우지 않는다
+        ex = [_ex("신건", "2026-09-25", "100,000,000원", "", id=1), _ex("2차", "2026-10-30", "80,000,000원", "", id=2)]
+        self.assertEqual(self._norm(ex)[0], ("신건", "2026-09-25", ""))
+
+    def test_same_level_yuchal_already_explains_drop(self):
+        # 신건 1/5 유찰 → 신건 2/5(같은 금액) 변경 → 2차: 하락은 1/5 유찰로 설명되므로 2/5 '변경'은 사실 그대로
+        ex = [_ex("신건", "2026-01-05", "100,000,000원", "유찰", id=1), _ex("신건", "2026-02-05", "100,000,000원", "변경", id=2),
+              _ex("2차", "2026-03-05", "80,000,000원", "", id=3)]
+        self.assertEqual([r[2] for r in self._norm(ex)], ["유찰", "변경", ""])   # 3/5는 다음 기일이 없어 규칙 밖 → 빈칸
+
+    def test_detection_matches_and_idempotent(self):
+        ex = [_ex("신건", "2026-09-01", "293,000,000원", "재진행 4회", id=1), _ex("2차", "2026-10-06", "234,400,000원", "", id=2)]
+        self.assertTrue(N.yuchal_fill_needed(ex, TODAY))
+        once = N.canonical_rows(None, ex, TODAY)
+        stored = [dict(r, id=i + 1) for i, r in enumerate(once)]          # 정규화가 쓴 순서대로 저장됐다고 보고
+        self.assertFalse(N.yuchal_fill_needed(stored, TODAY))              # 정규화 뒤엔 더 안 잡힘(공회전 없음)
+        self.assertTrue(N.rows_equal(N.canonical_rows(None, stored, TODAY), once))   # 두 번 돌려도 같음
+
+
 class SaStatus(unittest.TestCase):
     """목록 상태 글자 스피드옥션 양식 통일(주인님 2026-09-18) — 이미 양식이면 그대로, '진행'·% 없는 글자는 양식으로."""
     ROWS = [_ex("신건", "2026-06-01", "100,000,000원", "유찰"), _ex("2차", "2026-07-06", "80,000,000원", "유찰"),

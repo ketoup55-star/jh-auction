@@ -107,5 +107,31 @@ class TestAptInfoCacheRule(unittest.TestCase):
         self.assertFalse(self.f(None))
 
 
+class TestKbAuctionAd(unittest.TestCase):
+    """KB '경매 광고' 매물(경매 물건 자체를 경매 중개사가 최저가로 올린 것)은 호가·경쟁매물에서 뺀다 — 2026-09-19 주안애 1,170만원."""
+
+    def setUp(self):
+        import ast
+        import os
+        src = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "api", "main.py"), encoding="utf-8").read()
+        ns = {}
+        for node in ast.parse(src).body:
+            if isinstance(node, ast.FunctionDef) and node.name == "_kb_is_auction_ad":
+                exec(ast.get_source_segment(src, node), ns)
+            if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "_APT_ASK_RULE_MIN" for t in node.targets):
+                exec(ast.get_source_segment(src, node), ns)
+        self.f = ns["_kb_is_auction_ad"]
+        self.min_ask = ns["_APT_ASK_RULE_MIN"]
+
+    def test_real_ad(self):
+        self.assertTrue(self.f({"feature": "경매. 인천 미추홀구 주안동 주안애", "agent_name": "뉴스타법원경매공인중개사사무소"}))
+        self.assertTrue(self.f({"feature": None, "agent_name": "OO법원경매공인중개사"}))
+        self.assertFalse(self.f({"feature": "올수리 남향 즉시입주", "agent_name": "주안공인중개사"}))
+        self.assertFalse(self.f({}))
+
+    def test_ask_rule_min(self):   # 호가 5천만원 이하면 '호가−1000만' 규칙 미적용(예그린 1,500만 → 500만 방지)
+        self.assertEqual(self.min_ask, 50_000_000)
+
+
 if __name__ == "__main__":
     unittest.main()

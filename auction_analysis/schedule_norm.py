@@ -367,6 +367,49 @@ def _kind_from_row(r: dict) -> str:
     return SALE_KIND                         # 유찰·매각·변경·진행·예정·재진행… = 매각기일
 
 
+_FILL_TERMINAL_RE = re.compile(r"(유찰|매각|허가|미납|납부|완료|취하|취소|기각|각하|정지)")
+
+
+def _needs_yuchal(res: str) -> bool:
+    """이 매각기일 결과를 '유찰'로 채워도 되나 — 빈칸·진행·예정·미진행·추후지정·변경·재진행/재매각 N회(수집기 상태 글자)만.
+    유찰·매각·허가·불허가·미납·납부·취하·취소·기각·각하·정지 같은 확정 결과는 그대로 둔다."""
+    t = (res or "").strip()
+    if t.startswith(("재진행", "재매각")):          # '재매각 2회'는 결과가 아니라 수집기 상태 글자(안의 '매각'에 속지 않게)
+        return True
+    return not _FILL_TERMINAL_RE.search(t)
+
+
+def yuchal_fill_targets(seq: list, tstr: str) -> list[int]:
+    """[(날짜, 회차번호, 결과)] 매각기일 처리 순서 → '유찰'로 채울 위치. 규칙(주인님 2026-09-19): 다음 매각기일이 한 단계 아래
+    (회차+1)면 그 단계는 유찰로 끝난 것 — 그 단계에 이미 유찰이 적힌 행이 있으면 그걸로 설명되므로 두고(같은 금액 기일변경 행 '변경'은
+    사실), 없을 때만 하락 직전 행(지난 기일, 확정 결과 아님)을 유찰로. canonical_rows·yuchal_fill_needed가 같이 쓴다(공회전 방지)."""
+    out = []
+    for i in range(len(seq) - 1):
+        d, n, res = seq[i]
+        n2 = seq[i + 1][1]
+        if n is None or n2 != n + 1 or not d or d >= tstr or not _needs_yuchal(res):
+            continue
+        j, explained = i - 1, False
+        while j >= 0 and seq[j][1] == n:          # 같은 단계(같은 회차로 이어진 행들)에 이미 유찰이 있나
+            if "유찰" in (seq[j][2] or ""):
+                explained = True
+                break
+            j -= 1
+        if not explained:
+            out.append(i)
+    return out
+
+
+def yuchal_fill_needed(rows: list[dict], today: date | None = None) -> bool:
+    """저장된 기일현황(id 포함)에 유찰로 채울 행이 있나 — 20분 스윕 탐지용. canonical_rows와 같은 함수(yuchal_fill_targets)·
+    같은 순서((날짜, id) = 정규화가 쓴 순서)."""
+    tstr = (today or date.today()).isoformat()
+    rs = sorted(rows, key=lambda r: (_ymd(str(r.get("sell_date") or "")), r.get("id") or 0))
+    sale = [r for r in rs if str(r.get("round") or "").strip() and _kind_from_row(r) == SALE_KIND]
+    seq = [(_ymd(str(r.get("sell_date") or "")), _round_no(r.get("round")), r.get("result") or "") for r in sale]
+    return bool(yuchal_fill_targets(seq, tstr))
+
+
 def canonical_rows(doc_rows: list[dict] | None, existing: list[dict], today: date | None = None,
                    doc_multi: bool = False, current: tuple | None = None) -> list[dict]:
     """정규화된 auction_schedule 행 목록(순서=시간순). existing 행의 낙찰 상세를 같은 날짜 매각 행에 붙인다.
@@ -444,6 +487,12 @@ def canonical_rows(doc_rows: list[dict] | None, existing: list[dict], today: dat
     _order, _rnds = order_and_rounds([(e["date"], e["min_price"]) for e in _sale], anchor=_anchor)
     for _pos, _g in enumerate(_order):
         _sale[_g]["_rnd"], _sale[_g]["_pos"] = _rnds[_g], _pos
+    # 앞 기일 유찰 채우기(주인님 2026-09-19): 지난 매각기일 다음 매각기일의 최저가가 '한 단계'(다음 회차) 내려갔으면 앞 기일은
+    #  유찰이다(최저가는 유찰 때만 내려감). 빈칸·진행·예정·변경·재진행 N회 등이 기일이 지나도 남던 것(실측 1,269행).
+    #  재감정 신건으로 다시 시작한 경우(회차가 1로)·두 단계 이상 건너뛴 경우는 건드리지 않는다. 탐지는 yuchal_fill_needed(같은 규칙).
+    _seq = sorted(_sale, key=lambda e: e.get("_pos", 0))
+    for _i in yuchal_fill_targets([(e["date"], e.get("_rnd"), e["result"]) for e in _seq], tstr):
+        _seq[_i]["result"] = "유찰"
     ev.sort(key=lambda e: (e["date"], 0 if e["kind"] == SALE_KIND else 1, e.get("_pos", 0), e["time"]))
     rows: list[dict] = []
     for e in ev:

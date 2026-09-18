@@ -4581,6 +4581,7 @@ def _col_enrich_sync() -> None:
                 FROM items WHERE kb_complex_no IS NOT NULL AND (is_active OR data_class='현황')
              ) it
              LEFT JOIN kb_listing l ON l.complex_no::text=it.cno AND l.trade_type='매매'
+                  AND coalesce(l.feature,'') !~ '경매' AND coalesce(l.agent_name,'') !~ '경매'   -- 경매 광고 매물 제외(2026-09-19)
                   AND (it.area IS NULL OR (l.area_excl IS NOT NULL AND abs(l.area_excl-it.area)<=3))
              GROUP BY it.item_key
            ) sub WHERE i.item_key=sub.item_key AND i.kb_count IS DISTINCT FROM sub.cnt""",
@@ -6794,10 +6795,14 @@ def _schedule_noncanon_keys(c, limit: int = 0, extra: str = "") -> list:
         if k != cur:
             if cur is not None and _schn.stored_rounds_wrong(buf, anchor=cur_ap):
                 found.setdefault(cur, set()).add("round_label")
+            if cur is not None and _schn.yuchal_fill_needed(buf):      # 앞 기일 유찰 채우기(정규화와 같은 함수 규칙)
+                found.setdefault(cur, set()).add("yuchal_fill")
             cur, cur_ap, buf = k, ap, []
         buf.append({"id": i, "round": rnd, "sell_date": sd, "min_price": mp, "result": res})
     if cur is not None and _schn.stored_rounds_wrong(buf, anchor=cur_ap):
         found.setdefault(cur, set()).add("round_label")
+    if cur is not None and _schn.yuchal_fill_needed(buf):
+        found.setdefault(cur, set()).add("yuchal_fill")
     out = [(k, ",".join(sorted(v))) for k, v in sorted(found.items())]
     return out[:limit] if limit else out
 
@@ -11216,10 +11221,11 @@ def auction_competing_listings(item_key: str) -> dict:
         listings = lr.json() if lr.status_code in (200, 206) else []
     except Exception:
         listings = []
+    listings = [l for l in listings if not _kb_is_auction_ad(l)]   # 경매 광고 매물 제외(경매 물건 자체를 최저가로 광고)
     rt_cname = None
     if not listings:   # 🔴우리 DB에 매물 0건(미수집 단지) → KB 실시간 조회 폴백(강북화성파크드림 등)
         _rt = _kb_realtime_listings(cno)
-        listings = _rt.get("listings") or []
+        listings = [l for l in (_rt.get("listings") or []) if not _kb_is_auction_ad(l)]
         rt_cname = _rt.get("cname")
         if area:       # 동일 평형 ±3㎡ 필터(실시간은 전 평형 반환 → 여기서 좁힘)
             listings = [l for l in listings
@@ -11289,7 +11295,7 @@ def auction_kb_counts(keys: str) -> dict:
     off = 0
     while off <= 60000:
         try:
-            lr = auction_db._get("kb_listing", [("select", "complex_no,area_excl"),
+            lr = auction_db._get("kb_listing", [("select", "complex_no,area_excl,feature,agent_name"),
                                                 ("complex_no", cinq), ("trade_type", "eq.매매"),
                                                 ("order", "listing_id"),   # ★ 안정 페이징: order 없으면 offset 페이징이 행을 건너뛰어 일부 단지 누락→count 0
                                                 ("limit", "1000"), ("offset", str(off))])
@@ -11297,6 +11303,8 @@ def auction_kb_counts(keys: str) -> dict:
         except Exception:
             page = []
         for x in page:
+            if _kb_is_auction_ad(x):          # 경매 광고 매물은 호가 건수에서 제외
+                continue
             by_cx.setdefault(str(x.get("complex_no")), []).append(x.get("area_excl"))
         if len(page) < 1000:
             break
@@ -11418,11 +11426,21 @@ def _kb_complex_no_of(item_key: str, d: Optional[dict] = None) -> Optional[str]:
     return cno
 
 
+_APT_ASK_RULE_MIN = 50_000_000   # '3개월 실거래 없으면 호가−1000만' 규칙은 호가가 이 금액 초과일 때만(주인님 2026-09-19)
+
+
+def _kb_is_auction_ad(l: dict) -> bool:
+    """경매 물건을 경매 전문 중개사가 최저가로 올린 광고 매물 — 시세(호가)·경쟁매물·호가 건수에서 뺀다.
+    🔴2026-09-19 실측: 주안애 59㎡(1년 실거래 1.475억~2.4억)에 '뉴스타법원경매공인중개사사무소'가 올린 1동 303호(= 경매 물건
+    자체) 1,170만원 매물(특징 '경매. …') → 호가−1000만 규칙이 추정시세 170만원. kb_listing 매매 101건이 이런 광고."""
+    return "경매" in (l.get("feature") or "") or "경매" in (l.get("agent_name") or "")
+
+
 def _kb_band_min_price(cno: Optional[str], band: Optional[str], area) -> Optional[int]:
-    """KB 매매 매물 중 층군(band=1~6층 등)+동일평형(전용±3㎡)의 '최저 호가'(원). 없으면 None."""
+    """KB 매매 매물 중 층군(band=1~6층 등)+동일평형(전용±3㎡)의 '최저 호가'(원). 없으면 None. 경매 광고 매물 제외."""
     if not cno or not band:
         return None
-    params = [("select", "price,floor,area_excl"), ("complex_no", f"eq.{cno}"),
+    params = [("select", "price,floor,area_excl,feature,agent_name"), ("complex_no", f"eq.{cno}"),
               ("trade_type", "eq.매매"), ("limit", "300")]
     if area:
         params += [("area_excl", f"gte.{round(area - 3, 2)}"), ("area_excl", f"lte.{round(area + 3, 2)}")]
@@ -11434,7 +11452,7 @@ def _kb_band_min_price(cno: Optional[str], band: Optional[str], area) -> Optiona
     prices = []
     for l in listings:
         p, fl = l.get("price"), l.get("floor")
-        if not p:
+        if not p or _kb_is_auction_ad(l):
             continue
         _s = str(fl or "")
         _fm = re.search(r"(\d+)", _s)
@@ -11623,9 +11641,11 @@ def _apt_info_compute(item_key: str, months: int) -> dict:
                    "price_src": ("호가" if _B < _A else "실거래+호가평균"), "kb_ask": _B}
         else:
             est = {**est, "price": _floor100(_A), "price_src": "실거래"}
-    elif _B:
+    elif _B and _B > _APT_ASK_RULE_MIN:
         # 🔴3개월 실거래 없음 → 호가(유사층수 최저) − 1000만원(주인님 지정 2026-08-08).
         #  실거래도 호가도 없으면 est=None 유지(산출불가 — 어쩔 수 없음).
+        #  🔴호가 5천만원 이하 아파트는 이 규칙을 쓰지 않는다(주인님 2026-09-19) — 1,000만원 고정 차감이 말이 안 되는 값을
+        #   냈다(예그린 46㎡ 실거래 1,500만~2,400만인데 호가 1,500만 − 1,000만 = 500만원) → 산출불가.
         est = {"price": max(0, _B - 10_000_000), "price_src": "호가-1000만", "kb_ask": _B,
                "count": 0, "band": _band, "floor": auction_floor, "window": 3, "pool": 0}
     amounts = [t["amount"] for t in same if t.get("amount")]

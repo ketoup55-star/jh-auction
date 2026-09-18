@@ -472,6 +472,7 @@ def refresh_site_token(refresh_token: str) -> dict | None:
         )
         j = r.json()
         if (j.get("dataHeader") or {}).get("resultCode") != "10000":
+            log.error("siteToken 갱신 거절 dataHeader=%s — refresh_token 만료/무효, kbland.kr 재로그인 필요", j.get("dataHeader"))
             return None
         data = (j.get("dataBody") or {}).get("data") or {}
         at = (data.get("access_token") or "").strip()
@@ -591,14 +592,30 @@ def _api(method: str, url: str, ctx: str, **kw) -> requests.Response:
     return r
 
 
+class KbAuthError(RuntimeError):
+    """KB 인증 거절(dataHeader resultCode 10402 UNAUTHORIZED). 🔴2026-09-19: 예전엔 경고만 남기고 빈 결과를 돌려줘
+    '매물 0건'으로 처리 → 단지마다 기존 매물을 전부 비활성화했다(8/22 refresh_token 만료 뒤 한 달간 매일 listings 0,
+    매매 매물 210,454건 전부 비활성). 이제 예외로 올려 수집을 멈추고 비활성화하지 않는다."""
+
+
+def _is_unauthorized(r: requests.Response) -> bool:
+    try:
+        return str(((r.json() or {}).get("dataHeader") or {}).get("resultCode")) == "10402"
+    except Exception:
+        return False
+
+
 def _body(r: requests.Response, ctx: str) -> dict:
-    """응답 JSON 파싱 + KB측 오류(dataHeader) 로깅."""
+    """응답 JSON 파싱 + KB측 오류(dataHeader) 로깅. 인증 거절(10402)은 KbAuthError."""
     try:
         d = r.json()
     except Exception as e:
         log.error("응답 JSON 파싱실패 [%s] :: %s | 본문=%s", ctx, e, r.text[:200])
         raise
     dh = d.get("dataHeader") or {}
+    if str(dh.get("resultCode")) == "10402":
+        log.error("KB 인증 거절 [%s] dataHeader=%s — kbland.kr 재로그인 후 KB_REFRESH_TOKEN 갱신 필요", ctx, dh)
+        raise KbAuthError(f"KB 인증 거절 [{ctx}]")
     ok = str(dh.get("resultCode", dh.get("successFlag", ""))) in ("", "0", "10000", "200", "S", "true", "True")
     if dh and not ok:
         log.warning("KB 응답이상 [%s] dataHeader=%s", ctx, dh)   # KB측 거절/오류 메시지
@@ -650,9 +667,9 @@ def kb_list_complex(complex_no, trade_code: str = "1", page: int = 1, size: int 
     r = _api("POST", PROP_MAIN_URL, ctx=f"list_complex:{complex_no}:p{page}",
              data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
              headers=_signed_headers(AUTH.get_token()), timeout=30)
-    if r.status_code == 401:
-        # 토큰 만료 추정 → 1회 강제 재발급 후 재시도
-        log.warning("단지매물 401(토큰만료 추정) — 토큰 재발급 후 재시도 %s", complex_no)
+    if r.status_code == 401 or _is_unauthorized(r):
+        # 토큰 만료 추정(401 또는 200 안의 resultCode 10402) → 1회 강제 재발급 후 재시도. 그래도 거절이면 _body가 KbAuthError
+        log.warning("단지매물 인증거절(토큰만료 추정) — 토큰 재발급 후 재시도 %s", complex_no)
         r = _api("POST", PROP_MAIN_URL, ctx=f"list_complex:{complex_no}:p{page}:retry",
                  data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
                  headers=_signed_headers(AUTH.get_token(force=True)), timeout=30)
@@ -1272,6 +1289,10 @@ def collect_apartments(limit: int | None = None, resume: bool = True, dry: bool 
                 else:
                     log.info("수집완료 item=%s → %s 매매 %d건 (conf %.2f)",
                              item_key, m.get("kb_name"), len(listings), m.get("confidence") or 0)
+        except KbAuthError as e:
+            con.rollback(); stat["errors"] += 1; stat["status"] = "auth_failed"
+            log.error("KB 인증 만료 — 아파트 수집 중단(매물 비활성화 안 함) :: %s", e)
+            break
         except Exception as e:  # noqa: BLE001
             con.rollback()
             stat["errors"] += 1
@@ -1289,7 +1310,7 @@ def collect_apartments(limit: int | None = None, resume: bool = True, dry: bool 
                      stat["matched"], stat["unmatched"], stat["listings"], stat["errors"])
     cur.close()
     con.close()
-    stat["status"] = "done"
+    stat["status"] = "auth_failed" if stat.get("status") == "auth_failed" else "done"   # 인증 만료 중단은 그대로 남김
     log.info("아파트 수집 완료: %s", {k: stat[k] for k in
              ("target", "processed", "matched", "unmatched", "listings", "zero_listing", "errors")})
     if progress is not None:
@@ -1411,6 +1432,10 @@ def collect_gongmae(limit: int | None = None, only_new: bool = True, skip_proces
                     stat["new_complex"] += 1
                     con.commit()
                     log.info("공매 신규단지 %s → %s (매물 누적 %d)", cno, m.get("kb_name"), stat["listings"])
+        except KbAuthError as e:
+            con.rollback(); stat["errors"] += 1; stat["status"] = "auth_failed"
+            log.error("KB 인증 만료 — 공매 수집 중단(매물 비활성화 안 함) :: %s", e)
+            break
         except Exception as e:  # noqa: BLE001
             con.rollback(); stat["errors"] += 1
             log.exception("공매 수집오류 %s :: %s", item_key, e)
@@ -1421,7 +1446,7 @@ def collect_gongmae(limit: int | None = None, only_new: bool = True, skip_proces
             log.info("공매 진행 %d/%d (신규단지%d 스킵%d 매물%d)", stat["processed"], stat["target"],
                      stat["new_complex"], stat["skipped_existing"], stat["listings"])
     cur.close(); con.close()
-    stat["status"] = "done"
+    stat["status"] = "auth_failed" if stat.get("status") == "auth_failed" else "done"   # 인증 만료 중단은 그대로 남김
     log.info("공매 수집 완료: %s", {k: stat[k] for k in
              ("target", "matched", "unmatched", "new_complex", "skipped_existing", "listings", "photos", "errors")})
     if progress is not None:
@@ -1447,6 +1472,10 @@ def refresh_kb_all(limit: int | None = None, with_photos: bool = True,
             # 갱신: best_raw 없음(단지정보 유지), 기존 매물 provenance 보존, 단지단위 비활성화
             _collect_complex(cur, cno, None, None, "01", with_photos, stat, dedup_by_complex=True)
             con.commit()
+        except KbAuthError as e:
+            con.rollback(); stat["errors"] += 1; stat["status"] = "auth_failed"
+            log.error("KB 인증 만료 — 전체 새로고침 중단(매물 비활성화 안 함) :: %s", e)
+            break
         except Exception as e:  # noqa: BLE001
             con.rollback(); stat["errors"] += 1
             log.exception("새로고침 오류 단지 %s :: %s", cno, e)
@@ -1457,7 +1486,7 @@ def refresh_kb_all(limit: int | None = None, with_photos: bool = True,
             log.info("새로고침 진행 %d/%d (매물%d 사진%d)", stat["processed"], stat["target"],
                      stat["listings"], stat["photos"])
     cur.close(); con.close()
-    stat["status"] = "done"
+    stat["status"] = "auth_failed" if stat.get("status") == "auth_failed" else "done"   # 인증 만료 중단은 그대로 남김
     log.info("KB 전체 새로고침 완료: %s", {k: stat[k] for k in
              ("target", "processed", "listings", "photos", "errors")})
     if progress is not None:
