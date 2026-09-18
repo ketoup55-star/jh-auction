@@ -177,6 +177,15 @@ def _detect_waiver(text: str) -> Optional[str]:
     return None
 
 
+def waiver_comment(comment):
+    """말소동의·대항력 포기 확약서로 인수가 면제된 임차인의 판정 문장을 맞춘다.
+    명세서 판정 '… → 보증금 전액 매수인 인수'가 그대로 남아 같은 카드의 ✓확약서 문구와 모순이었다
+    (2026-09-18 실측: 확약서 있는 목록 물건 569건 중 388건)."""
+    if not comment or "확약서" in comment:
+        return comment
+    return re.sub(r"매수인\s*인수", "매수인 인수 대상이나, 말소동의·대항력 포기 확약서 제출로 낙찰자 미인수", comment, count=1)
+
+
 def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
     """analyzed_at 있으면 크롤러DB로 권리분석 구조 생성, 없으면 None(호출측이 PDF 폴백)."""
     cols = ("rights_baseline_date,total_debt,analyzed_at,detail_text,dividend_deadline,"
@@ -325,6 +334,7 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
             t["assume"] = 0
             t["waiver"] = True
             waived_total += t["assume_waived"]
+            t["comment"] = waiver_comment(t.get("comment"))
         assumed_total = sum(t["assume"] for t in tenants)
 
     # ── 선순위전세권 배당요구 소멸 보정 ──

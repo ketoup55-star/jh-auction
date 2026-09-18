@@ -4598,7 +4598,7 @@ def _col_enrich_sync() -> None:
         #  2시간 뒤 전량 삭제 → 매 예열이 헛돌았다. 보관비용은 실측 건당 2,380바이트(89,690건=204MB)로 작다.
     ]
     try:
-        with psycopg.connect(dsn, autocommit=True, connect_timeout=15) as conn:
+        with psycopg.connect(dsn, autocommit=True, connect_timeout=15, prepare_threshold=None) as conn:   # 트랜잭션 풀러 — 자동 prepare 금지
             with conn.cursor() as cur:
                 cur.execute("SET statement_timeout=120000")
                 cur.execute("SET lock_timeout=10000")

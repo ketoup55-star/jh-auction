@@ -281,7 +281,11 @@ class SupabaseSource:
             import psycopg
             c = getattr(_PG_TLS, "conn", None)
             if c is None or c.closed:
-                c = psycopg.connect(dsn, autocommit=True, connect_timeout=10)
+                # 🔴prepare_threshold=None 필수(2026-09-18 실측): DSN이 트랜잭션 풀러(:6543)라, psycopg가 같은 쿼리 5회째부터
+                #  만드는 서버측 prepared statement('_pg3_N')가 다른 세션의 다른 쿼리와 이름이 겹쳐 **남의 결과를 조용히
+                #  돌려줬다**(재현: SELECT item_key 60회 중 25회가 SELECT * 결과, 10회 'already exists'). 그 결과 로컬 item:
+                #  캐시 74건이 주소·용도 없는 빈 껍데기가 돼 상세·지도(59건 '지도 불가')가 깨졌다.
+                c = psycopg.connect(dsn, autocommit=True, connect_timeout=10, prepare_threshold=None)
                 _PG_TLS.conn = c
             with c.cursor() as cur:
                 cur.execute(sql, params)
