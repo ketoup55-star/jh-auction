@@ -366,7 +366,7 @@ def _apt_deposit_unknown_compute():
     ⚠️DB 직접 조회(psycopg) — 예전 REST 페이징은 3초 제한에 걸려 빈 결과를 돌려줬고, 그러면 필터 목록이 통째로 지워졌다.
     조회 실패 시 None(호출측이 기존 값을 유지)."""
     rows = auction_db.query_pg(
-        "SELECT i.item_key, i.data_class, i.min_price, i.sale_price, i.result FROM items i "
+        "SELECT i.item_key, i.data_class, i.is_active, i.min_price, i.sale_price, i.result FROM items i "
         "WHERE i.usage_name ILIKE %s "
         "AND EXISTS (SELECT 1 FROM item_tenants t WHERE t.item_key=i.item_key AND t.has_opposing_power "
         "            AND t.fixed_date IS NULL AND t.dividend_date IS NULL AND coalesce(t.deposit,0)=0) "
@@ -392,11 +392,13 @@ def _apt_deposit_unknown_compute():
             base = sp
         else:
             base = mn
-        dc_of[x["item_key"]] = x.get("data_class")
+        # 진행 중(is_active)이면 분류가 '백데이터'여도 현황으로 본다 — 🔴주인님: "아파트 + 차액 3천만 이상은 무조건 고정".
+        #  예전엔 data_class만 봐서 진행 중인데 '백데이터'로 분류된 물건은 과거 규칙(차액 미적용)으로 들어갔다(2026-09-18 실측 3건).
+        dc_of[x["item_key"]] = "현황" if x.get("is_active") else x.get("data_class")
         if base:
             base_of[x["item_key"]] = base
     match: set = {k for k, dc in dc_of.items() if dc and dc != "현황"}      # 과거(매각완료)는 차익 미적용 — 주인님 지시
-    cur = [k for k, dc in dc_of.items() if dc == "현황" and k in base_of]   # 현황만 차익(시세−기준가) 적용
+    cur = [k for k, dc in dc_of.items() if dc == "현황" and k in base_of]   # 현황·진행 중은 차익(시세−기준가) 적용
     for i in range(0, len(cur), 150):
         ch = cur[i:i + 150]
         try:
