@@ -1872,7 +1872,7 @@ async function loadCompetingListings(){
   if(!d || !d.matched || !d.count){ return; }   // KB 매칭 없음/매물 없음 → 토글 미표시
   KB_LISTINGS=d.listings||[]; kbMeta=d; kbF={band:new Set(),area:new Set(),dong:new Set()};
   wrap.innerHTML=`<div class="kb-compete">
-    <button class="kb-toggle" onclick="this.parentNode.classList.toggle('open')">🏠 경쟁매물보기<span class="kb-sub">동일 평형(전용 ${d.area}㎡) 매매 <b>${d.count}건</b></span><span style="margin-left:auto;display:inline-flex">${FOLDCUE}</span></button>
+    <button class="kb-toggle" onclick="this.parentNode.classList.toggle('open')">🏠 경쟁매물보기<span class="kb-sub">${d.area?`동일 평형(전용 ${d.area}㎡)`:"전 평형(전용면적 미상)"} 매매 <b>${d.count}건</b></span><span style="margin-left:auto;display:inline-flex">${FOLDCUE}</span></button>
     <div class="kb-body">
       <div class="apt-quote">
         <div class="qbox"><div class="ql">매물</div><div class="qv"><b id="kbCount">${d.count}</b>건</div></div>
@@ -1893,7 +1893,7 @@ async function loadCompetingListings(){
         </tr></thead>
         <tbody id="kbTbody"></tbody>
       </table></div>
-      <div class="apt-note">※ KB부동산 매매 매물 기준 · ${d.complex_name||''} · 동일 평형(전용 ${d.area}±3㎡) · 평균·최저·최고는 필터 반영</div>
+      <div class="apt-note">※ KB부동산 매매 매물 기준 · ${d.complex_name||''} · ${d.area?`동일 평형(전용 ${d.area}±3㎡)`:"전 평형(전용면적 미상)"} · 평균·최저·최고는 필터 반영</div>
     </div>
   </div>`;
   renderKbRows();

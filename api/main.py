@@ -4567,11 +4567,16 @@ def _col_enrich_sync() -> None:
            FROM (SELECT key, value FROM api_cache, jsonb_each_text(data) WHERE cache_key='similar_index') kv
            WHERE kv.key = i.item_key AND kv.value ~ '^[0-9]+$' AND i.similar_count IS DISTINCT FROM kv.value::int""",
         # 호가(KB 동일평형±3㎡ 매매 매물수) — kb_listing JOIN 집계(변경분만). KB크롤러 갱신 반영, Python 엔드포인트와 8/8 일치 검증
+        #  🔴2026-09-18: 면적을 area_text '전용'에서만 읽어 목록 아파트 82%가 단지 전 평형 매물수였다 → _area_num과 같은 순서
+        #  (건물면적 전용 → 건물면적 숫자 → area_text 전용 → area_text 숫자). 진행물건(is_active)도 포함.
         """UPDATE items i SET kb_count = sub.cnt FROM (
              SELECT it.item_key, count(l.*)::int cnt FROM (
                 SELECT item_key, kb_complex_no::text cno,
-                       NULLIF(substring(area_text from '전용[[:space:]]*([0-9.]+)'),'')::numeric area
-                FROM items WHERE kb_complex_no IS NOT NULL AND data_class='현황'
+                       COALESCE(substring(building_area from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
+                                substring(building_area from '([0-9]+(?:[.][0-9]+)?)'),
+                                substring(area_text from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
+                                substring(area_text from '([0-9]+(?:[.][0-9]+)?)'))::numeric area
+                FROM items WHERE kb_complex_no IS NOT NULL AND (is_active OR data_class='현황')
              ) it
              LEFT JOIN kb_listing l ON l.complex_no::text=it.cno AND l.trade_type='매매'
                   AND (it.area IS NULL OR (l.area_excl IS NOT NULL AND abs(l.area_excl-it.area)<=3))
@@ -4598,15 +4603,25 @@ def _col_enrich_sync() -> None:
                 cur.execute("SET statement_timeout=120000")
                 cur.execute("SET lock_timeout=10000")
                 total = 0
-                for s in stmts:
-                    try:
-                        cur.execute(s)
-                        if cur.rowcount and cur.rowcount > 0:
-                            total += cur.rowcount
-                    except Exception:
-                        pass
+                fails = []
+                for i_s, s in enumerate(stmts):
+                    for _att in range(2):      # 교착·락대기(크롤러 등 다른 프로세스의 items UPDATE와 겹침)는 3초 뒤 한 번 더
+                        try:
+                            cur.execute(s)
+                            if cur.rowcount and cur.rowcount > 0:
+                                total += cur.rowcount
+                            break
+                        except Exception as _se:
+                            if _att == 0 and any(w in str(_se) for w in ("deadlock", "lock timeout", "canceling statement due to lock")):
+                                import time as _tm
+                                _tm.sleep(3)
+                                continue
+                            fails.append(f"#{i_s} {str(_se)[:60]}")
+                            break
         if total:
             print(f"[col_sync] 컬럼화 동기화 {total}행 갱신", flush=True)
+        if fails:   # 🔴예전엔 조용히 넘겨 — 교착·락대기로 오피스텔 시세 복원 문장이 실패해도 흔적이 없었다(2026-09-18 실측 571건 방치)
+            print(f"[col_sync] ⚠ 컬럼화 동기화 실패 {len(fails)}문장: {'; '.join(fails)[:300]}", flush=True)
     except Exception as _e:
         print(f"[col_sync] skip: {str(_e)[:80]}", flush=True)
 
@@ -4777,15 +4792,17 @@ def _apt_recompute_items(keys: list, cur, workers: int = 6) -> dict:
     # 오피스텔은 offi:(오피스텔 매매 실거래) 시세가 주인 — 있으면 여기서 덮어쓰거나 비우지 않는다(col_sync와 번갈아 바뀌지 않게)
     no_offi = ("NOT EXISTS (SELECT 1 FROM api_cache o WHERE o.cache_key = 'offi:' || items.item_key "
                "AND (o.data->>'v') = '2' AND (o.data->>'est') ~ '^[0-9.]+$')")
-    if vals:
-        cur.executemany("UPDATE items SET est_price=%s WHERE item_key=%s AND est_price IS DISTINCT FROM %s AND " + no_offi, vals)
-    if clears:
-        cur.execute("UPDATE items SET est_price=NULL, profit=NULL WHERE item_key = ANY(%s) "
-                    "AND (est_price IS NOT NULL OR profit IS NOT NULL) AND " + no_offi, (clears,))
-    if vals or clears:
-        cur.execute("UPDATE items SET profit=est_price-expected_bid WHERE item_key = ANY(%s) AND est_price IS NOT NULL "
-                    "AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
-                    ([v[1] for v in vals],))
+    # items UPDATE는 col_sync 계열과 같은 락 아래 — 락 없이 돌리다 col_sync의 대량 UPDATE와 교착(2026-09-18 'deadlock detected' 실측)
+    with _items_backfill_lock:
+        if vals:
+            cur.executemany("UPDATE items SET est_price=%s WHERE item_key=%s AND est_price IS DISTINCT FROM %s AND " + no_offi, vals)
+        if clears:
+            cur.execute("UPDATE items SET est_price=NULL, profit=NULL WHERE item_key = ANY(%s) "
+                        "AND (est_price IS NOT NULL OR profit IS NOT NULL) AND " + no_offi, (clears,))
+        if vals or clears:
+            cur.execute("UPDATE items SET profit=est_price-expected_bid WHERE item_key = ANY(%s) AND est_price IS NOT NULL "
+                        "AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
+                        ([v[1] for v in vals],))
     return {"tried": len(keys), "saved": len(apt_rows), "neg": len(neg_rows), "priced": len(vals), "cleared": len(clears)}
 
 
@@ -11071,12 +11088,13 @@ def auction_competing_listings(item_key: str) -> dict:
     items.kb_complex_no 로 KB 단지를 찾아 kb_listing 에서 같은 전용면적대 매매만 추린다.
     우리 DB에 매물이 없는 미수집 단지는 KB 실시간 조회(_kb_realtime_listings)로 폴백."""
     try:
-        r = auction_db._get("items", [("select", "kb_complex_no,area_text"),
+        r = auction_db._get("items", [("select", "kb_complex_no,area_text,building_area"),
                                       ("item_key", f"eq.{item_key}"), ("limit", "1")])
         rows = r.json() if r.status_code in (200, 206) else []
     except Exception:
         rows = []
     area_text = rows[0].get("area_text") if rows else ""
+    building_area = rows[0].get("building_area") if rows else ""
     cno = rows[0].get("kb_complex_no") if rows else None
     if not cno:
         # 주소 폴백 — kb_complex_no 백필 안 된 물건도 match_address(kb_search=공개 통합검색API·토큰불요)로 실시간 KB단지 매칭.
@@ -11109,8 +11127,10 @@ def auction_competing_listings(item_key: str) -> dict:
                 pass
     if not cno:
         return {"matched": False, "count": 0, "listings": []}
-    m = re.search(r"전용\s*([\d.]+)", area_text or "")
-    area = round(float(m.group(1)), 2) if m else None
+    # 🔴2026-09-18: 예전엔 area_text의 '전용 N'만 봐서, area_text가 빈 목록 아파트 82%(3,410/4,138)가 면적 None →
+    #  '동일 평형'이라면서 전 평형 매물을 보여 줬다(화면 '전용 null㎡'). 상세 시세(apt_info)와 같은 면적 기준으로.
+    _a = _area_num(building_area, area_text)
+    area = round(float(_a), 2) if _a else None
     params = [("select", "listing_id,area_excl,price,floor,dong,ho,unit_price,"
                          "direction,room_cnt,bath_cnt,feature,agent_name,confirm_date"),
               ("complex_no", f"eq.{cno}"), ("trade_type", "eq.매매"),
@@ -11176,7 +11196,7 @@ def auction_kb_counts(keys: str) -> dict:
         return {}
     inq = "in.(" + ",".join('"' + k + '"' for k in ks) + ")"
     try:
-        r = auction_db._get("items", [("select", "item_key,kb_complex_no,area_text"),
+        r = auction_db._get("items", [("select", "item_key,kb_complex_no,area_text,building_area"),
                                       ("item_key", inq), ("kb_complex_no", "not.is.null")])
         items = r.json() if r.status_code in (200, 206) else []
     except Exception:
@@ -11186,8 +11206,8 @@ def auction_kb_counts(keys: str) -> dict:
         cno = it.get("kb_complex_no")
         if not cno:
             continue
-        m = re.search(r"전용\s*([\d.]+)", it.get("area_text") or "")   # 전용 미상(area_text 빈 물건)이면 None
-        info[it["item_key"]] = (str(cno), float(m.group(1)) if m else None)
+        _a = _area_num(it.get("building_area"), it.get("area_text"))   # 상세 시세·경쟁매물과 같은 면적 기준(전용 미상이면 None)
+        info[it["item_key"]] = (str(cno), float(_a) if _a else None)
         complexes.add(str(cno))
     if not complexes:
         return {}
