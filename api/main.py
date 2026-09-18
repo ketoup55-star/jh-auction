@@ -4664,7 +4664,51 @@ def _col_sync_loop() -> None:
             _stale_analysis_sweep()        # ★물건 갱신 뒤 옛 분석 캐시 재계산(freshness 루프 안전망) — 2026-09-18
         except Exception as _e:
             print(f"[stale_analysis] skip: {str(_e)[:80]}", flush=True)
+        try:
+            _geo_block_sweep()             # ★블록 주소 아파트 지도 좌표 미리 찍기(클라우드는 K-apt 접속불가) — 2026-09-18
+        except Exception as _e:
+            print(f"[geo_block] skip: {str(_e)[:80]}", flush=True)
         _t.sleep(1200)          # 20분마다 변경분 동기화
+
+
+def _geo_block_sweep() -> None:
+    """블록 주소 목록 아파트(지번 없음: '새솔동 송산그린시티이에이비9블록', '합정동 소사3지구4블록')의 반경 지도를 로컬에서 미리 계산.
+    이런 주소는 같은 단지 실거래 번지도 '가-'(미부여)일 수 있어 K-apt 단지 주소로만 좌표가 찍히는데, 클라우드는 K-apt 접속불가다.
+    apt_radius_map이 대체 좌표를 geo:<주소>로, 지도를 aptmap:으로 저장 → 클라우드가 그대로 쓴다. 한 번에 30건(대부분 0건)."""
+    if _IS_CLOUD:
+        return
+    rows = auction_db.query_pg(
+        "SELECT i.item_key FROM items i WHERE (i.is_active OR i.data_class='현황') "
+        "AND (i.usage_name ILIKE %s OR i.usage_name ILIKE %s) AND i.address ~ %s "
+        "AND NOT EXISTS (SELECT 1 FROM api_cache g WHERE g.cache_key = 'geo:' || i.address) "
+        "AND NOT EXISTS (SELECT 1 FROM api_cache m WHERE m.cache_key = 'aptmap:' || i.item_key "   # 신선도는 data._ts(3일) —
+        "                AND CASE WHEN (m.data->>'_ts') ~ '^[0-9.]+$' THEN (m.data->>'_ts')::float ELSE 0 END"   # REST 저장은 updated_at을
+        "                    > extract(epoch from now()) - 259200) "                                            # 안 바꾼다(실측)
+        "AND NOT EXISTS (SELECT 1 FROM api_cache n WHERE n.cache_key = 'aptmapneg:' || i.item_key "      # 못 찍은 물건은
+        "                AND n.updated_at > now() - interval '3 days') "                                  # 3일 뒤 재시도
+        "ORDER BY i.sell_date_d NULLS LAST LIMIT 30",
+        ("%아파트%", "%오피스텔%", "블록|[0-9]BL|BL[0-9]|지구"))
+    if not rows:
+        return
+    ok, neg = 0, []
+    for r in rows:
+        try:
+            m = apt_radius_map(r["item_key"])
+            if isinstance(m, dict) and m.get("available"):
+                ok += 1
+            else:
+                neg.append(r["item_key"])      # 오피스텔 블록 주소(K-apt 미등록)·전용면적 미상 등
+        except Exception:
+            pass
+    if neg:
+        try:
+            import psycopg
+            with psycopg.connect(os.environ.get("SUPABASE_DB_URL"), prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+                c.cursor().executemany("INSERT INTO api_cache (cache_key, data) VALUES (%s, '{\"available\": false}'::jsonb) "
+                                       "ON CONFLICT (cache_key) DO UPDATE SET updated_at = now()", [("aptmapneg:" + k,) for k in neg])
+        except Exception:
+            pass
+    print(f"[geo_block] 블록 주소 지도 {len(rows)}건 계산 → 표시 가능 {ok}건 · 불가 {len(neg)}건(3일 뒤 재시도)", flush=True)
 
 
 def _est_col_warm() -> None:
