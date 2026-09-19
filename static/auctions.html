@@ -1253,7 +1253,7 @@ function pickFuel(f){   // 리스트 연료 태그 클릭 → 연료 드롭다�
 }
 // 서버 응답에 실린 캐시값으로 준공/세대/승강기·유사거래·시세·매수판정을 '첫 페인트에' 동기 렌더.
 //  → 캐시된 물건은 새로고침과 동시에 모든 컬럼이 함께 뜸(비동기 깜빡임 제거). 미캐시는 done 표시 안 해 폴백이 채움.
-function prefillFromResponse(list){
+function prefillFromResponse(list, noTail){   // noTail: 나눠 그리기 청크마다 부를 때 — 예상낙찰 fetch·정렬은 마지막 1번만
   const m={}; (list||[]).forEach(L=>{ if(L&&L.item_key) m[L.item_key]=L; });
   // ① 준공/세대/승강기 + 유사거래 → .kapt
   document.querySelectorAll('.kapt[data-key]').forEach(el=>{
@@ -1310,7 +1310,7 @@ function prefillFromResponse(list){
     if(base){ const diff=L.est_price-base; html+=`<div class="${diff>=0?'eprofit':'eloss'}"><span class="lbl">차익 :</span><span class="amt">${diff>=0?'+':'−'}${won(Math.abs(diff))}</span></div>`; const tr=el.closest('tr'); if(tr) tr.dataset.diff=diff; }
     el.innerHTML=html; el.dataset.sise=L.est_price; el.dataset.done="1";
   });
-  fillExpBids();                            // 예상낙찰가(임베드 경로에서도 떠야 함 — 독립 패스; 컬럼 없는 행만 fetch)
+  if(!noTail) fillExpBids();                // 예상낙찰가(임베드 경로에서도 떠야 함 — 독립 패스; 컬럼 없는 행만 fetch)
   // ③ 매수판정 배지 → .gradechip
   const gcls={'매수양호':'g-ok','매수검토':'g-mid','매수금지':'g-no'};
   document.querySelectorAll('.gradechip[data-key]').forEach(el=>{
@@ -1331,7 +1331,7 @@ function prefillFromResponse(list){
     el.textContent="수요 "+L.demand;
     el.classList.add("dem-"+({"양호":"good","보통":"mid","검토":"rev"}[L.demand]||"mid"));
   });
-  applyAptSort();
+  if(!noTail) applyAptSort();
 }
 var _MCPH="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%232b3a52'/%3E%3Cpath d='M50 30 L72 50 L66 50 L66 72 L54 72 L54 58 L46 58 L46 72 L34 72 L34 50 L28 50 Z' fill='%23ffffff' fill-opacity='0.22'/%3E%3C/svg%3E"; window._MCPH=_MCPH;
 async function doSearch(){
@@ -1380,13 +1380,14 @@ async function doSearch(){
   }
   document.getElementById("cnt").innerHTML=`검색결과 <b>${d.total.toLocaleString()}</b>건`;
   document.getElementById("grid").classList.remove('loading');
+  let _didScroll=false;
   if(!d.items.length){ document.getElementById("grid").innerHTML='<div class="kv" style="padding:20px;text-align:center">조건에 맞는 물건이 없습니다.</div>'; }
   else{
     const isMobile=window.matchMedia("(max-width:600px)").matches;   // @media(max-width:600px) 기준 — 보이는 레이아웃만 생성(카드/테이블 이중생성 제거 → 렌더 블록 130ms→~65ms)
     window._wasMobile=isMobile;
     if(!window._respBound){ window._respBound=true; let _rt; window.addEventListener("resize",function(){ clearTimeout(_rt); _rt=setTimeout(function(){ if(window.matchMedia("(max-width:600px)").matches!==window._wasMobile) doSearch(); }, 250); }); }   // 창 크기가 PC↔폰 경계(600px)를 넘으면 반대 레이아웃으로 재렌더(목록캐시라 서버왕복 없음)
     const cardsAcc=[];
-    const rows=d.items.map((L,i)=>{
+    const _mk=(L,i)=>{            // 행 1개 HTML(폰=카드는 cardsAcc에 넣고 "" 반환) — 청크마다 필요한 만큼만 만든다
       const href="/static/auction.html?item_key="+encodeURIComponent(L.item_key);
       const t=L.thumb_url?`<img class="thumb" loading="lazy" decoding="async" src="${L.thumb_url}" onerror="this.outerHTML='<div class=ph>🏢</div>'">`:`<div class="ph">🏢</div>`;
       const objno=(L.obj_no&&String(L.obj_no)!=="1")?`<div class="casesub">물번 ${L.obj_no}</div>`:"";
@@ -1426,13 +1427,33 @@ async function doSearch(){
         <td class="cmid" data-label="매각기일"><div>${dd.date}</div>${dd.label?`<div class="kv" style="color:${dd.color};font-weight:600">${dd.label}</div>`:""}${(isSold&&L.bid_count)?`<div class="hbid">입찰 ${L.bid_count}명</div>`:""}${isSold?(L.winner_name?`<div class="hwin">낙찰 ${L.winner_name}</div>`:`<div class="noinfo">낙찰자 정보 없음</div>`):""}${predBadge}</td>
         <td class="cmid" data-label="결과"><div style="color:${rc};font-weight:600">${rr.status}</div>${rr.count?`<div class="kv" style="color:${rc}">${rr.count}</div>`:""}${rr.pct?`<div class="kv" style="color:${rc}">${rr.pct}</div>`:""}${(hasWin&&salePct!=null)?`<div class="hwin">낙찰 ${salePct}%</div>`:""}</td>
         <td class="cmid" data-label="조회수">${(L.hit_count||0).toLocaleString()}</td></tr>`;
-    }).join("");
+    };
+    const _html=(a,b)=>{ const out=[]; for(let j=a;j<Math.min(b,d.items.length);j++) out.push(_mk(d.items[j],j)); return isMobile?cardsAcc.splice(0).join(""):out.join(""); };
+    // 🔴나눠 그리기(주인님 2026-09-19 "검색하기 누르면 딱 멈춤"): 150행을 한 번에 innerHTML로 넣으면 문자열 만들기 60~96ms +
+    //  표 레이아웃 130~180ms가 한 덩어리로 메인스레드를 막았다(150행 실측 합 약 0.2~0.3초, 30행이면 0.08초).
+    //  → 첫 화면분 _FIRST행만 먼저 (만들어) 넣고 나머지는 _CHUNK행씩 다음 프레임에 만들어 덧붙인다. 배지 채우기·정렬·필터는 다 붙은 뒤 1번.
+    const _FIRST=12, _CHUNK=30, _mySeq=(window._renderSeq=(window._renderSeq||0)+1);
     document.getElementById("grid").innerHTML = isMobile
-      ? `<div class="cardlist">${cardsAcc.join("")}</div>`
+      ? `<div class="cardlist">${_html(0,_FIRST)}</div>`
       : `<div class="scrollx"><table class="tbl"><thead><tr>
       <th style="width:44px">선택</th><th style="width:108px">법원명<br>사건번호</th><th>소재지</th><th style="width:132px">용도</th><th style="width:168px">감정가<br>최저가<br>[낙찰가]</th><th style="width:106px">매각기일<br>[입찰인원]</th><th style="width:92px">결과<br>유찰수 %</th><th style="width:54px">조회</th>
-    </tr></thead><tbody>${rows}</tbody></table></div>`;
-    prefillFromResponse(d.items);  // 서버가 응답에 실어준 캐시값(준공/시세/유사거래/판정)을 첫 페인트에 즉시 채움 — 목록은 이걸로 완성됨
+    </tr></thead><tbody>${_html(0,_FIRST)}</tbody></table></div>`;
+    prefillFromResponse(d.items.slice(0,_FIRST), true);   // 첫 화면분 캐시값(준공/시세/유사거래/판정) 즉시
+    const _host=isMobile?document.querySelector('#grid .cardlist'):document.querySelector('#grid .tbl tbody');
+    const _next=f=>document.hidden?setTimeout(f,0):requestAnimationFrame(()=>setTimeout(f,0));   // 한 프레임 그리고 다음 청크
+    window.scrollTo(0,0); _didScroll=true;                  // 맨 위로는 첫 청크 직후(다 붙은 뒤에 하면 그 사이 내린 스크롤이 튄다)
+    await new Promise(done=>{
+      let i=_FIRST;
+      (function step(){
+        if(_mySeq!==window._renderSeq) return done();       // 그 사이 새 검색이 시작됨 → 옛 목록 덧붙이기 중단
+        if(i>=d.items.length || !_host) return done();
+        _host.insertAdjacentHTML('beforeend', _html(i,i+_CHUNK));
+        prefillFromResponse(d.items.slice(i,i+_CHUNK), true);
+        i+=_CHUNK; _next(step);
+      })();
+    });
+    if(_mySeq!==window._renderSeq) return;                   // 새 검색이 뒤를 이어 그림
+    fillExpBids(); applyAptSort();                           // prefill 꼬리(예상낙찰 fetch·정렬) — 전체 행 기준 1번
     applyBuyFilter();  // 필터 활성 상태면 재검색 결과에도 즉시 적용(등급 로딩 후 fillAptBriefs가 재적용)
     // ★목록(스피너)을 최우선으로: 미캐시 enrich(브리핑·시세·판정·호가)는 목록 페인트 '후'로 지연 발사.
     //  이 8개를 검색과 동시에 쏘면 2vCPU 서버가 경합해 목록 fetch가 0.34초→3.2초로 밀린다(브라우저 실측).
@@ -1468,7 +1489,7 @@ async function doSearch(){
   document.getElementById("pageno").textContent=`${pn} / ${pages}`;
   document.getElementById("prev").disabled=offset<=0;
   document.getElementById("next").disabled=offset+LIMIT>=d.total;
-  window.scrollTo(0,0);
+  if(!_didScroll) window.scrollTo(0,0);
 }
 function resetForm(){
   offset=0; selectedStatus="진행물건"; clearUsage();   // 초기화도 기본값(진행물건)으로
