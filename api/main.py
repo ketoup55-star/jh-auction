@@ -3771,6 +3771,46 @@ def _api_addr_for(item_key: str, addr: str):
     return f"{' '.join(toks)} {umd} {(jm.group(1) or '').strip()}{jm.group(2)}".replace("  ", " ")
 
 
+_kakao_jibun_cache: dict = {}
+_BRIEF_VER = 2   # 2 = 도로명주소 카카오 지번 변환 추가(2026-09-21)
+
+
+def _kakao_jibun(addr: str):
+    """도로명주소 → (시군구5, 법정동5, 본번, 부번) — 카카오 주소검색. _api_addr_for가 detail_text로 지번을 못 만들 때 쓴다.
+    ★안전장치: 주소 괄호의 법정동(예 '(양정동,더 센텀)')이 있으면 카카오 결과 법정동과 같아야만 채택(엉뚱한 지번 → 다른 건물 값 오염 방지).
+    실측(2026-09-21 세대 빈칸 표본 40): 도로명 27건 전부 변환·법정동 일치. 실패·불일치는 None(조회 안 함)."""
+    import time as _time_kj
+    key = os.environ.get("KAKAO_REST_KEY")
+    if not (key and addr):
+        return None
+    q = re.split(r",|\s(?=\S*\d+동\b)|\s(?=\S*\d+층)|\s(?=제?\S*\d+호)", addr)[0].strip()
+    if q in _kakao_jibun_cache:
+        return _kakao_jibun_cache[q]
+    res = None
+    for _try in range(3):
+        try:
+            r = httpx.get("https://dapi.kakao.com/v2/local/search/address.json", params={"query": q},
+                          headers={"Authorization": "KakaoAK " + key}, timeout=10)
+            if r.status_code == 429 or r.status_code >= 500:
+                _time_kj.sleep(1.0 + _try)
+                continue
+            docs = (r.json() or {}).get("documents") or []
+            a = (docs[0].get("address") if docs else None) or {}
+            bcode, bun = str(a.get("b_code") or ""), str(a.get("main_address_no") or "")
+            if len(bcode) == 10 and bun.isdigit() and a.get("mountain_yn") != "Y":
+                m = re.search(r"\(([^),]*?[동읍면리가])", addr)
+                umd = (m.group(1).strip() if m else "")
+                d3 = str(a.get("region_3depth_name") or "")
+                if not umd or umd == d3 or d3.endswith(umd) or umd in d3.split():
+                    ji = str(a.get("sub_address_no") or "0")
+                    res = (bcode[:5], bcode[5:], bun, ji if ji.isdigit() else "0")
+            break
+        except Exception:
+            _time_kj.sleep(1.0 + _try)
+    _kakao_jibun_cache[q] = res
+    return res
+
+
 def _unit_floor_from_addr(addr: str):
     """주소에서 물건 층수(예: '16층1603호'→16) 파싱. 지하/B층은 제외, 1~60 범위만."""
     if not addr or re.search(r"지하\s*\d*\s*층|지하층|B\d+", addr):
@@ -3873,6 +3913,9 @@ def _compute_brief(item_key: str) -> dict:
                 try:
                     _addr_api = _api_addr_for(item_key, addr)
                     bi = building.info(_addr_api, collective=_collective) if _addr_api else None
+                    if not _addr_api:          # 도로명인데 detail_text로 지번을 못 만듦 → 카카오 지번 변환(법정동 일치 검증)
+                        _kj = _kakao_jibun(addr)
+                        bi = building.info_codes(*_kj, collective=_collective) if _kj else None
                 except Exception:
                     bi = None
             if bi:
@@ -3942,6 +3985,8 @@ def _compute_brief(item_key: str) -> dict:
                        "source": ("api+doc" if (used_api and used_doc) else
                                   "api" if used_api else
                                   "items" if _from_items else "doc")}   # items=R2교정 컬럼 폴백(준공년도만)
+    if isinstance(out, dict) and out.get("available"):
+        out["bv"] = _BRIEF_VER      # 계산 규칙 판수 — 올리면 _brief_missing_loop가 세대 빈칸을 새 규칙으로 1회 재계산
     return out
 
 
@@ -6475,6 +6520,8 @@ _BRIEF_MISSING_SQL = f"""
        AND (c.data IS NULL
             OR ((c.data->>'available') = 'true' AND coalesce(c.data->>'hh_ok','') = '')
             OR (c.data->>'quota') = 'true'
+            OR ((c.data->>'available') = 'true' AND coalesce(c.data->>'households','') = ''
+                AND coalesce(c.data->>'bv','') <> '{_BRIEF_VER}')      -- 세대 빈칸은 규칙 판수가 오르면 1회 재계산(공회전 없음)
             OR ((c.data->>'available') = 'false'
                 AND coalesce((c.data->>'ts')::float, 0) < extract(epoch from now()) - {int(_BRIEF_NEG_TTL)}))
      ORDER BY i.is_active DESC, (i.usage_name ~ '아파트') DESC, (i.usage_name ~ '오피스텔') DESC, i.first_seen DESC NULLS LAST

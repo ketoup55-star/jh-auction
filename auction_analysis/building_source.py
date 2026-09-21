@@ -57,6 +57,20 @@ class BuildingSource:
         if not r:
             return None
         sgg, bjd, bun, ji = r
+        return self.info_codes(sgg, bjd, bun, ji, collective=collective, _ck=ck)
+
+    def info_codes(self, sgg: str, bjd: str, bun: str, ji: str, collective: bool = False, _ck: str | None = None) -> dict | None:
+        """법정동코드·지번으로 직접 조회 — 도로명주소를 카카오 주소검색으로 지번 변환한 경우(2026-09-21: 세대 빈칸 1,493건의
+        표본 40 중 34건이 '도로명이라 지번을 못 만들어 조회 자체를 안 함'이었고, 카카오 변환은 27/27 성공·법정동 일치)."""
+        import time
+        if not self.key:
+            return None
+        bun, ji = f"{int(bun):04d}", f"{int(ji):04d}"
+        ck = _ck or f"codes:{sgg}{bjd}-{bun}-{ji}|{int(bool(collective))}"
+        if ck in self._cache:
+            return self._cache[ck]
+        if time.time() < self._quota_block_until:
+            return None
         # 🔴도로명주소는 resolve_bjd가 지번을 '0000-0000'(미상)으로 돌려준다. 이걸 그대로 조회하면 API가 그 법정동의
         #   0-0 레코드("단독주택·1층·1가구·승강기0")를 돌려주고, 그게 물건 정보로 박혔다(실측: 오피스텔 1세대 209건 중 205건,
         #   집합건물 용도=단독주택 289건·승강기없음 290건). 지번 미상이면 호출하지 않는다 — 호출측이 detail_text 지번으로 재구성.
