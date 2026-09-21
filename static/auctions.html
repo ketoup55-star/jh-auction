@@ -1358,16 +1358,23 @@ function _perfStart(){
       if(n-P.t0>(('render' in P.ms)?6000:20000)){ _perfEnd(('render' in P.ms)?'ok':'noresult'); return; } requestAnimationFrame(loop); };
     requestAnimationFrame(loop);
     try{ P.obs=new PerformanceObserver(l=>l.getEntries().forEach(e=>P.lt.push([Math.round(e.startTime-P.t0),Math.round(e.duration),P.ph]))); P.obs.observe({type:'longtask'}); }catch(e){}
+    // 긴 프레임(LoAF, Chrome 123+): 멈춘 프레임마다 어떤 함수가 몇 ms·강제 레이아웃 몇 ms·렌더(스타일·배치·칠하기) 몇 ms인지
+    try{ P.lobs=new PerformanceObserver(l=>l.getEntries().forEach(e=>{ if(e.duration<60) return;
+      const sc=(e.scripts||[]).slice().sort((a,b)=>b.duration-a.duration).slice(0,2).map(x=>
+        (x.sourceFunctionName||x.invoker||'?').replace(/https?:\/\/[^ ]*\//,'').slice(0,40)+'='+Math.round(x.duration)+(x.forcedStyleAndLayoutDuration>1?'/fl'+Math.round(x.forcedStyleAndLayoutDuration):''));
+      const render=e.renderStart?Math.round(e.startTime+e.duration-e.renderStart):0, sl=e.styleAndLayoutStart?Math.round(e.startTime+e.duration-e.styleAndLayoutStart):0;
+      P.lf.push(Math.round(e.startTime-P.t0)+':'+Math.round(e.duration)+'[js '+sc.join('+')+' |render '+render+' sl '+sl+' blk '+Math.round(e.blockingDuration||0)+']'); })); P.lf=[]; P.lobs.observe({type:'long-animation-frame'}); }catch(e){ P.lf=['noLoAF']; }
   }catch(e){}
 }
 function _perfPh(ph){ if(_pp&&_pp.on){ _pp.ph=ph; if(!(ph in _pp.ms)) _pp.ms[ph]=Math.round(performance.now()-_pp.t0); } }
 function _perfEnd(why){
-  const P=_pp; if(!P||!P.on) return; P.on=false; try{ P.obs&&P.obs.disconnect(); }catch(e){}
+  const P=_pp; if(!P||!P.on) return; P.on=false; try{ P.obs&&P.obs.disconnect(); P.lobs&&P.lobs.disconnect(); }catch(e){}
   const worst=P.gaps.reduce((m,g)=>Math.max(m,g[1]),0), tot=P.gaps.reduce((a,g)=>a+g[1],0);
   const ms=Object.entries(P.ms).map(e=>e[0]+'@'+e[1]).join(',');
   const gs=P.gaps.slice().sort((a,b)=>b[1]-a[1]).slice(0,12).map(g=>g[1]+'@'+g[0]+':'+g[2]).join(' ');
   const lt=P.lt.slice().sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[1]+'@'+x[0]+':'+x[2]).join(' ');
-  const detail=`srch ${why} fetch=${(P.f||[]).join(',')} worst=${worst} jank=${tot} n=${P.gaps.length} rows=${document.querySelectorAll('#grid tbody tr,#grid .mcard').length} w=${innerWidth}x${innerHeight} dpr=${devicePixelRatio} cpu=${navigator.hardwareConcurrency||0} | ${ms} | gaps ${gs} | lt ${lt}`;
+  let rsp=''; try{ rsp=performance.getEntriesByType('resource').filter(e=>e.responseEnd>P.t0 && /\/auction/.test(e.name)).map(e=>e.name.split('?')[0].split('/').pop()+'@'+Math.round(e.responseEnd-P.t0)).slice(0,24).join(','); }catch(e){}
+  const detail=`srch ${why} fetch=${(P.f||[]).join(',')} worst=${worst} jank=${tot} n=${P.gaps.length} rows=${document.querySelectorAll('#grid tbody tr,#grid .mcard').length} w=${innerWidth}x${innerHeight} dpr=${devicePixelRatio} cpu=${navigator.hardwareConcurrency||0} | ${ms} | gaps ${gs} | lt ${lt} | lf ${(P.lf||[]).slice(0,4).join(' ')} | rsp ${rsp}`;
   try{ fetch('/client_perf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({detail:detail,worst:worst}),keepalive:true}); }catch(e){}
 }
 async function doSearch(){

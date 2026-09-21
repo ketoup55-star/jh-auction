@@ -111,13 +111,13 @@ async def client_perf(request: Request):
         p = {}
     def _w():
         try:
-            q = str(p.get('detail'))[:1000] if p.get('detail') else ("worst=%s 150+%s 100+%s 50+%s ltmax=%s rows=%s imgs=%s dom=%s cpu=%s mem=%sGB view=%s %ss ua=%s"
+            q = str(p.get('detail'))[:2500] if p.get('detail') else ("worst=%s 150+%s 100+%s 50+%s ltmax=%s rows=%s imgs=%s dom=%s cpu=%s mem=%sGB view=%s %ss ua=%s"
                  % (p.get('worst', 0), p.get('o150', 0), p.get('o100', 0), p.get('o50', 0), p.get('ltmax', 0),
                     p.get('rows', 0), p.get('imgs', 0), p.get('dom', 0), p.get('cpu', 0), p.get('mem', 0),
                     p.get('view', ''), p.get('secs', 0), str(p.get('ua', ''))[:40]))   # detail = 검색 렉 기록기(auctions.html _perfEnd)
             httpx.post(auction_db.url + "/rest/v1/slow_requests",
                        headers={**auction_db._h, "Content-Type": "application/json", "Prefer": "return=minimal"},
-                       json={"method": "CLIENT", "path": "/__client_jank__", "query": q[:1000],
+                       json={"method": "CLIENT", "path": "/__client_jank__", "query": q[:2500],
                              "duration_ms": int(p.get('worst', 0) or 0), "status": 200, "host": "client"}, timeout=5)
         except Exception:
             pass
