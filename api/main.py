@@ -3771,8 +3771,26 @@ def _api_addr_for(item_key: str, addr: str):
     return f"{' '.join(toks)} {umd} {(jm.group(1) or '').strip()}{jm.group(2)}".replace("  ", " ")
 
 
+def _kb_households(item_key: str):
+    """물건에 연결된 KB 단지(items.kb_complex_no, 신뢰도 kb_match_conf=1.0)의 세대수. 없거나 신뢰도 미달이면 None."""
+    try:
+        rows = auction_db.query_pg(
+            "SELECT k.households, i.kb_match_conf FROM items i JOIN kb_complex k ON k.complex_no = i.kb_complex_no "
+            "WHERE i.item_key = %s", (item_key,))
+    except Exception:
+        rows = None
+    if not rows:
+        return None
+    try:
+        conf = float(rows[0].get("kb_match_conf") or 0)
+        h = int(rows[0].get("households") or 0)
+    except Exception:
+        return None
+    return h if (conf >= 1.0 and h >= 2) else None
+
+
 _kakao_jibun_cache: dict = {}
-_BRIEF_VER = 3   # 2 = 도로명주소 카카오 지번 변환 추가, 3 = K-apt 지번 매칭 추가(2026-09-21)
+_BRIEF_VER = 4   # 2 = 도로명주소 카카오 지번 변환, 3 = K-apt 지번 매칭, 4 = KB 단지정보 세대수 폴백(2026-09-21)
 
 
 def _kakao_jibun(addr: str):
@@ -3970,6 +3988,13 @@ def _compute_brief(item_key: str) -> dict:
                     and "다가구" not in (purpose + usage)):
                 hh_disp, hh_label, hh_ok = "단독", "", True
             _hh_src = ("doc" if (un and doc.get("units") == un) else "api" if un else None)
+            # KB 단지정보(주인님 승인 2026-09-21 "KB로 채워"): K-apt(이름·지번)·표제부·문서로 못 구한 아파트만, 연결 신뢰도 1.0일 때.
+            #  실측: 빈칸 표본 17 중 13건 KB에 있음(장산 72·동촌 99·대준블루온 174 등), 기존값과 대조 일치 K-apt 88.6%.
+            if not un and re.search(r"아파트", usage):
+                _kbh = _kb_households(item_key)
+                if _kbh and _hh_plausible(_kbh, "세대", usage, addr):
+                    un, ul = _kbh, "세대"
+                    hh_disp, hh_label, hh_ok, _hh_src = str(_kbh), "세대", True, "kb"
             # 쿼터 차단 중이라 표제부/K-apt를 못 부른 집합건물은 'quota' 표식 → 20분 스윕이 쿼터 풀린 뒤 재계산(30일 TTL로 굳지 않게).
             _quota = bool(_collective and not un and (building.quota_blocked()
                                                       or (re.search(r"아파트", usage) and kapt.quota_blocked())))
@@ -11696,7 +11721,8 @@ def _brief_as_detail(item_key: str, name: str):
         return None
     return {"name": name or "", "households": b.get("households"),
             "approved": (str(b.get("build_year")) if b.get("build_year") else None),
-            "elevator": b.get("elevator"), "_src": "건축물대장"}
+            "elevator": b.get("elevator"),
+            "_src": {"kb": "KB 단지정보", "kapt": "국토부 공동주택"}.get(b.get("hh_src"), "건축물대장")}   # 세대수 출처대로 라벨
 
 
 APT_VER = 9   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v8: 3개월 실거래 없으면 호가(유사층수 최저)-1000만원=추정시세, 호가도 없으면 산출불가=주인님 지정)

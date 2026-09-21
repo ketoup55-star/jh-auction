@@ -1746,7 +1746,7 @@ async function loadAptInfo(){
     ${r&&r.complex_trades_total?`<div class="m"><span class="k">동일단지 거래</span><span class="v">최근 ${r.months}개월 ${r.complex_trades_total}건</span></div>`:''}
   </div>`;
   const detailRow=cd?`
-    <div class="apt-subhd">상세 단지정보<span class="apt-src">${cd._src==="건축물대장"?"건축물대장":"국토부 공동주택"}</span></div>
+    <div class="apt-subhd">상세 단지정보<span class="apt-src">${(cd._src==="건축물대장"||cd._src==="KB 단지정보")?cd._src:"국토부 공동주택"}</span></div>
     <div class="apt-meta apt-detail">
       ${(cd.households&&cd.households!=="0")?`<div class="m"><span class="k">세대수</span><span class="v">${eok(cd.households)}세대</span></div>`:''}
       ${cd.dongs?`<div class="m"><span class="k">동수</span><span class="v">${eok(cd.dongs)}개동</span></div>`:''}
