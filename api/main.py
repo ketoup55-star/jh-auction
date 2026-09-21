@@ -3772,7 +3772,7 @@ def _api_addr_for(item_key: str, addr: str):
 
 
 _kakao_jibun_cache: dict = {}
-_BRIEF_VER = 2   # 2 = 도로명주소 카카오 지번 변환 추가(2026-09-21)
+_BRIEF_VER = 3   # 2 = 도로명주소 카카오 지번 변환 추가, 3 = K-apt 지번 매칭 추가(2026-09-21)
 
 
 def _kakao_jibun(addr: str):
@@ -3851,8 +3851,19 @@ def _compute_brief(item_key: str) -> dict:
         if re.search(r"아파트", usage):
             lawd = resolve_lawd(addr) or _sgg_geo_fallback(addr)
             name = _apt_name_from_addr(addr)
-            if lawd and name:
-                b = kapt.brief(lawd, name, danji=_danji_hint(addr), bjd=_bjd10(addr))
+            # 지번(본번,부번): 지번주소면 resolve_bjd, 도로명이면 카카오 변환 — 이름으로 못 가린 단지를 K-apt 지번주소로 확정
+            _jb = None
+            try:
+                _rb = resolve_bjd(re.split(r",", addr)[0])
+                if _rb and not (_rb[2] == "0000" and _rb[3] == "0000"):
+                    _jb = (_rb[2], _rb[3])
+                else:
+                    _kj = _kakao_jibun(addr)
+                    _jb = (_kj[2], _kj[3]) if _kj else None
+            except Exception:
+                _jb = None
+            if lawd and (name or _jb):
+                b = kapt.brief(lawd, name, danji=_danji_hint(addr), bjd=_bjd10(addr), jibun=_jb)
                 if b and (b.get("build_year") or b.get("households")):
                     out = {"available": True, "unit_label": "세대", **b, "hh_src": "kapt"}
                     out["hh_ok"] = _hh_plausible(out.get("households"), "세대", usage, addr)

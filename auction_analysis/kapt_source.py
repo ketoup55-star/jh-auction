@@ -148,6 +148,17 @@ class KaptSource:
         # ★목록 디스크 캐시(7일): 재시작마다 ~200시군구×최대 10페이지를 다시 받아 일일 한도를 태우던 것 방지(2026-09-17 실측: 재시작 7회 → 한도 소진).
         self._list_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "kapt_lists.json")
         self._list_saved_at = 0.0
+        # 지번 대조용 단지 지번주소 캐시(주소는 안 바뀜 → 디스크 영구, 재시작해도 K-apt 한도 안 태움)
+        self._addr_file = os.path.join(os.path.dirname(self._list_file), "kapt_addrs.json")
+        self._addr_cache: dict[str, str] = {}
+        self._addr_new = 0
+        try:
+            import json as _json
+            if os.path.exists(self._addr_file):
+                with open(self._addr_file, encoding="utf-8") as f:
+                    self._addr_cache.update(_json.load(f) or {})
+        except Exception:
+            pass
         try:
             import json as _json
             if os.path.exists(self._list_file) and time.time() - os.path.getmtime(self._list_file) < 7 * 86400:
@@ -404,12 +415,63 @@ class KaptSource:
             self._code_cache[ck] = best_code
         return best_code
 
-    def brief(self, lawd_cd: str, apt_name: str, danji=None, bjd: str | None = None) -> dict | None:
+    def find_by_jibun(self, lawd_cd: str, bjd: str | None, bun, ji, max_cands: int = 120) -> str | None:
+        """같은 법정동의 K-apt 단지 중 기본정보 지번주소(kaptAddr)의 지번이 물건 지번과 '정확히' 같은 단지(하나일 때만).
+        2026-09-21 주인님 지적("동이 여러 개면 150세대 넘으니 K-apt에 있어야지"): 세대 빈칸 아파트 중 K-apt에 있는데
+        이름이 흔해 못 가린 단지(삼환·주공·현대)를 지번으로 가리면 정확 — 만수동 983-1→만수삼환1차 660, 평화동1가 445-6→
+        평화주공2단지 1,350, 모현동1가 2-1→모현동현대1차 488. 같은 지번이 없으면(라온·동문·현대그린맨션) K-apt 미등록이 맞다."""
+        try:
+            b, j = int(str(bun)), int(str(ji or 0))
+        except Exception:
+            return None
+        if not (lawd_cd and bjd and b):
+            return None
+        jb = f"{b}-{j}" if j else f"{b}"
+        cands = [it for it in self._sigungu_list(lawd_cd) if str(it.get("bjdCode") or "") == str(bjd)]
+        if not cands or len(cands) > max_cands:
+            return None
+        hits = set()
+        pat = re.compile(r"(^|\s)" + re.escape(jb) + r"(?=\s|$|번지|,)")
+        for it in cands:
+            if pat.search(self._basis_addr(it.get("kaptCode")).split("(")[0]):
+                hits.add(it.get("kaptCode"))
+        return next(iter(hits)) if len(hits) == 1 else None
+
+    def _basis_addr(self, kapt_code: str) -> str:
+        """지번 대조용 가벼운 조회: 기본정보의 지번주소(kaptAddr)만(상세정보 호출 안 함). 성공만 캐시."""
+        if not (self.key and kapt_code):
+            return ""
+        if kapt_code in self._basis_cache:
+            return self._basis_cache[kapt_code].get("addr") or ""
+        if kapt_code in self._addr_cache:
+            return self._addr_cache[kapt_code]
+        j = self._get_json(_BASIS, {"kaptCode": kapt_code})
+        try:
+            ad = str(j["response"]["body"]["item"].get("kaptAddr") or "")
+        except Exception:
+            return ""
+        self._addr_cache[kapt_code] = ad
+        self._addr_new += 1
+        if self._addr_new >= 20:
+            self._addr_new = 0
+            try:
+                import json as _json
+                tmp = self._addr_file + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    _json.dump(dict(self._addr_cache), f, ensure_ascii=False)
+                os.replace(tmp, self._addr_file)
+            except Exception:
+                pass
+        return ad
+
+    def brief(self, lawd_cd: str, apt_name: str, danji=None, bjd: str | None = None, jibun=None) -> dict | None:
         """목록뷰용: 준공년도·세대수·승강기. basis_info(캐시) 재사용.
-        이름만으로 애매하면(N단지 여러 개) danji(동번호//100) 힌트로 한 번 더 시도."""
-        code = self.find_kapt_code(lawd_cd, apt_name, bjd=bjd)
-        if not code and danji:
+        이름만으로 애매하면(N단지 여러 개) danji(동번호//100) 힌트로 한 번 더 시도, 그래도 없으면 지번(jibun=(본번,부번))으로."""
+        code = self.find_kapt_code(lawd_cd, apt_name, bjd=bjd) if apt_name else None
+        if not code and danji and apt_name:
             code = self.find_kapt_code(lawd_cd, apt_name, danji=danji, bjd=bjd)
+        if not code and jibun:
+            code = self.find_by_jibun(lawd_cd, bjd, *jibun)
         if not code:
             return None
         info = self.basis_info(code)
