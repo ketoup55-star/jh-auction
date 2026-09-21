@@ -3818,6 +3818,8 @@ def _kakao_jibun(addr: str):
             if len(bcode) == 10 and bun.isdigit() and a.get("mountain_yn") != "Y":
                 m = re.search(r"\(([^),]*?[동읍면리가])", addr)
                 umd = (m.group(1).strip() if m else "")
+                if re.search(r"\d|건축물|빌딩|아파트", umd):   # '(주건축물제1동)'·'(101동)' 같은 건물 표기는 법정동이 아님(실측 39건 오거부)
+                    umd = ""
                 d3 = str(a.get("region_3depth_name") or "")
                 if not umd or umd == d3 or d3.endswith(umd) or umd in d3.split():
                     ji = str(a.get("sub_address_no") or "0")
@@ -3825,7 +3827,8 @@ def _kakao_jibun(addr: str):
             break
         except Exception:
             _time_kj.sleep(1.0 + _try)
-    _kakao_jibun_cache[q] = res
+    if res:                       # 성공만 캐시(일시 실패가 재시작 전까지 굳지 않게)
+        _kakao_jibun_cache[q] = res
     return res
 
 
@@ -3942,7 +3945,7 @@ def _compute_brief(item_key: str) -> dict:
                 try:
                     _addr_api = _api_addr_for(item_key, addr)
                     bi = building.info(_addr_api, collective=_collective) if _addr_api else None
-                    if not _addr_api:          # 도로명인데 detail_text로 지번을 못 만듦 → 카카오 지번 변환(법정동 일치 검증)
+                    if not bi:                 # 조회용 주소를 못 만들었거나(도로명) 만든 주소로 대장이 안 나오면 → 카카오 지번 변환(법정동 일치 검증)
                         _kj = _kakao_jibun(addr)
                         bi = building.info_codes(*_kj, collective=_collective) if _kj else None
                 except Exception:
@@ -6550,7 +6553,7 @@ _brief_sweep._bad_streak = 0
 #  ③로컬 디스크(brief_cache.json)에만 있는 옛형식 brief(1,453건)는 메모리 적중이라 Supabase(클라우드가 읽는 곳)에 다시 안 올라감.
 #  → 없는 것·옛형식·만료된 실패만 골라 새 규칙으로 계산해 Supabase에 저장하는 전용 루프(DISABLE_PREWARM 무관, 경량 배치).
 _BRIEF_MISSING_SQL = f"""
-    SELECT i.item_key, i.usage_name, i.address FROM items i
+    SELECT i.item_key, i.usage_name, i.address, coalesce((c.data->>'tries')::int, 0) FROM items i
       LEFT JOIN api_cache c ON c.cache_key = 'brief:'||i.item_key
      WHERE (i.is_active OR i.data_class = '현황') AND {_COLLECTIVE_SQL}
        AND (c.data IS NULL
@@ -6558,6 +6561,11 @@ _BRIEF_MISSING_SQL = f"""
             OR (c.data->>'quota') = 'true'
             OR ((c.data->>'available') = 'true' AND coalesce(c.data->>'households','') = ''
                 AND coalesce(c.data->>'bv','') <> '{_BRIEF_VER}')      -- 세대 빈칸은 규칙 판수가 오르면 1회 재계산(공회전 없음)
+            OR ((c.data->>'available') = 'true' AND coalesce(c.data->>'households','') = ''
+                AND coalesce((c.data->>'tries')::int, 0) < 3
+                AND coalesce((c.data->>'tries_ts')::float, 0) < extract(epoch from now()) - 21600)
+                -- 🔴일시 실패 재시도(2026-09-21 실측: 대량 처리 뒤 빈칸 표본 15건 중 11건이 재계산만으로 채워짐 = API 시간초과·
+                --  총괄표제부 실패가 빈칸으로 굳었던 것). 6시간 간격 최대 3회, 그래도 없으면 원천에 없는 것으로 둔다.
             OR ((c.data->>'available') = 'false'
                 AND coalesce((c.data->>'ts')::float, 0) < extract(epoch from now()) - {int(_BRIEF_NEG_TTL)}))
      ORDER BY i.is_active DESC, (i.usage_name ~ '아파트') DESC, (i.usage_name ~ '오피스텔') DESC, i.first_seen DESC NULLS LAST
@@ -6582,6 +6590,16 @@ def _brief_fill_missing(limit: int = 100) -> int:
     print(f"[brief_missing] 준공·세대 빈칸 {len(rows)}건 계산 시작", flush=True)
     res = _brief_recompute([r[0] for r in rows], {r[0]: r[1] for r in rows}, tag="missing",
                            addr_by_key={r[0]: r[2] for r in rows})
+    # 계산 뒤에도 세대 빈칸이면 시도 횟수·시각 기록(6시간 간격 최대 3회 재시도 근거). 한 건씩 키로 갱신 — REST 저장은 updated_at이 안 바뀐다.
+    try:
+        prev = {r[0]: int(r[3] or 0) for r in rows}
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+            for k in prev:
+                c.execute("UPDATE api_cache SET data = data || jsonb_build_object('tries', %s::int, 'tries_ts', "
+                          "extract(epoch from now())) WHERE cache_key = %s AND (data->>'available') = 'true' "
+                          "AND coalesce(data->>'households','') = ''", (prev[k] + 1, "brief:" + k))
+    except Exception as e:
+        print(f"[brief_missing] 시도횟수 기록 실패: {str(e)[:80]}", flush=True)
     print(f"[brief_missing] 완료 {res.get('stats')}", flush=True)
     return len(rows)
 
