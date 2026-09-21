@@ -4971,6 +4971,7 @@ def _start_prewarm() -> None:
         #   (舊버그: else 블록에 있어 DISABLE_PREWARM=1이면 안 돌아 컬럼 자동유지·아파트 시세예열이 죽어있었음)
         threading.Thread(target=_col_sync_loop, daemon=True).start()        # api_cache→items 컬럼(시세·예상낙찰·차익·호가·유사거래) 20분마다
         threading.Thread(target=_est_col_warm_loop, daemon=True).start()    # est 직접기록 예열(cache_save 우회) — 아파트 시세 커버리지 성장·유지
+        threading.Thread(target=_brief_missing_loop, daemon=True).start()   # 준공·세대 brief 없음·옛형식 → 계산·Supabase 저장(DISABLE_PREWARM 무관)
     try:
         _kb_apply_token()   # Supabase 공유 토큰(api_cache kb:auth) 로드 — 시작 시 1회, 가벼움(브라우저 없음)
     except Exception:
@@ -6460,6 +6461,59 @@ def _brief_sweep(limit: int = 300) -> None:
 
 
 _brief_sweep._bad_streak = 0
+
+
+# 🔴준공·세대·승강기 빈칸 재발방지(2026-09-21 주인님 "세대수·준공년도 안 나오는 게 아직 있다"):
+#  실측 진행중 집합건물 16,301건 중 brief 없음 2,042(빌라 1,947)·실패 200. 원인 ①.env DISABLE_PREWARM=1이라 신규 물건을
+#  채우는 유일한 루프(_prewarm_loop)가 한 번도 안 돌았다 ②_brief_sweep은 api_cache에 '있는' 행만 JOIN해 없는 물건은 영영 대상 밖
+#  ③로컬 디스크(brief_cache.json)에만 있는 옛형식 brief(1,453건)는 메모리 적중이라 Supabase(클라우드가 읽는 곳)에 다시 안 올라감.
+#  → 없는 것·옛형식·만료된 실패만 골라 새 규칙으로 계산해 Supabase에 저장하는 전용 루프(DISABLE_PREWARM 무관, 경량 배치).
+_BRIEF_MISSING_SQL = f"""
+    SELECT i.item_key, i.usage_name, i.address FROM items i
+      LEFT JOIN api_cache c ON c.cache_key = 'brief:'||i.item_key
+     WHERE (i.is_active OR i.data_class = '현황') AND {_COLLECTIVE_SQL}
+       AND (c.data IS NULL
+            OR ((c.data->>'available') = 'true' AND coalesce(c.data->>'hh_ok','') = '')
+            OR (c.data->>'quota') = 'true'
+            OR ((c.data->>'available') = 'false'
+                AND coalesce((c.data->>'ts')::float, 0) < extract(epoch from now()) - {int(_BRIEF_NEG_TTL)}))
+     ORDER BY i.is_active DESC, (i.usage_name ~ '아파트') DESC, (i.usage_name ~ '오피스텔') DESC, i.first_seen DESC NULLS LAST
+     LIMIT %s"""
+_brief_missing_stat: dict = {"last": None, "picked": 0, "backlog": None}
+
+
+def _brief_fill_missing(limit: int = 100) -> int:
+    """brief 없음·옛형식·만료 실패 물건을 limit건 계산 → Supabase 저장. 처리 건수 반환(0=밀린 것 없음)."""
+    if _IS_CLOUD or _brief_recomp["running"]:
+        return 0
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return 0
+    import psycopg
+    import time as _t
+    with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+        rows = c.execute(_BRIEF_MISSING_SQL, (limit,)).fetchall()
+    _brief_missing_stat.update({"last": _t.strftime("%Y-%m-%d %H:%M:%S"), "picked": len(rows)})
+    if not rows:
+        return 0
+    print(f"[brief_missing] 준공·세대 빈칸 {len(rows)}건 계산 시작", flush=True)
+    res = _brief_recompute([r[0] for r in rows], {r[0]: r[1] for r in rows}, tag="missing",
+                           addr_by_key={r[0]: r[2] for r in rows})
+    print(f"[brief_missing] 완료 {res.get('stats')}", flush=True)
+    return len(rows)
+
+
+def _brief_missing_loop() -> None:
+    """밀린 게 있으면 1분 간격으로 연속 처리, 없으면 10분마다 신규 확인(신규 물건이 들어오면 10분 안에 채워짐)."""
+    import time as _t
+    _t.sleep(180)
+    while True:
+        n = 0
+        try:
+            n = _brief_fill_missing(100)
+        except Exception as e:
+            print(f"[brief_missing] 실패: {str(e)[:120]}", flush=True)
+        _t.sleep(60 if n else 600)
 
 
 def _apt_detail_sync(limit: int = 200) -> int:
