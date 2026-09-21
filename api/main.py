@@ -12644,7 +12644,8 @@ def _chat_search_properties(args: dict, exclude_keys=None) -> dict:
     # 예상낙찰가(캐시) 일괄 조회 → 각 카드에 부착 + 'has_expbid'(예상낙찰가 있는 것만) 필터
     try:
         _apt_ks = [x["item_key"] for x in out if x.get("유형") == "아파트" and x.get("item_key")]
-        _vil_ks = [x["item_key"] for x in out if x.get("유형") in ("다세대 (빌라)", "도시형생활 주택") and x.get("item_key")]
+        _vil_ks = [x["item_key"] for x in out if re.sub(r"\s", "", x.get("유형") or "") in ("다세대(빌라)", "도시형생활주택")
+                   and x.get("item_key")]   # 띄어쓰기 표기 무관(새 수집분은 '다세대(빌라)')
         _exp = {}
         if _apt_ks:
             _exp.update(auction_expbid_batch(",".join(_apt_ks)) or {})

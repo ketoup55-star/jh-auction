@@ -572,6 +572,10 @@ class SupabaseSource:
             else:
                 f.append(("search_group", f"eq.{group}"))
         if usages:
+            # 🔴띄어쓰기만 다른 표기까지 함께(2026-09-22 주인님 "빌라·도생 조회하니 한 개도 안 나온다"): 화면·챗봇은 '다세대 (빌라)'·
+            #  '도시형생활 주택'을 보내는데 새 수집분은 '다세대(빌라)'·'도시형생활주택'으로 들어와(진행중 빌라 6,299 vs 90, 도생 249 vs 165)
+            #  정확일치 필터에 거의 다 빠졌다. DB의 실제 표기 목록으로 확장(1시간 캐시) → 크롤러가 어떤 표기를 써도 같이 잡힌다.
+            usages = self._usage_variants(usages)
             if len(usages) == 1:      # 단일 용도 → eq: (usage_name,case_sort) 부분인덱스를 탐(0.07s).
                 f.append(("usage_name", "eq." + usages[0].replace('"', "")))   # in/ANY는 planner가 case_sort 스캔 택해 51k행 필터→timeout(22s)
             else:
@@ -815,6 +819,33 @@ class SupabaseSource:
             "years": sorted(years, reverse=True),
             "courts": court_tree,
         }
+
+    _usage_var_cache: dict = {"ts": 0.0, "map": {}}
+
+    def _usage_variants(self, usages) -> list:
+        """요청 용도명 → DB에 실제 있는 '띄어쓰기만 다른' 표기 전부(요청값 포함). DB 조회 실패 시 요청값+공백제거형."""
+        import time as _t
+        c = SupabaseSource._usage_var_cache
+        if _t.time() - c["ts"] > 3600:
+            try:
+                rows = self.query_pg("SELECT DISTINCT usage_name FROM items WHERE usage_name IS NOT NULL")
+            except Exception:
+                rows = None
+            if rows:
+                m: dict = {}
+                for r in rows:
+                    nm = r.get("usage_name") or ""
+                    m.setdefault(re.sub(r"\s", "", nm), set()).add(nm)
+                c["map"], c["ts"] = m, _t.time()
+        out: list = []
+        for u in (usages if isinstance(usages, (list, tuple, set)) else [usages]):
+            u = str(u or "")
+            key = re.sub(r"\s", "", u)
+            cand = ([u] + sorted(c["map"].get(key, ()))) if c["map"] else [u, key]   # DB 표기가 있으면 그것만(eq 유지 가능)
+            for v in cand:
+                if v and v not in out:
+                    out.append(v)
+        return out
 
     def usages_in_group(self, group: str, data_class: str = "현황") -> list[str]:
         """그룹 내 실제 존재하는 용도 목록(체크박스용). 샘플 기반 distinct."""
