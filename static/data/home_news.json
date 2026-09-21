@@ -1,42 +1,87 @@
 {
  "items": [
   {
-   "keyword": "대출규제",
-   "title": "아파트 대출규제 부담… 오피스텔 거래량·가격 상승세 - 국토일보",
-   "link": "http://www.ikld.kr/news/articleView.html?idxno=340985",
-   "image": "http://www.ikld.kr/news/thumbnail/202609/340985_187945_2737_v150.jpg",
-   "source": "국토일보",
-   "published": "2026-09-20T08:50:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "갈피 못 찾는 부동산 정책… 잦은 궤도 수정에 ‘신뢰성’ 시험대 - 천지일보",
-   "link": "https://www.newscj.com/news/articleView.html?idxno=3434133",
-   "image": "https://cdn.newscj.com/news/thumbnail/202609/3434133_3551470_1535_v150.jpg",
-   "source": "천지일보",
-   "published": "2026-09-20T07:45:00+09:00",
+   "keyword": "집값",
+   "title": "오세훈, 李대통령 집값 책임론 반박…'박원순 시절' 소환 - 한국경제",
+   "link": "https://www.hankyung.com/article/2026092179417",
+   "image": "https://img.hankyung.com/photo/202609/ZN.45769630.1.jpg",
+   "source": "한국경제",
+   "published": "2026-09-21T12:14:18+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 세금",
-   "title": "부동산 정책 몇달만에 잇단 조정…시장은 '예측가능성' 우려 - v.daum.net",
-   "link": "https://v.daum.net/v/20260920060254744",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/20/yonhap/20260920060254382qjuq.jpg",
-   "source": "v.daum.net",
-   "published": "2026-09-20T06:02:54+09:00",
+   "title": "'아파트 팔았는데 세금 1억8000만원 냈어요 ㅠㅠ' 사연 두고 갑론을박 - 위키트리",
+   "link": "https://www.wikitree.co.kr/articles/1160989",
+   "image": "https://cdnweb01.wikitree.co.kr/webdata/editor/202609/21/img_20260921115640_b4b29e11.jpg",
+   "source": "위키트리",
+   "published": "2026-09-21T11:59:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "빌라 경매",
-   "title": "신림 역세권 빌라가 2억대 …서울 남부 빌라 추천 경매 6선 - 땅집고",
-   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026091900578",
-   "image": "https://image.chosun.com/sitedata/thumbnail/202609/19/2026091900577_0_thumb.jpg",
-   "source": "땅집고",
-   "published": "2026-09-20T06:00:00+09:00",
+   "keyword": "부동산 세금",
+   "title": "“집값 오르니 세금도 뛰었다 … 용인시 재산세 3489억 부과 - 용인신문",
+   "link": "https://www.yonginilbo.com/news/article.html?no=110833",
+   "image": "https://www.yonginilbo.com/data/photos/20260938/art_17896937091785_18082e.jpg",
+   "source": "용인신문",
+   "published": "2026-09-21T10:47:06+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "[포토] 오세훈 서울시장, '과한 부동산 정책 규제 정부에 일침' - 아시아경제",
+   "link": "https://www.asiae.co.kr/article/2026092110390411444",
+   "image": "https://cphoto.asiae.co.kr/listimglink/1/2026092110344736165_1789954487.jpg",
+   "source": "아시아경제",
+   "published": "2026-09-21T10:39:05+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "추석 앞둔 9월 넷째주 분양시장, 8개 단지 4591가구 청약…국감선 공급-대출규제 '엇박자' 도마 - 베타뉴스",
+   "link": "https://www.betanews.net/article/view/beta202609190015",
+   "image": "https://www.betanews.net/data/beta/image/2026/09/19/beta20260919000013.jpg",
+   "source": "베타뉴스",
+   "published": "2026-09-21T09:42:57+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "동두천 아파트가 1억대부터…경기도 소액 아파트 추천 경매 6선 - realty.chosun.com",
+   "link": "https://realty.chosun.com/site/data/html_dir/2026/09/19/2026091900598.html",
+   "image": "https://image.chosun.com/sitedata/image/202609/19/2026091900597_0.jpg",
+   "source": "realty.chosun.com",
+   "published": "2026-09-21T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "강남 집값은 떨어지는데도…대치·목동은 ‘학군지 불패' - edaily.co.kr",
+   "link": "https://www.edaily.co.kr/News/Read?newsId=01453046645582416&mediaCodeNo=257",
+   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/09/PS26092100103.jpg",
+   "source": "edaily.co.kr",
+   "published": "2026-09-21T05:08:01+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "84주째 뛴 서울 집값, 역대 최장기록 눈앞 - chosun.com",
+   "link": "https://www.chosun.com/economy/real_estate/2026/09/21/MWYQBQZ2AVDP7O7FFFT5463GRU/",
+   "image": "https://www.chosun.com/resizer/v2/WGZP5O3XDZP67MOJBN5G3VPTKI.JPG?auth=23b7da5df3288d1b926419ac46598b51ce2eda17da38ec84377ffc088ca6fce0&width=1200&height=630&smart=true",
+   "source": "chosun.com",
+   "published": "2026-09-21T00:45:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "“또 바뀔텐데…관심없어” 부동산정책 딜레마 - 문화일보",
+   "link": "https://www.munhwa.com/article/11618394",
+   "image": "https://wimg.munhwa.com/news/cms/2026/09/21/news-a.v1.20260920.1dd02bc8517e43949d6a3d4c60343f36_T1.png",
+   "source": "문화일보",
+   "published": "2026-09-21T00:12:03+09:00",
    "has_time": true
   }
  ],
- "count": 4,
- "date": "2026-09-20"
+ "count": 9,
+ "date": "2026-09-21"
 }
