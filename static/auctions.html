@@ -1355,7 +1355,7 @@ function _perfStart(){
     const loop=()=>{ if(!P.on) return; const n=performance.now();
       if(document.visibilityState!=='visible'){ _perfEnd('hidden'); return; }
       if(n-last>50) P.gaps.push([Math.round(last-P.t0),Math.round(n-last),P.ph]); last=n;
-      if(n-P.t0>6000){ _perfEnd('ok'); return; } requestAnimationFrame(loop); };
+      if(n-P.t0>(('render' in P.ms)?6000:20000)){ _perfEnd(('render' in P.ms)?'ok':'noresult'); return; } requestAnimationFrame(loop); };
     requestAnimationFrame(loop);
     try{ P.obs=new PerformanceObserver(l=>l.getEntries().forEach(e=>P.lt.push([Math.round(e.startTime-P.t0),Math.round(e.duration),P.ph]))); P.obs.observe({type:'longtask'}); }catch(e){}
   }catch(e){}
@@ -1367,7 +1367,7 @@ function _perfEnd(why){
   const ms=Object.entries(P.ms).map(e=>e[0]+'@'+e[1]).join(',');
   const gs=P.gaps.slice().sort((a,b)=>b[1]-a[1]).slice(0,12).map(g=>g[1]+'@'+g[0]+':'+g[2]).join(' ');
   const lt=P.lt.slice().sort((a,b)=>b[1]-a[1]).slice(0,8).map(x=>x[1]+'@'+x[0]+':'+x[2]).join(' ');
-  const detail=`srch ${why} worst=${worst} jank=${tot} n=${P.gaps.length} rows=${document.querySelectorAll('#grid tbody tr,#grid .mcard').length} w=${innerWidth}x${innerHeight} dpr=${devicePixelRatio} cpu=${navigator.hardwareConcurrency||0} | ${ms} | gaps ${gs} | lt ${lt}`;
+  const detail=`srch ${why} fetch=${(P.f||[]).join(',')} worst=${worst} jank=${tot} n=${P.gaps.length} rows=${document.querySelectorAll('#grid tbody tr,#grid .mcard').length} w=${innerWidth}x${innerHeight} dpr=${devicePixelRatio} cpu=${navigator.hardwareConcurrency||0} | ${ms} | gaps ${gs} | lt ${lt}`;
   try{ fetch('/client_perf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({detail:detail,worst:worst}),keepalive:true}); }catch(e){}
 }
 async function doSearch(){
@@ -1393,9 +1393,11 @@ async function doSearch(){
   // 일시적 서버 오류(Supabase 순간 500·콜드 지연·네트워크 blip)는 자동 재시도로 자가복구 —
   // 최대 3회(700ms→1600ms 백오프) 조용히 재시도 후에도 실패할 때만 에러 표시.
   for(let _try=0;;_try++){
-    if(_cc && Date.now()-_cc.t<60000){ d=_cc.d; break; }   // 캐시 히트 → 즉시(서버 왕복 없음)
+    if(_cc && Date.now()-_cc.t<60000){ d=_cc.d; if(_pp&&_pp.on) (_pp.f=_pp.f||[]).push('cache'); break; }   // 캐시 히트 → 즉시(서버 왕복 없음)
     try{
+      const _ft=performance.now();
       const _r=await fetch("/auctions?"+_q,{cache:"no-store"});
+      if(_pp&&_pp.on) (_pp.f=_pp.f||[]).push('try'+_try+':'+_r.status+':'+Math.round(performance.now()-_ft));
       if(!_r.ok) throw new Error("HTTP "+_r.status);
       d=await _r.json();
       if(!d || typeof d.total!=="number" || !Array.isArray(d.items)) throw new Error("bad response");
@@ -1403,6 +1405,7 @@ async function doSearch(){
       window._listCache.set(_ck,{d:d,t:Date.now()});
       break;                                   // 성공
     }catch(e){
+      if(_pp&&_pp.on) (_pp.f=_pp.f||[]).push('err'+_try+':'+String(e&&e.message||e).slice(0,40));
       if(_try<2){                              // 700ms→1600ms 후 재시도(사용자엔 '검색 중' 유지)
         const _cr=document.getElementById("cnt"); if(_cr) _cr.textContent="검색 중…";
         await new Promise(r=>setTimeout(r, _try? 1600:700));
