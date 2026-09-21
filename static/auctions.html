@@ -131,6 +131,14 @@
   .tbl th{background:var(--label);color:var(--labeltx);font-size:11px;font-weight:600;padding:9px 6px;border-bottom:1px solid var(--line);}
   .tbl td{padding:10px 8px;border-bottom:1px solid var(--line);font-size:12px;vertical-align:top;}
   .tbl tr:last-child td{border-bottom:none;}.tbl tbody tr:hover{background:#f7f9fc;cursor:pointer;}
+  /* 🔴검색 렉 근본(2026-09-21 주인님 화면 실측: 150행 검색 1회에 6초간 0.58~0.71초 멈춤 — 행을 붙이거나 배지를 채울 때마다
+     표 150행 전체를 다시 배치·칠함). 표 행은 content-visibility가 안 먹는다(표 내부 요소는 격리 불가) → 행을 grid로 바꿔 행마다
+     격리하고, 화면 밖 행은 배치·칠하기를 건너뛴다. 열 폭은 th 폭 그대로(바꾸기 전과 셀 위치·크기 0px 차이 실측). */
+  .tbl,.tbl thead,.tbl tbody{display:block;}
+  .tbl tr{display:grid;grid-template-columns:44px 108px minmax(0,1fr) 132px 168px 106px 92px 54px;}
+  .tbl th,.tbl td{display:block;min-width:0;}
+  .tbl th{text-align:center;align-content:center;}
+  .tbl tbody tr{content-visibility:auto;contain-intrinsic-size:auto 105px;}
   /* 🔴 content-visibility 제거(2026-09-17): 표 150행에 걸었더니 브라우저가 매 레이아웃마다 전 행 화면내외 판정으로 실측 157ms(끄면 4ms) 소요 → enrich·스크롤마다 반복돼 최악 956ms·심함9회 유발. 렉 잡으려던 게 오히려 40배 렉을 만들어 되돌림. */
   .cmid{text-align:center;white-space:nowrap;}.cnum{text-align:right;white-space:nowrap;}
   .thumb{width:78px;height:62px;border-radius:6px;object-fit:cover;background:var(--label);flex:0 0 78px;}
