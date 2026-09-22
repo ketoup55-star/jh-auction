@@ -1960,10 +1960,26 @@ def _grade_buckets(force: bool = False) -> dict:
     #  (sync는 현황만 upsert), 등급 필터/배지는 컬럼 기반이라 과거도 정상. → 현황(11.8k)만 재계산해 가볍고 빠르게.
     res_rows = None
     for _ in range(4):
+        # 🔴크롤러 미분석이라도 명세서를 판독한 법원 수집분(stmt: available)은 명세서 기준 분석이 있으므로 포함(2026-09-22).
+        #  빠져 있으면 상세의 '단조 상향'만 타서, 확약서로 풀린 물건이 목록에서 매수금지로 굳었다(실측 위험 221 vs 목록 금지 343).
+        #  (EXISTS 한 쿼리는 api_cache 전체 스캔으로 2분 초과 → 두 번 나눠 조회)
         res_rows = db.query_pg("SELECT item_key, usage_name, address, tags FROM items "
                                "WHERE data_class='현황' AND search_group='주거용' AND analyzed_at IS NOT NULL")
-        if res_rows is not None:
+        _sk = db.query_pg("SELECT substr(cache_key, 6) AS k FROM api_cache WHERE cache_key LIKE 'stmt:%%' "
+                          "AND data->>'available' = 'true'") if res_rows is not None else None
+        if res_rows is not None and _sk is not None:
+            _have = {x["item_key"] for x in res_rows}
+            _extra = [x["k"] for x in _sk if x["k"] not in _have]
+            for _i in range(0, len(_extra), 2000):
+                _er = db.query_pg("SELECT item_key, usage_name, address, tags FROM items WHERE item_key = ANY(%s) "
+                                  "AND data_class='현황' AND search_group='주거용'", (_extra[_i:_i + 2000],))
+                if _er is None:
+                    _sk = None
+                    break
+                res_rows += _er
+        if res_rows is not None and _sk is not None:
             break
+        res_rows = None
         _t.sleep(1.0)
     if res_rows is None:
         return _abort("res(주거용 현황) 조회 실패")
@@ -7425,7 +7441,8 @@ def _statement_fill_item(c, item_key: str, force: bool = False) -> str:
             from auction_analysis.crawler_analysis import _detect_waiver
             _it = c.execute("SELECT tags, detail_text FROM items WHERE item_key=%s", (item_key,)).fetchone()
             if (_it and (("인수조건변경" in (_it[0] or "")) or _detect_waiver(_it[1] or ""))) \
-                    or _detect_waiver(built.get("caution") or ""):   # 명세서 비고의 확약서도(법원 수집분은 detail_text 없음)
+                    or _detect_waiver(built.get("caution") or "") \
+                    or _detect_waiver(re.sub(r"\s+", "", built.get("caution") or "")):   # 명세서 비고의 확약서도(법원 수집분은 detail_text 없음)
                 upd = []
         for x in upd:                                 # 명세서 우선: '소멸되지 아니하는 것'/대항력 임차인의 임차권·전세권 = 인수
             c.execute("UPDATE item_rights SET status='인수' WHERE id=%s", (x["id"],))

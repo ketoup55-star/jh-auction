@@ -338,7 +338,9 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
         #  포기하고 주택임차권등기의 말소에 동의한다는 확약서 제출')를 못 봤다 → statement_fill이 임차인 행에 넣은 '비고:'도 본다.
         _notes = " ".join(str(x.get("status") or "").split("| 비고:", 1)[1] for x in tenants_raw
                           if "| 비고:" in str(x.get("status") or ""))
-        waiver = _detect_waiver(_notes.replace("[명세서]", ""))
+        _notes = _notes.replace("[명세서]", "")
+        # 명세서 글자는 줄바꿈으로 '포 기'처럼 끊긴다(실측 A05|2025|13380|1) → 공백 뺀 문장으로도 한 번 더
+        waiver = _detect_waiver(_notes) or _detect_waiver(re.sub(r"\s+", "", _notes))
     if not waiver and "인수조건변경" in (it.get("tags") or ""):   # 보증기관(HUG/SGI/HF) 인수조건변경 태그 = 임차보증금 인수 면제
         waiver = "보증기관(HUG·SGI·HF) 인수조건변경 — 임차보증금 미배당분을 낙찰자가 인수하지 않음"
     waived_total = 0
@@ -375,8 +377,19 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
 
     # ── 위험도(사이트 자체 지표) ──
     #  확약서로 인수가 제거된 대항력 임차인은 실제 리스크가 없으므로 '주의' 판정에서 제외.
+    # 확약서(말소동의)로 면제된 임차인 본인의 임차권 등기는 말소 예정 → 인수로 치지 않는다
+    #  (statement_fill이 면제면 등기 '인수' 전환을 안 하는 것과 같은 기준. 실측 A05|2025|13380|1: 면제 3.3억인데 임차권설정 '인수'로 위험)
+    _waived_names = [t.get("name") or "" for t in tenants if t.get("waiver")]
+
+    def _waived_lease(r):
+        if not waiver or "임차권" not in (r.get("type") or ""):
+            return False
+        hd = r.get("holder") or ""
+        # 확약서 문장에 그 임차권자 이름이 나오면 같은 임대차(예 C02|2025|34357|1 'HUG: …임차인 이근호의 …양수인 … 확약')
+        return any(n and (n in hd or hd in n) for n in _waived_names) or bool(hd and len(hd) >= 2 and hd in waiver)
+
     has_assume = assumed_total > 0 or any(
-        r["status"] == "인수" and not _jeonse_extinguished(r) for r in rights)
+        r["status"] == "인수" and not _jeonse_extinguished(r) and not _waived_lease(r) for r in rights)
     has_opp = any(t["has_opposing_power"] and not t.get("waiver") for t in tenants)
     risk = "위험" if has_assume else ("주의" if has_opp else "안전")
 

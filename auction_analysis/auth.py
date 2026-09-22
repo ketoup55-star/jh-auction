@@ -108,7 +108,16 @@ class UserStore:
                 return self._run(sql, params, fetch)
 
     def _run(self, sql: str, params: tuple, fetch: Optional[str]):
-        cur = self.conn.execute(sql, params)
+        try:
+            cur = self.conn.execute(sql, params)
+        except Exception:
+            # 🔴실행 실패 시 트랜잭션을 반드시 닫는다 — 안 닫으면 'idle in transaction'으로 락을 쥔 채 남아 다음 서버 기동의
+            #  UPDATE users가 무한 대기(2026-09-22 실측: CREATE UNIQUE INDEX 세션이 725초 락 → 새 서버가 포트를 못 열었다)
+            try:
+                self.conn.rollback()
+            except Exception:
+                pass
+            raise
         # ★읽기도 반드시 트랜잭션 종료(commit). autocommit=False라 SELECT도 암묵 BEGIN을 열어,
         #   안 닫으면 커넥션이 'idle in transaction'으로 방치→pooler 커넥션 점유·풀 고갈→타 요청 커넥션 대기(간헐 1초+).
         #   (읽기전용이라 commit=rollback과 동일 효과, 트랜잭션만 닫음.)
@@ -327,9 +336,11 @@ class UserStore:
         self._ensure_column("favorites", "memo", "TEXT DEFAULT ''")           # 메모
         self._ensure_column("favorites", "notify", "INTEGER DEFAULT 1")       # 알림/달력 표시
         self._ensure_column("user_folders", "sort_order", "INTEGER DEFAULT 0")  # 폴더 정렬순서
-        self._ex(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_provider "
-            "ON users(provider, provider_id)")
+        # 이미 있으면 건너뜀 — 'IF NOT EXISTS'여도 매 기동마다 users에 락을 잡아, 남은 트랜잭션이 있으면 기동이 멈췄다
+        if not self._ex("SELECT 1 FROM pg_indexes WHERE indexname='idx_users_provider'", (), fetch="one"):
+            self._ex(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_users_provider "
+                "ON users(provider, provider_id)")
         self._seed_grades()
 
     def _seed_grades(self) -> None:
