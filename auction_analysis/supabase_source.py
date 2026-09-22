@@ -575,7 +575,17 @@ class SupabaseSource:
             # 🔴띄어쓰기만 다른 표기까지 함께(2026-09-22 주인님 "빌라·도생 조회하니 한 개도 안 나온다"): 화면·챗봇은 '다세대 (빌라)'·
             #  '도시형생활 주택'을 보내는데 새 수집분은 '다세대(빌라)'·'도시형생활주택'으로 들어와(진행중 빌라 6,299 vs 90, 도생 249 vs 165)
             #  정확일치 필터에 거의 다 빠졌다. DB의 실제 표기 목록으로 확장(1시간 캐시) → 크롤러가 어떤 표기를 써도 같이 잡힌다.
+            _ukeys = {re.sub(r"\s", "", str(u or "")) for u in usages}
+            _want_dos, _want_vil = "도시형생활주택" in _ukeys, "다세대(빌라)" in _ukeys
             usages = self._usage_variants(usages)
+            if _want_dos and not _want_vil:
+                # 도생 검색 = 원래 도생 표기 + 빌라로 들어왔지만 앱이 도생으로 재분류한 것(items.usage_fix, 2026-09-22)
+                _inner = ",".join('"' + u.replace('"', '') + '"' for u in usages)
+                f.append(("or", f"(usage_name.in.({_inner}),usage_fix.eq.도시형생활주택)"))
+                usages = []
+            elif _want_vil and not _want_dos:
+                f.append(("or", "(usage_fix.is.null,usage_fix.neq.도시형생활주택)"))   # 빌라 검색에서 재분류 도생은 뺀다
+        if usages:
             if len(usages) == 1:      # 단일 용도 → eq: (usage_name,case_sort) 부분인덱스를 탐(0.07s).
                 f.append(("usage_name", "eq." + usages[0].replace('"', "")))   # in/ANY는 planner가 case_sort 스캔 택해 51k행 필터→timeout(22s)
             else:
@@ -874,12 +884,58 @@ class SupabaseSource:
             parts.append(f'"{col}" {d}{n}')
         return ", ".join(parts)
 
+    @staticmethod
+    def _or_to_sql(opval: str):
+        """PostgREST or값 '(a.eq.x,b.is.null,c.in.("x","y"))' → ('(… OR …)', params). 지원 밖이면 None."""
+        s = (opval or "").strip()
+        if not (s.startswith("(") and s.endswith(")")):
+            return None
+        s = s[1:-1]
+        parts, depth, cur, q = [], 0, "", False
+        for ch in s:                                  # 최상위 쉼표로만 나눔(괄호·따옴표 안 쉼표는 유지)
+            if ch == '"':
+                q = not q
+            elif not q and ch == "(":
+                depth += 1
+            elif not q and ch == ")":
+                depth -= 1
+            if ch == "," and depth == 0 and not q:
+                parts.append(cur); cur = ""
+            else:
+                cur += ch
+        parts.append(cur)
+        conds, params = [], []
+        for p in parts:
+            m = re.fullmatch(r"([a-z_]+)\.(eq|neq|is|in)\.(.+)", p.strip())
+            if not m:
+                return None
+            col, op, val = m.groups()
+            if op == "eq":
+                conds.append(f'"{col}"=%s'); params.append(val)
+            elif op == "neq":
+                conds.append(f'"{col}"<>%s'); params.append(val)
+            elif op == "is":
+                if val != "null":
+                    return None
+                conds.append(f'"{col}" IS NULL')
+            else:
+                items = [x.strip().strip('"') for x in val.strip("()").split('","')] if val.startswith("(") else None
+                if not items:
+                    return None
+                items = [x.strip('"') for x in items]
+                conds.append(f'"{col}" IN ({",".join(["%s"] * len(items))})'); params += items
+        return "(" + " OR ".join(conds) + ")", params
+
     def _filters_to_sql(self, filters):
         """_filters 튜플 → (where, params). or절 등 변환불가면 None → 호출측이 REST 폴백."""
         conds, params = [], []
         for key, opval in filters:
             if key == "or":
-                return None                      # or절(지역·시도·유형복수) → REST가 안전
+                _o = self._or_to_sql(opval)      # 단순 or(용도 재분류 등: eq/neq/is.null/in)만 SQL로
+                if _o is None:
+                    return None                  # 그 밖 or절(지역·시도·유형복수) → REST가 안전
+                conds.append(_o[0]); params += _o[1]
+                continue
             op = opval.split(".", 1)[0]
             val = opval.split(".", 1)[1] if "." in opval else ""
             if op == "eq": conds.append(f'"{key}"=%s'); params.append(val)
@@ -926,7 +982,7 @@ class SupabaseSource:
                 "area_text,land_area,building_area,tags,appraisal_price,min_price,"
                 "sale_price,sale_rate,fail_count,sell_date,result,status_reason,"
                 "bid_count,sale_2nd_price,hit_count,thumb_url,buy_grade,data_class,"
-                "est_price,expected_bid,expbid_count,profit,kb_count,similar_count,apt_demand")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익·호가·유사거래·수요배지 포함(fetch 왕복·온-패스 compute 제거)
+                "est_price,expected_bid,expbid_count,profit,kb_count,similar_count,apt_demand,usage_fix")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익·호가·유사거래·수요배지 포함(fetch 왕복·온-패스 compute 제거)
         iks = kw.get("item_keys")
         if iks is not None and len(iks) > 600:
             # 큰 item_keys 집합 → 청크별 상위(offset+limit) 조회 후 병합·정렬·슬라이스(분산 top-k).
@@ -1158,7 +1214,8 @@ class SupabaseSource:
             "case_no": row.get("case_no"),
             "obj_no": row.get("obj_no"),
             "court": row.get("court_name"),
-            "usage": row.get("usage_name"),
+            "usage": row.get("usage_fix") or row.get("usage_name"),   # 앱 재분류(도생 등) 우선 — 크롤러 usage_name은 불변
+            "usage_raw": row.get("usage_name"),
             "group": row.get("search_group"),
             "address": row.get("address"),
             "area_text": row.get("area_text"),

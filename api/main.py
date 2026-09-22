@@ -5106,6 +5106,7 @@ def _start_prewarm() -> None:
         threading.Thread(target=_col_sync_loop, daemon=True).start()        # api_cache→items 컬럼(시세·예상낙찰·차익·호가·유사거래) 20분마다
         threading.Thread(target=_est_col_warm_loop, daemon=True).start()    # est 직접기록 예열(cache_save 우회) — 아파트 시세 커버리지 성장·유지
         threading.Thread(target=_brief_missing_loop, daemon=True).start()   # 준공·세대 brief 없음·옛형식 → 계산·Supabase 저장(DISABLE_PREWARM 무관)
+        threading.Thread(target=_dosaeng_loop, daemon=True).start()         # 빌라로 들어온 도생 재분류(items.usage_fix) — 신규 자동
     try:
         _kb_apply_token()   # Supabase 공유 토큰(api_cache kb:auth) 로드 — 시작 시 1회, 가벼움(브라우저 없음)
     except Exception:
@@ -6652,6 +6653,123 @@ def _brief_fill_missing(limit: int = 100) -> int:
         print(f"[brief_missing] 시도횟수 기록 실패: {str(e)[:80]}", flush=True)
     print(f"[brief_missing] 완료 {res.get('stats')}", flush=True)
     return len(rows)
+
+
+# ── 도생 재분류(2026-09-22 주인님 "도생 재분류 만들어") ──
+#  법원 직접수집분은 도시형생활주택도 '다세대(빌라)'로 들어온다(법원 사이트에 분류 없음 — 데이터팀). 크롤러 칸(usage_name)은 두고
+#  앱 칸 items.usage_fix에 '도시형생활주택'을 적는다. 근거 = 건축물대장 표제부·층별개요 주용도/기타용도 또는 감정평가서 본문의 '도시형'.
+#  실측(옛 분류 표본 25건씩): 도생 18/25(72%) 잡힘, 빌라 오탐 1/25(4%). 적혀 있지 않은 도생(28%)은 빌라로 남는다(정직한 한계).
+_DOSAENG = "도시형생활주택"
+_DOSAENG_VER = 1
+_DOSAENG_SQL = """
+    SELECT i.item_key, i.address FROM items i
+      LEFT JOIN api_cache c ON c.cache_key = 'dosaeng:'||i.item_key
+     WHERE (i.is_active OR i.data_class = '현황') AND i.usage_name ~ '다세대'
+       AND (c.data IS NULL OR coalesce((c.data->>'v')::int, 0) < %s
+            OR ((c.data->>'dosaeng') IS NULL AND coalesce((c.data->>'tries')::int, 0) < 3
+                AND coalesce((c.data->>'at')::float, 0) < extract(epoch from now()) - 21600))
+     ORDER BY i.is_active DESC, i.first_seen DESC NULLS LAST
+     LIMIT %s"""
+_dosaeng_stat: dict = {"last": None, "done": 0, "dosaeng": 0}
+
+
+def _appraisal_text(item_key: str) -> str | None:
+    """감정평가서 본문(앞 14쪽) 글자. 문서 없음 ''. 읽기 실패 None."""
+    try:
+        r = auction_db.query_pg("SELECT r2_key FROM media WHERE item_key=%s AND kind='감정평가서' AND r2_key IS NOT NULL "
+                                "ORDER BY created_at DESC LIMIT 1", (item_key,))
+    except Exception:
+        return None
+    if r is None:
+        return None
+    if not r or not auction_db.r2:
+        return ""
+    try:
+        b = httpx.get(f"{auction_db.r2}/{r[0]['r2_key']}", timeout=40, follow_redirects=True).content
+        if not b.startswith(b"%PDF-"):
+            return b.decode("utf-8", "ignore")        # html·json 감정평가서
+        import io as _io
+        import pdfplumber
+        with _STMT_PDF_SEM:
+            with pdfplumber.open(_io.BytesIO(b)) as d:
+                return "\n".join((p.extract_text() or "") for p in d.pages[:14])
+    except Exception:
+        return None
+
+
+def _dosaeng_judge(item_key: str, addr: str) -> dict:
+    """{'dosaeng': True/False/None(조회 실패), 'src': 근거}. 대장(표제부·층별) 먼저, 없으면 감정평가서."""
+    codes = None
+    try:
+        r = resolve_bjd(re.split(r",", addr)[0])
+        if r and not (r[2] == "0000" and r[3] == "0000"):
+            codes = (r[0], r[1], r[2], r[3])
+        else:
+            codes = _kakao_jibun(addr)
+    except Exception:
+        codes = None
+    purps = building.purposes_raw(*codes) if codes else []
+    if purps and any("도시형" in p for p in purps):
+        return {"dosaeng": True, "src": "건축물대장: " + next(p for p in purps if "도시형" in p)[:60]}
+    txt = _appraisal_text(item_key)
+    if txt and "도시형" in txt:
+        m = re.search(r".{0,20}도시형.{0,20}", txt.replace("\n", " "))
+        return {"dosaeng": True, "src": "감정평가서: " + (m.group(0).strip() if m else "도시형")}
+    if purps is None or txt is None:
+        return {"dosaeng": None, "src": "조회 실패"}   # 확정 못함 → 6시간 뒤 최대 3회 재시도
+    return {"dosaeng": False, "src": "대장·감정평가서에 도시형 기재 없음"}
+
+
+def _dosaeng_fill(limit: int = 60) -> int:
+    if _IS_CLOUD:
+        return 0
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return 0
+    import psycopg
+    import time as _t
+    with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+        rows = c.execute(_DOSAENG_SQL, (_DOSAENG_VER, limit)).fetchall()
+        if not rows:
+            return 0
+        n_d = 0
+
+        def one(kv):
+            k, a = kv
+            try:
+                return k, _dosaeng_judge(k, a or "")
+            except Exception as e:
+                return k, {"dosaeng": None, "src": f"오류 {str(e)[:40]}"}
+        with _cf.ThreadPoolExecutor(max_workers=4) as ex:
+            res = list(ex.map(one, rows))
+        for k, j in res:
+            old = c.execute("SELECT data FROM api_cache WHERE cache_key=%s", ("dosaeng:" + k,)).fetchone()
+            tries = int(((old[0] or {}).get("tries") or 0)) + 1 if (old and j["dosaeng"] is None) else 0
+            auction_db.cache_save("dosaeng:" + k, {"v": _DOSAENG_VER, "dosaeng": j["dosaeng"], "src": j["src"],
+                                                    "tries": tries, "at": _t.time()})
+            if j["dosaeng"] is True:
+                n_d += 1
+                c.execute("UPDATE items SET usage_fix=%s WHERE item_key=%s AND usage_fix IS DISTINCT FROM %s",
+                          (_DOSAENG, k, _DOSAENG))
+            elif j["dosaeng"] is False:
+                c.execute("UPDATE items SET usage_fix=NULL WHERE item_key=%s AND usage_fix=%s", (k, _DOSAENG))
+    _dosaeng_stat.update({"last": _t.strftime("%Y-%m-%d %H:%M:%S"), "done": _dosaeng_stat["done"] + len(rows),
+                          "dosaeng": _dosaeng_stat["dosaeng"] + n_d})
+    print(f"[dosaeng] 빌라 {len(rows)}건 판정 → 도생 {n_d}건", flush=True)
+    return len(rows)
+
+
+def _dosaeng_loop() -> None:
+    """밀린 게 있으면 1분 간격, 없으면 10분마다 신규 빌라 확인(새로 들어온 물건도 자동 재분류)."""
+    import time as _t
+    _t.sleep(240)
+    while True:
+        n = 0
+        try:
+            n = _dosaeng_fill(60)
+        except Exception as e:
+            print(f"[dosaeng] 실패: {str(e)[:120]}", flush=True)
+        _t.sleep(60 if n else 600)
 
 
 def _brief_missing_loop() -> None:

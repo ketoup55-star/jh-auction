@@ -19,7 +19,8 @@ import httpx
 from .bjd_codes import resolve_bjd
 
 _URL = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrTitleInfo"
-_URL_RECAP = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo"  # 총괄표제부 = 집합건물 단지 총세대수(표제부는 동별/0이라 소규모 아파트 세대수 누락)
+_URL_FLR = "https://apis.data.go.kr/1613000/BldRgstHubService/getBrFlrOulnInfo"     # 층별개요(층마다 용도 — 도생 재분류 근거)
+_URL_RECAP ="https://apis.data.go.kr/1613000/BldRgstHubService/getBrRecapTitleInfo"  # 총괄표제부 = 집합건물 단지 총세대수(표제부는 동별/0이라 소규모 아파트 세대수 누락)
 _UA = {"User-Agent": "Mozilla/5.0"}
 
 
@@ -58,6 +59,36 @@ class BuildingSource:
             return None
         sgg, bjd, bun, ji = r
         return self.info_codes(sgg, bjd, bun, ji, collective=collective, _ck=ck)
+
+    def purposes_raw(self, sgg: str, bjd: str, bun: str, ji: str) -> list | None:
+        """표제부 + 층별개요의 주용도·기타용도 원문 목록(도생 재분류용, 2026-09-22). 조회 실패 None, 기록 없음 []."""
+        import time
+        if not self.key or time.time() < self._quota_block_until:
+            return None
+        from .api_throttle import throttle
+        out: list = []
+        for url in (_URL, _URL_FLR):
+            items = None
+            for _try in range(3):
+                try:
+                    throttle()
+                    resp = httpx.get(url, params={"serviceKey": self.key, "sigunguCd": sgg, "bjdongCd": bjd,
+                                                  "bun": f"{int(bun):04d}", "ji": f"{int(ji):04d}", "numOfRows": "100",
+                                                  "_type": "xml"}, headers=_UA, timeout=25)
+                    if "quota exceeded" in resp.text or "LIMITED_NUMBER" in resp.text:
+                        self._quota_block_until = time.time() + 1800
+                        return None
+                    if "PER_SECOND" in resp.text:
+                        time.sleep(1.0 + _try)
+                        continue
+                    items = ET.fromstring(resp.text).findall(".//item")
+                    break
+                except Exception:
+                    time.sleep(1.0 + _try)
+            if items is None:
+                return None
+            out += [((i.findtext("mainPurpsCdNm") or "") + " " + (i.findtext("etcPurps") or "")).strip() for i in items]
+        return out
 
     def info_codes(self, sgg: str, bjd: str, bun: str, ji: str, collective: bool = False, _ck: str | None = None) -> dict | None:
         """법정동코드·지번으로 직접 조회 — 도로명주소를 카카오 주소검색으로 지번 변환한 경우(2026-09-21: 세대 빈칸 1,493건의
