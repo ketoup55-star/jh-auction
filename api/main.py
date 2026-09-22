@@ -2570,10 +2570,12 @@ def _enrich_list(items: list) -> None:
                               b.get("elevator") if isinstance(b, dict) else None)
         if ev:
             it["elev_caution"] = ev.split(" — ")[0].replace(" ", "")   # "승강기없음·5층"
-        s = _similar_cache.get(k)
+        # 유사거래(반경1km 빌라 실거래)는 지금 용도가 빌라·연립·도생일 때만 — 계산 당시 빌라였다가 용도가 바뀐 물건(아파트 105·
+        #  오피스텔 93·근린상가 75 등, 2026-09-22 실측)에 옛 건수가 계속 붙던 것 차단
+        s = _similar_cache.get(k) if _SIMILAR_USAGE_RE.search(it.get("usage") or "") else None
         if s:
             it["similar"] = s
-        elif it.get("similar_count") is not None:   # 컬럼 폴백 — 클라우드는 startup 블롭 대신 항상 최신 similar_count 컬럼 사용
+        elif it.get("similar_count") is not None and _SIMILAR_USAGE_RE.search(it.get("usage") or ""):   # 컬럼 폴백 — 클라우드는 startup 블롭 대신 항상 최신 similar_count 컬럼 사용
             it["similar"] = it["similar_count"]
         e = villa.get(k) or apt.get(k)
         if isinstance(e, dict) and e.get("price"):
@@ -3180,6 +3182,7 @@ import json as _json                                          # noqa: E402
 import concurrent.futures as _cf                               # noqa: E402
 _BRIEF_FILE = os.path.join(_ROOT, "brief_cache.json")
 _SIMILAR_FILE = os.path.join(_ROOT, "similar_cache.json")
+_SIMILAR_USAGE_RE = re.compile(r"다세대|연립|빌라|도시형")   # 유사거래(반경1km 빌라 실거래) 대상 용도 — 계산·표시·컬럼 동기화 공통
 
 
 def _load_brief_cache() -> dict:
@@ -4722,7 +4725,11 @@ def _col_enrich_sync() -> None:
         # 유사거래 건수 — similar_index 블롭(jsonb) 전개 후 조인(변경분만). 舊 startup 블롭 방식 대체
         """UPDATE items i SET similar_count = kv.value::int
            FROM (SELECT key, value FROM api_cache, jsonb_each_text(data) WHERE cache_key='similar_index') kv
-           WHERE kv.key = i.item_key AND kv.value ~ '^[0-9]+$' AND i.similar_count IS DISTINCT FROM kv.value::int""",
+           WHERE kv.key = i.item_key AND kv.value ~ '^[0-9]+$' AND i.similar_count IS DISTINCT FROM kv.value::int
+             AND coalesce(i.usage_fix, i.usage_name, '') ~ '다세대|연립|빌라|도시형'""",
+        # 용도가 빌라·연립·도생이 아니게 된 물건의 옛 유사거래 건수는 비운다(2026-09-22: 아파트·오피스텔·상가에 옛 건수가 남아 표시)
+        """UPDATE items SET similar_count = NULL
+           WHERE similar_count IS NOT NULL AND coalesce(usage_fix, usage_name, '') !~ '다세대|연립|빌라|도시형'""",
         # 호가(KB 동일평형±3㎡ 매매 매물수) — kb_listing JOIN 집계(변경분만). KB크롤러 갱신 반영, Python 엔드포인트와 8/8 일치 검증
         #  🔴2026-09-18: 면적을 area_text '전용'에서만 읽어 목록 아파트 82%가 단지 전 평형 매물수였다 → _area_num과 같은 순서
         #  (건물면적 전용 → 건물면적 숫자 → area_text 전용 → area_text 숫자). 진행물건(is_active)도 포함.
@@ -7789,6 +7796,12 @@ def auction_similar(keys: str) -> dict:
     """목록용 유사거래 건수 배치 — 캐시된 것만 즉시 반환, 미캐시는 백그라운드(요청 블로킹 금지).
     (舊: 미캐시를 요청 스레드에서 계산 → 웜에도 2.6초. _compute_similar가 반경1km 유사거래라 무거움)"""
     klist = [k for k in keys.split(",") if k][:80]
+    # 지금 용도가 빌라·연립·도생인 물건만(옛 캐시가 아파트·오피스텔 등에 붙던 것 차단). 조회 실패면 기존대로.
+    _u = auction_db.query_pg("SELECT item_key, coalesce(usage_fix, usage_name, '') AS u FROM items WHERE item_key = ANY(%s)",
+                             (klist,))
+    if _u is not None:
+        _ok = {r["item_key"] for r in _u if _SIMILAR_USAGE_RE.search(r["u"] or "")}
+        klist = [k for k in klist if k in _ok]
     todo = [k for k in klist if k not in _similar_cache]
     if todo:
         _bg_fill(todo, _get_similar, _save_similar_cache)
