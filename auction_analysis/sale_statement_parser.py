@@ -127,6 +127,10 @@ def parse_sale_statement(pdf_bytes: bytes) -> dict:
             full = _dedouble("\n".join((p.extract_text() or "") for p in pdf.pages))
     except Exception as e:
         return {"available": False, "reason": f"매각물건명세서 분석 실패: {type(e).__name__}"}
+    # 🔴글자 없는 PDF(그림만 묶은 스캔)는 '읽음'이 아니다(2026-09-22 실측: 서울중앙 2022타경101244 그림 PDF — 글자 0자인데
+    #  예전 코드는 available=True·임차인 0명으로 돌려줘, 실제 임차인 3명(박광서 등) 물건이 '임차인 없음'으로 저장될 뻔했다).
+    if len(re.sub(r"\s", "", full)) < 50:
+        return {"available": False, "reason": "글자 없는 PDF(그림) — 판독 불가"}
 
     # 최선순위 설정: 표에서 '최선순위' 셀 다음의 날짜+권리 셀
     senior = ""
