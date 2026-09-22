@@ -837,11 +837,14 @@ class SupabaseSource:
                     nm = r.get("usage_name") or ""
                     m.setdefault(re.sub(r"\s", "", nm), set()).add(nm)
                 c["map"], c["ts"] = m, _t.time()
+        # 같은 분류인데 이름이 다른 표기(2026-09-22 법원 직접수집분: '다가구주택' 72건 — 화면 '다가구 (원룸등)'로 안 잡힘)
+        alias = {"다가구(원룸등)": ("다가구주택",), "다가구주택": ("다가구(원룸등)",)}
         out: list = []
         for u in (usages if isinstance(usages, (list, tuple, set)) else [usages]):
             u = str(u or "")
             key = re.sub(r"\s", "", u)
-            cand = ([u] + sorted(c["map"].get(key, ()))) if c["map"] else [u, key]   # DB 표기가 있으면 그것만(eq 유지 가능)
+            keys = (key,) + alias.get(key, ())
+            cand = ([u] + sorted(v for kk in keys for v in c["map"].get(kk, ()))) if c["map"] else [u, key]   # DB 표기가 있으면 그것만
             for v in cand:
                 if v and v not in out:
                     out.append(v)
