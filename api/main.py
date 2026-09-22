@@ -3789,8 +3789,57 @@ def _kb_households(item_key: str):
     return h if (conf >= 1.0 and h >= 2) else None
 
 
+def _kb_households_by_loc(item_key: str, addr: str):
+    """KB 단지와 연결 안 된 물건: 같은 법정동 KB 단지 중 이름 핵심어가 같고(차수·단지번호 다르면 제외) 위치가 60m 안인 곳 1개의 세대수.
+    주인님 승인(2026-09-22 "1번 진행해"). 드라이런: 승림10차 13m·하나로타운1차 15m·갤럭시더정릉 17m·동탄위버폴리스 28m·
+    우성르보아파크 41m / '6동'·'1동' 같은 헐거운 이름 후보는 311m~1.5km라 거리에서 걸러짐."""
+    import math
+    from auction_analysis import kapt_source as _ks
+    try:
+        r = resolve_bjd(re.split(r",", addr)[0])
+        if not r:
+            return None
+        m = re.search(r"\(([^)]*?),([^)]+)\)", addr) or re.search(r"\d+(?:-\d+)?\s+([^\s,]{2,}?)\s+(?:제?\S*\d+동|제?\d+층|\d+층)", addr)
+        nm = (m.group(m.lastindex) if m else "").strip()
+        t = _ks._norm(nm)
+        tcore = _ks._core(t)
+        if len(tcore) < 2:
+            return None
+        rows = auction_db.query_pg("SELECT name, households, lat, lng FROM kb_complex WHERE bubcode = %s AND households > 1 "
+                                   "AND lat IS NOT NULL", (r[0] + r[1],)) or []
+        cands = []
+        for x in rows:
+            kn = re.sub(r"\(.*?\)", "", x.get("name") or "")
+            ncore = _ks._core(kn)
+            if not ncore or not (tcore in ncore or ncore in tcore):
+                continue
+            ti, ni = _ks._ident_set(t), _ks._ident_set(_ks._norm(kn))
+            if ti and ni and not (ti & ni):           # 13차≠14차, 1단지≠3단지
+                continue
+            cands.append(x)
+        if not cands:
+            return None
+        key = os.environ.get("KAKAO_REST_KEY")
+        q = re.split(r",|\s(?=\S*\d+동\b)|\s(?=제?\S*\d+층)|\s(?=제?\S*\d+호)", addr)[0].strip()
+        j = httpx.get("https://dapi.kakao.com/v2/local/search/address.json", params={"query": q},
+                      headers={"Authorization": "KakaoAK " + (key or "")}, timeout=10).json()
+        d = (j.get("documents") or [None])[0]
+        if not d:
+            return None
+        la, lo = float(d["y"]), float(d["x"])
+
+        def _dist(x):
+            p1, p2 = math.radians(la), math.radians(float(x["lat"]))
+            dp, dl = p2 - p1, math.radians(float(x["lng"]) - lo)
+            return 2 * 6371000 * math.asin(math.sqrt(math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2))
+        near = [x for x in cands if _dist(x) <= 60]
+        return int(near[0]["households"]) if len(near) == 1 else None
+    except Exception:
+        return None
+
+
 _kakao_jibun_cache: dict = {}
-_BRIEF_VER = 4   # 2 = 도로명주소 카카오 지번 변환, 3 = K-apt 지번 매칭, 4 = KB 단지정보 세대수 폴백(2026-09-21)
+_BRIEF_VER = 5   # 2 = 도로명주소 카카오 지번 변환, 3 = K-apt 지번 매칭, 4 = KB 단지정보 세대수 폴백, 5 = KB 이름+위치(60m) 대조(2026-09-22)
 
 
 def _kakao_jibun(addr: str):
@@ -3993,8 +4042,9 @@ def _compute_brief(item_key: str) -> dict:
             _hh_src = ("doc" if (un and doc.get("units") == un) else "api" if un else None)
             # KB 단지정보(주인님 승인 2026-09-21 "KB로 채워"): K-apt(이름·지번)·표제부·문서로 못 구한 아파트만, 연결 신뢰도 1.0일 때.
             #  실측: 빈칸 표본 17 중 13건 KB에 있음(장산 72·동촌 99·대준블루온 174 등), 기존값과 대조 일치 K-apt 88.6%.
-            if not un and re.search(r"아파트", usage):
-                _kbh = _kb_households(item_key)
+            if not un and _collective:
+                # 연결된 KB 단지(아파트, 신뢰도 1.0) → 없으면 이름+위치(60m) 대조(아파트·오피스텔·빌라·도생, 2026-09-22 승인)
+                _kbh = (_kb_households(item_key) if re.search(r"아파트", usage) else None) or _kb_households_by_loc(item_key, addr)
                 if _kbh and _hh_plausible(_kbh, "세대", usage, addr):
                     un, ul = _kbh, "세대"
                     hh_disp, hh_label, hh_ok, _hh_src = str(_kbh), "세대", True, "kb"
