@@ -120,13 +120,18 @@ _HDR = [
 
 
 def parse_sale_statement(pdf_bytes: bytes) -> dict:
-    out: dict = {"available": False, "tenants": []}
     try:
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
             tables = [t for p in pdf.pages for t in (p.extract_tables() or [])]   # 전 페이지(다가구 임차인 표는 수쪽에 걸침 — 1쪽만 읽으면 대부분 누락)
             full = _dedouble("\n".join((p.extract_text() or "") for p in pdf.pages))
     except Exception as e:
         return {"available": False, "reason": f"매각물건명세서 분석 실패: {type(e).__name__}"}
+    return _parse_core(tables, full)
+
+
+def _parse_core(tables: list, full: str) -> dict:
+    """표(행=셀 목록)·본문 글자 → 임차인·최선순위·배당요구종기·요약. PDF(pdfplumber)·법원 JSON(글자+좌표) 공용."""
+    out: dict = {"available": False, "tenants": []}
     # 🔴글자 없는 PDF(그림만 묶은 스캔)는 '읽음'이 아니다(2026-09-22 실측: 서울중앙 2022타경101244 그림 PDF — 글자 0자인데
     #  예전 코드는 available=True·임차인 0명으로 돌려줘, 실제 임차인 3명(박광서 등) 물건이 '임차인 없음'으로 저장될 뻔했다).
     if len(re.sub(r"\s", "", full)) < 50:
@@ -148,6 +153,10 @@ def parse_sale_statement(pdf_bytes: bytes) -> dict:
                 break
         if senior:
             break
+    if not senior:                          # 표에 없으면 본문에서(법원 JSON은 표 테두리가 없어 '최선순위' 셀 구조가 없다)
+        _ms = re.search(r"최선순위[\s\S]{0,80}?(\d{4}\s*\.\s*\d{1,2}\s*\.\s*\d{1,2}\s*\.?\s*[가-힣()]+)", full)
+        if _ms:
+            senior = re.sub(r"\s+", " ", _ms.group(1)).strip()
     # 배당요구종기 — 셀 안 줄바꿈('배당요구종\n기')이 있어 글자 사이 공백 허용. 본문에서 못 찾으면 표에서('배당요구종' 셀 다음 날짜 셀).
     deadline = None
     dl_date = None
@@ -324,3 +333,321 @@ def _summary_sections(full: str) -> dict:
     caution = section("비고", ["※", "개인정보유출", "개인정보 유출", "등록자:"])
     caution = re.sub(r"^[>\s]+", "", caution)   # '비고>' 의 '>' 잔여 제거
     return {"surviving_rights": surviving, "ground_rights": ground, "caution": caution}
+
+
+# ───────── 법원 JSON(매각물건명세서_글자) → 표·본문 ─────────
+#  2026-09-22: 법원 직접수집분 명세서는 PDF가 아니라 법원 뷰어 글자 레이어 JSON([페이지JSON문자열...], 각 블록
+#  {text, rect[글자마다 left/right/bottom/top]})로 온다. 표 테두리가 없어 pdfplumber 표 추출을 못 쓰므로 헤더 낱말 위치로
+#  열 경계를 잡고 글자를 칸에 넣어 PDF와 같은 모양의 표를 만든 뒤 _parse_core(같은 규칙)로 넘긴다.
+_JSON_COLS = (   # (필드, 헤더 기준 낱말들 — 앞에서부터 찾음)
+    ("name", ("점유자", "성명")), ("part", ("부분",)), ("source", ("정보출처", "구분")), ("right", ("점유의", "권원")),
+    ("period", ("임대차기간", "점유기간")), ("deposit", ("보증금",)), ("rent", ("차임",)),
+    ("movein", ("전입신고",)), ("fixed", ("확정일자",)), ("demand", ("요구여부", "배당요구일자")),
+)
+_JSON_HDR_LABEL = {"name": "점유자성명", "part": "점유부분", "source": "정보출처구분", "right": "점유의권원",
+                   "period": "임대차기간", "deposit": "보증금", "rent": "차임", "movein": "전입신고일자",
+                   "fixed": "확정일자", "demand": "배당요구여부"}
+_HDR_WORDS = re.compile(r"점유자|성\s*명|부분|정보출처|구\s*분|점유의|권\s*원|임대차기간|점유기간|보\s*증\s*금|차\s*임|"
+                        r"전입신고|외국인등록|류지변경|확정일자|배당|요구여부|일자·사업자|사업자등|록\s*신청일자|등록\(체")
+_END_RE = re.compile(r"^\s*(<\s*비\s*고|※|비고|등기된 부동산|매각에 따라|최선순위 설정일자)")
+
+
+def _json_pages(data) -> list:
+    import json as _json
+    j = _json.loads(data) if isinstance(data, (bytes, str)) else data
+    pages = []
+    for p in (j if isinstance(j, list) else [j]):
+        try:
+            pages.append(_json.loads(p) if isinstance(p, str) else p)
+        except Exception:
+            pages.append([])
+    return pages
+
+
+def _blocks(page) -> list:
+    """[(y, x0, x1, text, [(xc, ch)...])] 위에서 아래(y 큰→작은), 왼→오 순."""
+    out = []
+    for it in page or []:
+        t = it.get("text") or ""
+        rs = it.get("rect") or []
+        if not t or not rs:
+            continue
+        if len(rs) == len(t):
+            chars = [(((r.get("left") or 0) + (r.get("right") or 0)) / 2, ch) for ch, r in zip(t, rs)]
+        else:                               # 글자 수와 칸 수가 다르면 블록 폭에 고르게
+            x0, x1 = rs[0].get("left") or 0, rs[-1].get("right") or 0
+            w = (x1 - x0) / max(len(t), 1)
+            chars = [(x0 + w * (i + 0.5), ch) for i, ch in enumerate(t)]
+        out.append((rs[0].get("bottom") or 0, rs[0].get("left") or 0, rs[-1].get("right") or 0, t, chars))
+    out.sort(key=lambda b: (-b[0], b[1]))
+    return out
+
+
+def _lines_of(blocks, tol: float = 2.5) -> list:
+    """같은 높이 블록을 한 줄로: [(y, [(xc, ch)...], 원문)]."""
+    lines = []
+    for b in blocks:
+        if lines and abs(lines[-1][0] - b[0]) <= tol:
+            lines[-1][1].extend(b[4]); lines[-1][2].append(b[3])
+        else:
+            lines.append([b[0], list(b[4]), [b[3]]])
+    return [(y, sorted(ch, key=lambda c: c[0]), " ".join(tx)) for y, ch, tx in lines]
+
+
+def _col_centers(hdr_lines) -> dict:
+    """헤더 줄들에서 열 기준 낱말의 x 중심."""
+    centers = {}
+    for field, words in _JSON_COLS:
+        for w in words:
+            for _, chars, _ in hdr_lines:
+                s = "".join(ch for _, ch in chars)
+                idx = [i for i, (_, ch) in enumerate(chars) if not ch.isspace()]
+                s2 = "".join(chars[i][1] for i in idx)
+                k = s2.find(w)
+                if k >= 0:
+                    xs = [chars[idx[i]][0] for i in range(k, k + len(w))]
+                    centers[field] = sum(xs) / len(xs)
+                    break
+            if field in centers:
+                break
+    return centers
+
+
+def _words(chars) -> list:
+    """한 줄 글자 → 단어 [(첫 글자 x, 단어, 끝 글자 x)]. 공백 글자나 넓은 간격(>9)에서 끊는다."""
+    out, cur, x0, px, lx = [], "", None, None, None
+    for x, ch in chars:
+        if ch.isspace() or (px is not None and x - px > 9):
+            if cur:
+                out.append((x0, cur, lx))
+            cur, x0 = "", None
+            if ch.isspace():
+                px = x
+                continue
+        if not cur:
+            x0 = x
+        cur += ch
+        px = lx = x
+    if cur:
+        out.append((x0, cur, lx))
+    return out
+
+
+def _line_cols(chars, bounds, name_ci=None) -> list:
+    """한 줄 → 열별 단어 목록. 단어는 첫 글자가 놓인 열로(긴 이름 '주택도시보증공사'가 옆 칸으로 넘쳐도 이름 칸).
+    성명 칸에서 '('로 열린 단어는 ')'까지 이어서 성명으로('(임차인 : 김예림)')."""
+    per = [[] for _ in bounds]
+    open_name = False
+    last_end = None
+    for x, w, xe in _words(chars):
+        ci = next((i for i, (lo, hi) in enumerate(bounds) if lo <= x < hi), None)
+        # 괄호로 이어붙이기는 성명 칸 바로 옆(경계+25pt)이면서 직전 이름 단어에 붙어 있을 때(간격 ≤12)만 —
+        #  다른 칸 날짜·금액·'전부'까지 빨아들이지 않게(실측 26건)
+        if open_name and name_ci is not None and x < bounds[name_ci][1] + 25 and last_end is not None and x - last_end <= 12:
+            ci = name_ci
+        if ci is None:
+            continue
+        per[ci].append(w)
+        if name_ci is not None and ci == name_ci:
+            open_name = (open_name or "(" in w) and ")" not in w
+            last_end = xe
+    return per
+
+
+def _cells_of(lines, bounds, name_ci=None) -> list:
+    """줄들 → 열별 글자(줄 사이는 공백)."""
+    cols = [[] for _ in bounds]
+    for _, chars, _ in lines:
+        for ci, ws in enumerate(_line_cols(chars, bounds, name_ci)):
+            if ws:
+                cols[ci].append(" ".join(ws))
+    return [" ".join(c for c in col if c) for col in cols]
+
+
+def _split_names(block, anchors) -> list:
+    """이름 줄들(block=[(y, 글자)] 위→아래)을 len(anchors)개 연속 구간으로: Σ|구간 가운데 y − 앵커 y| 최소."""
+    n, k = len(block), len(anchors)
+    if k <= 1 or n < k:
+        return ["".join(t for _, t in block)] * max(k, 1)
+    ys = [y for y, _ in block]
+    INF = float("inf")
+    cost = [[INF] * (n + 1) for _ in range(k + 1)]
+    back = [[0] * (n + 1) for _ in range(k + 1)]
+    cost[0][0] = 0.0
+    for i in range(1, k + 1):
+        for e in range(i, n - (k - i) + 1):
+            for s in range(i - 1, e):
+                if cost[i - 1][s] == INF:
+                    continue
+                c = cost[i - 1][s] + abs((ys[s] + ys[e - 1]) / 2 - anchors[i - 1])
+                if c < cost[i][e]:
+                    cost[i][e], back[i][e] = c, s
+    out, e = [], n
+    for i in range(k, 0, -1):
+        s = back[i][e]
+        out.append("".join(t for _, t in block[s:e]))
+        e = s
+    return out[::-1]
+
+
+def _assign_rows(anchors, centers, has_prev: bool) -> list:
+    """행(위→아래, 기준 높이 anchors) → 이름 덩어리(위→아래, 가운데 centers) 번호. 순서를 지키며 각 덩어리에 연속된 행 묶음을
+    주되 '덩어리 가운데 ≈ 그 묶음 첫·끝 행 가운데'가 되도록(동적계획). 병합 칸 이름은 걸친 행들의 가운데에 적히므로
+    가장 가까운 이름을 고르면 이웃 이름이 붙는다(실측 B01|2023|106707|1: 등기 행에 위 사람 이름).
+    쪽 맨 위 이름 없는 행들은 -1(앞 쪽 마지막 이름을 이어받음). 덩어리가 행보다 많으면 일부 덩어리는 건너뛴다(벌점)."""
+    R, B = len(anchors), len(centers)
+    if not B:
+        return [-1 if has_prev else None] * R
+    INF = float("inf")
+    SKIP, LEAD = 40.0, (8.0 if has_prev else 60.0)   # 이어받기는 행마다 소액(맞는 이름이 있으면 그쪽을 고르게)
+    # dp[i][j] = 행 i개·덩어리 j개를 쓴 최소 비용
+    dp = [[INF] * (B + 1) for _ in range(R + 1)]
+    bk = [[None] * (B + 1) for _ in range(R + 1)]
+    dp[0][0] = 0.0
+    for i in range(1, R + 1):                           # 맨 앞 이어받기 묶음(덩어리 없음)
+        dp[i][0] = LEAD * i
+        bk[i][0] = ("lead", 0)
+    for j in range(1, B + 1):
+        for i in range(0, R + 1):
+            if dp[i][j - 1] + SKIP < dp[i][j]:          # 덩어리 j-1 건너뜀
+                dp[i][j], bk[i][j] = dp[i][j - 1] + SKIP, ("skip", i)
+            for s in range(0, i):
+                if dp[s][j - 1] == INF:
+                    continue
+                c = dp[s][j - 1] + abs(centers[j - 1] - (anchors[s] + anchors[i - 1]) / 2)
+                if c < dp[i][j]:
+                    dp[i][j], bk[i][j] = c, ("take", s)
+    out = [None] * R
+    i, j = R, B
+    while i > 0 or j > 0:
+        kind, s = bk[i][j] if bk[i][j] else ("lead", 0)
+        if kind == "lead":
+            for r in range(0, i):
+                out[r] = -1
+            break
+        if kind == "skip":
+            j -= 1
+            continue
+        for r in range(s, i):
+            out[r] = j - 1
+        i, j = s, j - 1
+    return out
+
+
+def json_to_tables(data) -> tuple:
+    """법원 JSON → (tables, full). tables = [[헤더행, 임차인행...]] (_parse_core가 PDF 표와 같게 읽음)."""
+    pages = _json_pages(data)
+    full_lines, rows_all, fields, bounds = [], [], None, None
+    in_table = False
+    last_nm = ""
+    for page in pages:
+        lines = _lines_of(_blocks(page))
+        full_lines += [t for _, _, t in lines]
+        # 헤더: '그 일자'로 끝나는 안내문 다음, 헤더 낱말로만 된 연속 줄
+        hi = None
+        for i, (_, _, t) in enumerate(lines):
+            if "정보출처" in t.replace(" ", "") or ("점유자" in t and "임대차" in t):
+                hi = i; break
+        data_lines = []
+        if hi is not None:
+            s = hi
+            while s > 0 and _HDR_WORDS.search(lines[s - 1][2]) and len(lines[s - 1][2]) < 40:
+                s -= 1
+            e = hi
+            while e + 1 < len(lines) and _HDR_WORDS.search(lines[e + 1][2]) and \
+                    not re.search(r"\d{4}\s*\.\s*\d", lines[e + 1][2]) and len(lines[e + 1][2]) < 45:
+                e += 1
+            cen = _col_centers(lines[s:e + 1])
+            if "name" in cen and len(cen) >= 6:
+                order = sorted(cen.items(), key=lambda kv: kv[1])
+                fields = [f for f, _ in order]
+                xs = [x for _, x in order]
+                bounds = [((xs[i - 1] + xs[i]) / 2 if i else -1e9, (xs[i] + xs[i + 1]) / 2 if i + 1 < len(xs) else 1e9)
+                          for i in range(len(xs))]
+                in_table = True
+                data_lines = lines[e + 1:]
+        elif in_table:
+            data_lines = [ln for ln in lines if not re.search(r"^\s*-?\s*\d+\s*-?\s*$", ln[2])]   # 연속 쪽(헤더 없음): 쪽번호 줄 제외
+        if not in_table or not bounds:
+            continue
+        body = []
+        for ln in data_lines:
+            if _END_RE.search(ln[2]) or "조사된 임차내역" in ln[2]:
+                in_table = False
+                break
+            body.append(ln)
+        if not body:
+            continue
+        # ① 행 나누기 = '정보출처' 칸이 새로 시작하는 줄(등기사항·현황조사·권리신고 — 행마다 정확히 하나).
+        #   성명 칸은 좁아 긴 이름이 여러 줄로 접히고(주택도/시보증/공사), 한 사람이 여러 행에 걸친 병합 칸이라
+        #   성명 줄을 행 기준으로 쓰면 한 사람이 여러 명으로 쪼개진다(실측 200건 중 41건) → 이름은 ②에서 따로 모은다.
+        ni = fields.index("name")
+        nlo, nhi = bounds[ni]
+        si = fields.index("source") if "source" in fields else None
+
+        def _col_txt(ln, ci):
+            lo_, hi_ = bounds[ci]
+            return "".join(ch for x, ch in ln[1] if lo_ <= x < hi_ and not ch.isspace())
+        anchors = []
+        if si is not None:
+            prev = ""
+            for ln in body:
+                t = _col_txt(ln, si)
+                if t and re.match(r"(등기|현황|권리|주민|전입|임대|신고|진술|기타|점유|배당)", t):
+                    anchors.append(ln[0])
+                prev = t or prev
+        if not anchors:                                    # 정보출처 칸이 없으면 성명 줄 기준(옛 방식)
+            anchors = [ln[0] for ln in body if _col_txt(ln, ni)]
+        if not anchors:
+            continue
+        cuts = [(anchors[i] + anchors[i + 1]) / 2 for i in range(len(anchors) - 1)]
+        groups = [[] for _ in anchors]
+        for ln in body:
+            groups[sum(1 for c in cuts if ln[0] < c)].append(ln)
+        # ② 이름 덩어리 = 성명 칸에서 줄 간격이 좁게(≤14, 실측 칸 안 줄간격 12~13·다른 사람 간격 ≥26) 이어진 줄들 → 한 이름.
+        #   각 행은 높이가 가장 가까운 덩어리의 이름(병합 칸 이름은 걸친 행들의 가운데에 적힌다).
+        nlines = [(ln[0], "".join(_line_cols(ln[1], bounds, ni)[ni])) for ln in body]
+        nlines = [(y, t) for y, t in nlines if t]
+        blocks_n = []
+        for y, t in nlines:
+            if blocks_n and blocks_n[-1][-1][0] - y <= 14:
+                blocks_n[-1].append((y, t))
+            else:
+                blocks_n.append([(y, t)])
+        names = [("".join(t for _, t in b), (b[0][0] + b[-1][0]) / 2) for b in blocks_n]
+        near = _assign_rows(anchors, [n[1] for n in names], bool(last_nm))
+        srcs = [(_col_txt(g[0], si) if (si is not None and g) else "") for g in groups]
+        srcs = ["".join(_line_cols(ln[1], bounds, ni)[si]) if si is not None else "" for g in groups for ln in g[:0]] or \
+               [("".join("".join(_line_cols(ln[1], bounds, ni)[si]) for ln in g) if si is not None else "") for g in groups]
+        for gi, g in enumerate(groups):
+            cells = _cells_of(g, bounds, ni)
+            if near[gi] is None or near[gi] < 0:           # 쪽 맨 위 이름 없는 행 = 앞 쪽에서 이어진 병합 칸(이름은 앞 쪽에 적힘)
+                nm, same_blk = last_nm, []
+            else:
+                nm = names[near[gi]][0]
+                same_blk = [j for j in range(len(groups)) if near[j] == near[gi]]
+            if len(same_blk) > 1:
+                kinds = [re.match(r"(등기|현황|권리|주민|전입|임대|신고|진술|기타|점유|배당)", srcs[j] or "") for j in same_blk]
+                kinds = [m.group(1) if m else "" for m in kinds]
+                if len(set(kinds)) < len(kinds):
+                    # 같은 출처가 반복 = 서로 다른 사람들(외국인 여러 명 — 사람 사이 줄간격 11이 한 이름 안 12~13과 같아 간격으론
+                    #  못 가른다, 실측 A04|2026|3329|1). 칸 내용은 세로 가운데 정렬이므로 이름 줄을 행 수만큼 연속 구간으로 나눠
+                    #  '구간 가운데 ≈ 그 행 정보출처 높이'가 되는 분할(동적계획)을 고른다.
+                    nm = _split_names(blocks_n[near[gi]], [anchors[j] for j in same_blk])[same_blk.index(gi)]
+            row = [cells[fields.index(f)] if f in fields else "" for f, _ in _JSON_COLS]
+            row[0] = nm
+            rows_all.append(row)
+            last_nm = nm
+    if not fields:
+        return [], "\n".join(full_lines)
+    header = [_JSON_HDR_LABEL[f] for f, _ in _JSON_COLS]
+    return [[header] + rows_all], "\n".join(full_lines)
+
+
+def parse_sale_statement_json(data) -> dict:
+    """법원 명세서 글자 JSON → parse_sale_statement와 같은 결과 형식."""
+    try:
+        tables, full = json_to_tables(data)
+    except Exception as e:
+        return {"available": False, "reason": f"명세서 JSON 분석 실패: {type(e).__name__}"}
+    return _parse_core(tables, full)

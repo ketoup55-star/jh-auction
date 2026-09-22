@@ -215,3 +215,9 @@ def rights_to_assume(rights: list[dict], surviving: str, tenants: list[dict]) ->
 
 def parse_pdf(pdf_bytes: bytes) -> dict:
     return parse_sale_statement(pdf_bytes)
+
+
+def parse_json(data) -> dict:
+    """법원 명세서 글자 JSON(media.kind='매각물건명세서_글자') — PDF가 없거나 그림 PDF인 물건용(2026-09-22)."""
+    from .sale_statement_parser import parse_sale_statement_json
+    return parse_sale_statement_json(data)

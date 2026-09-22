@@ -7331,7 +7331,8 @@ _stmt_fill: dict = {"running": False, "tag": "", "total": 0, "done": 0, "filled"
 _STMT_TARGET_SQL = """
 SELECT i.item_key FROM items i
  WHERE (i.is_active OR i.data_class = '현황')
-   AND EXISTS (SELECT 1 FROM media m WHERE m.item_key=i.item_key AND m.kind='매각물건명세서' AND m.r2_key IS NOT NULL)
+   AND EXISTS (SELECT 1 FROM media m WHERE m.item_key=i.item_key AND m.kind IN ('매각물건명세서','매각물건명세서_글자')
+                AND m.r2_key IS NOT NULL)
    AND NOT EXISTS (SELECT 1 FROM item_tenants t WHERE t.item_key=i.item_key)
    AND NOT EXISTS (SELECT 1 FROM api_cache c WHERE c.cache_key = 'stmt:'||i.item_key)
  ORDER BY i.item_key"""
@@ -7342,34 +7343,61 @@ def _statement_fill_item(c, item_key: str, force: bool = False) -> str:
     """한 물건: 명세서 PDF → item_tenants 채움 + items 보완(NULL만) + 명세서상 인수 권리 + 분석캐시 무효화·재계산.
     반환: filled|no_tenant|has_tenants|nodoc|noparse|error"""
     import time as _t
-    r = c.execute("SELECT r2_key FROM media WHERE item_key=%s AND kind='매각물건명세서' AND r2_key IS NOT NULL "
-                  "ORDER BY seq LIMIT 1", (item_key,)).fetchone()
-    if not r or not auction_db.r2:
+    if not auction_db.r2:
         return "nodoc"
-    url = f"{auction_db.r2}/{r[0]}"
-    data, last = None, ""
-    for _ in range(3):
-        try:
-            resp = httpx.get(url, timeout=40, follow_redirects=True)
-            if resp.status_code == 404:
-                return "nodoc"
-            if resp.status_code == 200 and resp.content[:5] == b"%PDF-":
-                data = resp.content
-                break
-            last = f"http {resp.status_code}" if resp.status_code != 200 else "PDF 아님"
-            if last == "PDF 아님":
-                break
-        except Exception as e:
-            last = str(e)[:60]
-    if data is None:
-        if last == "PDF 아님":
-            auction_db.cache_save("stmt:" + item_key, {"v": _stf.STMT_VER, "available": False, "reason": last,
-                                                       "at": _t.strftime("%Y-%m-%d %H:%M:%S")})
-            return "noparse"
+    # 원본 PDF 우선 → 없거나(법원 수집분은 글자 JSON만 옴) 그림 PDF면 글자 JSON(kind='매각물건명세서_글자', seq=0)으로 판독.
+    #  (2026-09-22 데이터팀: 법원 수집분 명세서는 spec_0.json=글자, seq1..N=그림. 예전엔 JSON을 'PDF 아님'으로 버렸다)
+    docs = {k: rk for k, rk in c.execute(
+        "SELECT DISTINCT ON (kind) kind, r2_key FROM media WHERE item_key=%s AND r2_key IS NOT NULL "
+        "AND kind IN ('매각물건명세서','매각물건명세서_글자') ORDER BY kind, seq", (item_key,)).fetchall()}
+    if not docs:
+        return "nodoc"
+
+    def _get(rk: str, want_pdf: bool):
+        last = ""
+        for _ in range(3):
+            try:
+                resp = httpx.get(f"{auction_db.r2}/{rk}", timeout=40, follow_redirects=True)
+                if resp.status_code == 404:
+                    return None, "nodoc"
+                if resp.status_code == 200:
+                    if want_pdf:
+                        return (resp.content, "") if resp.content[:5] == b"%PDF-" else (None, "PDF 아님")
+                    try:
+                        return resp.json(), ""
+                    except Exception:
+                        return None, "JSON 아님"
+                last = f"http {resp.status_code}"
+            except Exception as e:
+                last = str(e)[:60]
         raise RuntimeError(f"명세서 조회 실패: {last}")
-    with _STMT_PDF_SEM:
-        parsed = _stf.parse_pdf(data)
-    del data
+
+    parsed, reasons = None, []
+    if "매각물건명세서" in docs:
+        data, why = _get(docs["매각물건명세서"], True)
+        if data is not None:
+            with _STMT_PDF_SEM:
+                parsed = _stf.parse_pdf(data)
+            del data
+            if not parsed.get("available"):
+                why = parsed.get("reason") or "판독 불가"
+        if why:
+            reasons.append("PDF: " + why)
+    if (parsed is None or not parsed.get("available")) and "매각물건명세서_글자" in docs:
+        data, why = _get(docs["매각물건명세서_글자"], False)
+        if data is not None:
+            try:
+                parsed = _stf.parse_json(data)
+            except Exception as e:
+                parsed = {"available": False, "reason": f"JSON 판독 오류 {str(e)[:60]}"}
+            if not parsed.get("available"):
+                reasons.append("JSON: " + (parsed.get("reason") or "판독 불가"))
+        else:
+            reasons.append("JSON: " + why)
+    if parsed is None:
+        if all(r.endswith("nodoc") for r in reasons):
+            return "nodoc"
+        parsed = {"available": False, "reason": " / ".join(reasons)}
     built = _stf.build_rows(parsed)
     if not built.get("available"):
         auction_db.cache_save("stmt:" + item_key, {"v": _stf.STMT_VER, "available": False, "reason": parsed.get("reason"),
