@@ -104,6 +104,59 @@ def reg_date_from_note(note: str) -> date | None:
     return _d(m.group(1), m.group(2), m.group(3)) if m else None
 
 
+_AGENCY_NM = re.compile(r"공사|공단|은행|보증|관리원|보험|캐피탈|대부")
+
+
+def _link_agency(tenants: list, rows: list, caution: str) -> None:
+    """승계기관 행(이름만 '주택도시보증공사' 등, 괄호 사람이름 없음)을 원임차인에 연결 — 이름을 '기관(사람)'으로 바꿔
+    _merge_tenants가 한 임대차로 합치게 한다. 🔴2026-09-22 실측: 법원 글자 JSON 명세서는 기관을 괄호 없이 따로 적고 승계관계는
+    비고에만 있어('주택도시보증공사: …이경희의 승계인임') 같은 보증금이 두 번 인수로 잡혔다(명세서 채움 333건, 예 11.4억=5.7억×2).
+    연결 근거(순서대로): ⓪같은 기관의 '기관(사람)' 행 ①비고에 '기관 … 사람 … 승계/양수/대위'(또는 사람이 앞)
+    ③보증금이 정확히 같은 사람이 딱 하나 + 비고에 승계류 언급 ④전입일·확정일자가 모두 같은 사람 행이 딱 하나."""
+    people = [t for t in tenants if t.name and not _AGENCY_NM.search(t.name)]
+    ren: dict[str, str] = {}
+    for t in tenants:
+        nm = (t.name or "").strip()
+        if not nm or not _AGENCY_NM.search(nm) or "(" in nm:
+            continue
+        who = None
+        # ⓪같은 기관의 '기관(사람)' 행이 있으면 그 사람(예: 주택도시보증공사 + 주택도시보증공사(롯데쇼핑) = 같은 임대차)
+        sib = {_occupant_key(x.name) for x in tenants if (x.name or "").strip().startswith(nm + "(")}
+        if len(sib) == 1:
+            who = sib.pop()
+        best = -1
+        for p in ([] if who else people):
+            pk = _occupant_key(p.name)
+            # '…이경희의 승계인임' / '…임차인 김태현의 임차보증금반환채권 양수인임' — 한 문장에 여럿이면 '승계' 바로 앞 사람
+            m = pk and re.search(re.escape(nm) + r"[^.]{0,80}?(" + re.escape(pk) + r")[^.]{0,80}?(?:승계|양수|대위)", caution or "")
+            if m and m.start(1) > best:
+                who, best = pk, m.start(1)
+            # 사람이 앞: '등기권리자 이옥수의 권리를 승계(양수)한 주택도시보증공사'
+            elif pk and not m and re.search(re.escape(pk) + r"[^.]{0,40}?(?:승계|양수|대위)[^.]{0,20}?" + re.escape(nm), caution or ""):
+                if best < 0:
+                    who = pk
+        # ③그래도 없으면: 보증금이 정확히 같은 사람이 딱 하나 + 비고에 승계·양수·대위 언급
+        if who is None and t.deposit and re.search(r"승계|양수|대위|구상", caution or ""):
+            same = {_occupant_key(p.name) for p in people if p.deposit == t.deposit}
+            if len(same) == 1:
+                who = same.pop()
+        if who is None and t.move_in_date and t.fixed_date:
+            same = {_occupant_key(p.name) for p in people
+                    if p.move_in_date == t.move_in_date and p.fixed_date == t.fixed_date}
+            if len(same) == 1:
+                who = same.pop()
+        if who:
+            ren[nm] = f"{nm}({who})"
+    if not ren:
+        return
+    for t in tenants:
+        if (t.name or "").strip() in ren:
+            t.name = ren[t.name.strip()]
+    for r in rows:
+        if (r.get("name") or "").strip() in ren:
+            r["name"] = ren[r["name"].strip()]
+
+
 def build_rows(parsed: dict) -> dict:
     """파싱 결과 → item_tenants 행 목록 + items 보완값 + 인수 권리 키워드.
     반환: {available, no_tenant, senior_date(iso|None), senior_kind, deadline, tenants:[row], surviving, caution, ground,
@@ -116,6 +169,7 @@ def build_rows(parsed: dict) -> dict:
     out = {"available": True, "no_tenant": bool(parsed.get("no_tenant")), "senior_date": sd.isoformat() if sd else None,
            "senior_kind": skind, "deadline": deadline, "surviving": parsed.get("surviving_rights") or "",
            "caution": caution, "ground": parsed.get("ground_rights") or "", "tenants": [], "unknown_power": 0}
+    _link_agency(parsed.get("tenants") or [], parsed.get("rows") or [], caution)
     merged = _merge_tenants(parsed.get("tenants") or [])
     raw_by_key: dict[str, list] = {}
     for r in parsed.get("rows") or []:

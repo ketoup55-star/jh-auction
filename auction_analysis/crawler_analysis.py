@@ -209,8 +209,19 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
                 rights_raw = f_ri.result()
             if tenants_raw is None:
                 tenants_raw = f_te.result()
-    if not head or not head[0].get("analyzed_at"):
-        return None                                    # 크롤러 미분석 → PDF 폴백
+    if not head:
+        return None
+    # 법원 수집분(크롤러 미분석·등기부 없음)이라도 매각물건명세서를 판독해 채운 물건(stmt: 표식 available)은 명세서 기준으로
+    #  권리분석을 만든다(2026-09-22 주인님 승인: 채운 28건 중 24건이 '등기 문서 미확보'로 화면에 권리분석이 안 나왔다).
+    stmt_only = False
+    if not head[0].get("analyzed_at"):
+        try:
+            _sm = (db.cache_get_many(["stmt:" + item_key]) or {}).get("stmt:" + item_key)
+        except Exception:
+            _sm = None
+        if not (isinstance(_sm, dict) and _sm.get("available")):
+            return None                                # 크롤러 미분석·명세서 미판독 → PDF 폴백
+        stmt_only = not rights_raw
     it = head[0]
 
     # 승강기 유무(brief 캐시) — 다세대·도시형 4층↑ 무승강기 매수세 경고용
@@ -372,6 +383,9 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
     _unk_power = [t for t in tenants if (t.get("status_label") or "").startswith("대항력 미상")]
     if _unk_power and risk == "안전":
         risk = "주의"
+    # 등기부 권리 목록 없이 명세서만으로 판정한 물건 → 명세서에 안 적힌 인수 권리(가처분·가등기 등)를 알 수 없어 '안전' 단정 금지.
+    if stmt_only and risk == "안전":
+        risk = "주의"
 
     warnings: list[str] = []
     if assumed_total > 0:
@@ -385,11 +399,13 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
     if _unk_power:
         _nm = ", ".join((t.get("name") or "") for t in _unk_power[:3]) + (f" 외 {len(_unk_power) - 3}명" if len(_unk_power) > 3 else "")
         warnings.append(f"전입일 미상 임차인({_nm}) — 매각물건명세서로 대항력 판단 불가, 전입세대열람·현장 확인 필요")
+    if stmt_only:
+        warnings.append("등기부 미확보 — 매각물건명세서 기준 판정(명세서에 없는 인수 권리는 등기부등본으로 직접 확인 필요)")
     # 확약서(인수 면제)는 매수인에게 유리한 정보 → 경고(warnings)가 아닌 별도 waiver 필드로 노출(프런트가 ✓로 표시)
 
     return {
         "available": True,
-        "source": "crawler",
+        "source": "statement" if stmt_only else "crawler",
         "rights": rights,
         "tenants": tenants,
         "baseline": baseline,
