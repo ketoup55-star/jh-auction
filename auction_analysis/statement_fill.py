@@ -112,31 +112,86 @@ def _link_agency(tenants: list, rows: list, caution: str) -> None:
     _merge_tenants가 한 임대차로 합치게 한다. 🔴2026-09-22 실측: 법원 글자 JSON 명세서는 기관을 괄호 없이 따로 적고 승계관계는
     비고에만 있어('주택도시보증공사: …이경희의 승계인임') 같은 보증금이 두 번 인수로 잡혔다(명세서 채움 333건, 예 11.4억=5.7억×2).
     연결 근거(순서대로): ⓪같은 기관의 '기관(사람)' 행 ①비고에 '기관 … 사람 … 승계/양수/대위'(또는 사람이 앞)
-    ③보증금이 정확히 같은 사람이 딱 하나 + 비고에 승계류 언급 ④전입일·확정일자가 모두 같은 사람 행이 딱 하나."""
+    ③보증금이 정확히 같은 사람이 딱 하나 + 비고에 승계류 언급 ④전입일·확정일자가 모두 같은 사람 행이 딱 하나.
+    괄호가 있어도 키가 사람과 안 맞는 표기(1차 전량 뒤 28건: '(양도인김세정)'·'(임차권자권소연의승계인)'·외국인 6글자
+    '(오스니흐홀랑)'·공동임차 '(공동임차인:박원영,이나래)')는 괄호 안에 나오는 사람 이름으로 연결하고, 공동임차인은 한 임대차로 묶는다.
+    반환: {병합 키: 표시 이름('박원영,이나래')} — 공동임차 묶음만."""
     people = [t for t in tenants if t.name and not _AGENCY_NM.search(t.name)]
+    pkeys = [k for k in dict.fromkeys(_occupant_key(p.name) for p in people) if k and len(k) >= 2]
     ren: dict[str, str] = {}
+    joint: dict[str, str] = {}
     for t in tenants:
         nm = (t.name or "").strip()
-        if not nm or not _AGENCY_NM.search(nm) or "(" in nm:
+        if not nm or not _AGENCY_NM.search(nm):
+            continue
+        if "(" in nm:
+            if _occupant_key(nm) in pkeys:
+                continue                                  # 이미 사람 키로 합쳐짐('기관(김현진)')
+            inner = re.sub(r"\s", "", nm[nm.index("("):])
+            hits = [k for k in pkeys if k in inner]
+            if not hits:
+                # 기관→기관 사슬: '서울보증보험(임차인:한국토지주택공사)' + '한국토지주택공사(입주자:권원기)' = 같은 보증금
+                #  (C01 전세임대 실측 — SGI가 LH의 임차보증금반환채권 양수)
+                for x in tenants:
+                    xn = re.sub(r"\s", "", x.name or "")
+                    if x is t or "(" not in xn or not _AGENCY_NM.search(xn):
+                        continue
+                    xbase = xn[:xn.index("(")]
+                    if xbase and xbase in inner:
+                        xk = _occupant_key(x.name)
+                        hits = [xk] if xk in pkeys else [k for k in pkeys if k in xn[len(xbase):]]
+                        if not hits and xk:
+                            hits = [xk]                   # 입주자 사람행이 따로 없어도 두 기관행을 한 임대차로
+                        break
+            if hits and hits[0] not in pkeys and hits[0] == _occupant_key(nm):
+                continue
+            if hits:
+                base = nm[:nm.index("(")].strip()
+                ren[nm] = f"{base}(입주자:{hits[0]})"
+                if len(hits) > 1:                          # 공동임차인 = 한 임대차(보증금 하나)
+                    for p in people:
+                        k = _occupant_key(p.name)
+                        if k in hits[1:]:
+                            ren[p.name.strip()] = f"{p.name.strip()}(입주자:{hits[0]})"
+                    joint[hits[0]] = ",".join(hits)
             continue
         who = None
         # ⓪같은 기관의 '기관(사람)' 행이 있으면 그 사람(예: 주택도시보증공사 + 주택도시보증공사(롯데쇼핑) = 같은 임대차)
-        sib = {_occupant_key(x.name) for x in tenants if (x.name or "").strip().startswith(nm + "(")}
+        sib = set()
+        for x in tenants:
+            xn = re.sub(r"\s", "", x.name or "")
+            if xn.startswith(nm + "("):
+                xk = _occupant_key(x.name)
+                if xk in pkeys:
+                    sib.add(xk)
+                else:                                     # 기관 이름 자체는 사람으로 잡지 않되, 사람행 없는 '(롯데쇼핑)'은 그 이름
+                    inn = {k for k in pkeys if k in xn[len(nm):]}
+                    sib |= inn or ({xk} if xk and xk != nm and not _AGENCY_NM.search(xk) else set())
         if len(sib) == 1:
             who = sib.pop()
         best = -1
+        cz, nmz = re.sub(r"\s", "", caution or ""), re.sub(r"\s", "", nm)   # 비고는 '서울보증보험 주식회사'처럼 띄어 씀
         for p in ([] if who else people):
             pk = _occupant_key(p.name)
             # '…이경희의 승계인임' / '…임차인 김태현의 임차보증금반환채권 양수인임' — 한 문장에 여럿이면 '승계' 바로 앞 사람
-            m = pk and re.search(re.escape(nm) + r"[^.]{0,80}?(" + re.escape(pk) + r")[^.]{0,80}?(?:승계|양수|대위)", caution or "")
+            m = pk and re.search(re.escape(nmz) + r"[^.]{0,80}?(" + re.escape(pk) + r")[^.]{0,80}?(?:승계|양수|대위)", cz)
             if m and m.start(1) > best:
                 who, best = pk, m.start(1)
             # 사람이 앞: '등기권리자 이옥수의 권리를 승계(양수)한 주택도시보증공사'
-            elif pk and not m and re.search(re.escape(pk) + r"[^.]{0,40}?(?:승계|양수|대위)[^.]{0,20}?" + re.escape(nm), caution or ""):
+            elif pk and not m and re.search(re.escape(pk) + r"[^.]{0,40}?(?:승계|양수|대위)[^.]{0,20}?" + re.escape(nmz), cz):
                 if best < 0:
                     who = pk
+        # ②기관→기관(둘 다 괄호 없음): '서울보증보험 주식회사: … 한국토지주택공사의 임대차보증금반환채권의 승계인'
+        if who is None:
+            for x in tenants:
+                xz = re.sub(r"\s", "", x.name or "")
+                if x is t or not xz or "(" in xz or not _AGENCY_NM.search(xz):
+                    continue
+                if re.search(re.escape(nmz) + r"[^.]{0,80}?" + re.escape(xz) + r"[^.]{0,80}?(?:승계|양수|대위)", cz):
+                    who = xz
+                    break
         # ③그래도 없으면: 보증금이 정확히 같은 사람이 딱 하나 + 비고에 승계·양수·대위 언급
-        if who is None and t.deposit and re.search(r"승계|양수|대위|구상", caution or ""):
+        if who is None and t.deposit and re.search(r"승계|양수|대위|구상|전세임대|입주자", caution or ""):
             same = {_occupant_key(p.name) for p in people if p.deposit == t.deposit}
             if len(same) == 1:
                 who = same.pop()
@@ -146,15 +201,22 @@ def _link_agency(tenants: list, rows: list, caution: str) -> None:
             if len(same) == 1:
                 who = same.pop()
         if who:
-            ren[nm] = f"{nm}({who})"
+            ren[nm] = f"{nm}(입주자:{who})"               # '입주자:' 표기 = _occupant_key가 외국인 긴 이름도 사람 키로
+    # 기관↔기관이 서로를 가리키면(A→B, B→A) 키가 엇갈려 안 합쳐진다 → 나중 것 취소
+    for a in list(ren):
+        for b in list(ren):
+            if a != b and a in ren and b in ren and ren[a].endswith(f"(입주자:{re.sub(r'[ ]', '', b)})") \
+                    and ren[b].endswith(f"(입주자:{re.sub(r'[ ]', '', a)})"):
+                del ren[b]
     if not ren:
-        return
+        return joint
     for t in tenants:
         if (t.name or "").strip() in ren:
             t.name = ren[t.name.strip()]
     for r in rows:
         if (r.get("name") or "").strip() in ren:
             r["name"] = ren[r["name"].strip()]
+    return joint
 
 
 def build_rows(parsed: dict) -> dict:
@@ -169,7 +231,7 @@ def build_rows(parsed: dict) -> dict:
     out = {"available": True, "no_tenant": bool(parsed.get("no_tenant")), "senior_date": sd.isoformat() if sd else None,
            "senior_kind": skind, "deadline": deadline, "surviving": parsed.get("surviving_rights") or "",
            "caution": caution, "ground": parsed.get("ground_rights") or "", "tenants": [], "unknown_power": 0}
-    _link_agency(parsed.get("tenants") or [], parsed.get("rows") or [], caution)
+    joint = _link_agency(parsed.get("tenants") or [], parsed.get("rows") or [], caution) or {}
     merged = _merge_tenants(parsed.get("tenants") or [])
     raw_by_key: dict[str, list] = {}
     for r in parsed.get("rows") or []:
@@ -223,12 +285,13 @@ def build_rows(parsed: dict) -> dict:
         # 끝의 '[명세서]' 꼬리표 = 이 행의 출처(명세서 채움) 표식 — 재실행(force) 시 우리 행만 골라 지우는 데 쓴다
         comment = " · ".join(facts) + " → " + verdict + (f" | 비고: {note}" if note else "") + " " + SRC_TAG
         dep = t.deposit if (t.deposit and t.deposit < 10**14) else None     # bigint·상식 범위 밖(파싱 오류) 방어
+        disp = joint.get(key, t.name)                 # 공동임차인 묶음은 두 사람 이름을 함께 표시
         out["tenants"].append({
-            "seq": i, "name": t.name, "has_opposing_power": bool(has_opp),
+            "seq": i, "name": disp, "has_opposing_power": bool(has_opp),
             "move_in_date": mv.isoformat() if mv else None, "fixed_date": fx.isoformat() if fx else None,
             "dividend_date": ddate.isoformat() if ddate else None, "deposit": dep,
             "rent": t.rent or 0, "tenant_right": right or None, "occupancy": occ or None,
-            "status": f"{label} {t.name}: {comment}",
+            "status": f"{label} {disp}: {comment}",
             "assume_amount": (dep if (label == "인수" and dep) else None),
             "label": label,
         })
