@@ -7424,7 +7424,8 @@ def _statement_fill_item(c, item_key: str, force: bool = False) -> str:
             #  (crawler_analysis가 임차인 인수액을 0으로 면제하는 것과 같은 기준 — 실측 A01|2024|124388|1: 면제인데 등기만 인수라 '위험' 오판)
             from auction_analysis.crawler_analysis import _detect_waiver
             _it = c.execute("SELECT tags, detail_text FROM items WHERE item_key=%s", (item_key,)).fetchone()
-            if _it and (("인수조건변경" in (_it[0] or "")) or _detect_waiver(_it[1] or "")):
+            if (_it and (("인수조건변경" in (_it[0] or "")) or _detect_waiver(_it[1] or ""))) \
+                    or _detect_waiver(built.get("caution") or ""):   # 명세서 비고의 확약서도(법원 수집분은 detail_text 없음)
                 upd = []
         for x in upd:                                 # 명세서 우선: '소멸되지 아니하는 것'/대항력 임차인의 임차권·전세권 = 인수
             c.execute("UPDATE item_rights SET status='인수' WHERE id=%s", (x["id"],))

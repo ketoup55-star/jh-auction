@@ -333,6 +333,12 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
     #    태그기반(인수조건변경=전원 면제)이 제대로 반영됨. 舊버그: 면제가 보정보다 먼저 실행돼, 보정이 assume=deposit로
     #    되살려 매수금지 오판(예: 확약서로 미인수인데 1.7억 인수·매수금지). [[project_auction_deposit_unknown_grade]]
     waiver = _detect_waiver(it.get("detail_text") or "")
+    if not waiver:
+        # 법원 수집분은 detail_text가 비어 명세서 비고의 확약서(예: C01|2026|504971|1 'HUG … 잔존 임차보증금반환채권을
+        #  포기하고 주택임차권등기의 말소에 동의한다는 확약서 제출')를 못 봤다 → statement_fill이 임차인 행에 넣은 '비고:'도 본다.
+        _notes = " ".join(str(x.get("status") or "").split("| 비고:", 1)[1] for x in tenants_raw
+                          if "| 비고:" in str(x.get("status") or ""))
+        waiver = _detect_waiver(_notes.replace("[명세서]", ""))
     if not waiver and "인수조건변경" in (it.get("tags") or ""):   # 보증기관(HUG/SGI/HF) 인수조건변경 태그 = 임차보증금 인수 면제
         waiver = "보증기관(HUG·SGI·HF) 인수조건변경 — 임차보증금 미배당분을 낙찰자가 인수하지 않음"
     waived_total = 0
