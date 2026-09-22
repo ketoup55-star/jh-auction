@@ -489,7 +489,9 @@ class SupabaseSource:
         "세대적은": "households.asc.nullslast,item_key.asc",
         "주행적은": "mileage.asc.nullslast,item_key.asc",
         "주행많은": "mileage.desc.nullslast,item_key.asc",
-        "차익높은": "profit.desc.nullslast,item_key.asc",
+        # 화면에 보이는 차익(예상낙찰 있으면 시세−예상낙찰, 없으면 시세−최저가)으로 정렬 — 주인님 지시 2026-09-22.
+        #  舊 profit(시세−예상낙찰)만 보면 예상낙찰 없는 95%가 뒤로 밀려 사건번호순으로 섞였다. profit_disp는 20분 컬럼 동기화가 유지.
+        "차익높은": "profit_disp.desc.nullslast,item_key.asc",
     }
 
     def _filters(self, *, group=None, usages=None, keyword=None, data_class="현황",

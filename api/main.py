@@ -4722,6 +4722,9 @@ def _col_enrich_sync() -> None:
         "UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
         # 차익은 시세·예상낙찰가 둘 다 있을 때만 — 한쪽이 비면(오매칭 시세 제거 등) 옛 차익이 목록·보증금미상 필터에 남지 않게 비운다
         "UPDATE items SET profit=NULL WHERE profit IS NOT NULL AND (est_price IS NULL OR expected_bid IS NULL)",
+        # 차익 높은순 정렬값 = 화면에 보이는 차익(예상낙찰 있으면 시세−예상낙찰, 없으면 시세−최저가). 최저가가 바뀌어도 여기서 따라감
+        "UPDATE items SET profit_disp = COALESCE(profit, est_price - min_price) "
+        "WHERE profit_disp IS DISTINCT FROM COALESCE(profit, est_price - min_price)",
         # 유사거래 건수 — similar_index 블롭(jsonb) 전개 후 조인(변경분만). 舊 startup 블롭 방식 대체
         """UPDATE items i SET similar_count = kv.value::int
            FROM (SELECT key, value FROM api_cache, jsonb_each_text(data) WHERE cache_key='similar_index') kv
