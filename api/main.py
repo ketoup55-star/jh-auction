@@ -4039,6 +4039,11 @@ def _compute_brief(item_key: str) -> dict:
                 if (not un and bi.get("units") and not _title_only
                         and (_recap or ((not (_collective and _is_ho) or _ho_ok) and not _bi_wrong))):
                     un, ul = bi.get("units"), bi.get("unit_label")
+                # 여러 동 단지인데 그 지번 대장이 한 동뿐(단지 합계 없음) → 비워 두지 않고 '해당 동 N세대'로 동 기준임을 밝혀 표시
+                #  (2026-09-22 주인님 승인. 빈칸 원인 조사 22건). 숫자는 그대로, 단위 글자만 '세대(해당 동)'.
+                if (not un and _title_only and bi.get("units") and not _bi_wrong
+                        and bi.get("unit_label") in ("세대", "가구")):
+                    un, ul = bi.get("units"), "세대(해당 동)"
                 if ev is None and bi.get("elevator") is not None and not (_collective and _is_ho) and not _bi_wrong:
                     ev = int(bi.get("elevator") or 0) > 0
                 used_api = bool(bi.get("build_year") or bi.get("units")
@@ -11951,7 +11956,7 @@ def _brief_as_detail(item_key: str, name: str):
         return None
     if not (b.get("build_year") or b.get("households") or b.get("elevator") is not None):
         return None
-    return {"name": name or "", "households": b.get("households"),
+    return {"name": name or "", "households": b.get("households"), "unit_label": b.get("unit_label") or "세대",
             "approved": (str(b.get("build_year")) if b.get("build_year") else None),
             "elevator": b.get("elevator"),
             "_src": {"kb": "KB 단지정보", "kapt": "국토부 공동주택"}.get(b.get("hh_src"), "건축물대장")}   # 세대수 출처대로 라벨
