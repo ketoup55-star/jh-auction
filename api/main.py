@@ -4729,9 +4729,17 @@ def _col_enrich_sync() -> None:
         "UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
         # 차익은 시세·예상낙찰가 둘 다 있을 때만 — 한쪽이 비면(오매칭 시세 제거 등) 옛 차익이 목록·보증금미상 필터에 남지 않게 비운다
         "UPDATE items SET profit=NULL WHERE profit IS NOT NULL AND (est_price IS NULL OR expected_bid IS NULL)",
-        # 차익 높은순 정렬값 = 화면에 보이는 차익(예상낙찰 있으면 시세−예상낙찰, 없으면 시세−최저가). 최저가가 바뀌어도 여기서 따라감
-        "UPDATE items SET profit_disp = COALESCE(profit, est_price - min_price) "
-        "WHERE profit_disp IS DISTINCT FROM COALESCE(profit, est_price - min_price)",
+        # 차익 높은순 정렬값 = 화면에 보이는 차익과 '같은 기준'(auctions.html baseAmt와 1:1):
+        #  ①예상낙찰 있으면 시세−예상낙찰 ②매각완료(재매각 제외)는 시세−낙찰가 ③재매각·재진행은 시세−이전 낙찰가 ④그 외 시세−최저가.
+        #  🔴2026-09-23 주인님 지적: 정렬은 최저가 기준인데 화면은 재매각 행만 이전 낙찰가 기준이라(진행중 563건) 숫자가 뒤죽박죽으로 보였다.
+        """UPDATE items SET profit_disp = COALESCE(profit, est_price - CASE
+              WHEN result ~ '(매각|잔금납부|배당종결)' AND result !~ '재매각' THEN sale_price
+              WHEN result ~ '(재매각|재진행)' AND sale_price IS NOT NULL THEN sale_price
+              ELSE min_price END)
+           WHERE profit_disp IS DISTINCT FROM COALESCE(profit, est_price - CASE
+              WHEN result ~ '(매각|잔금납부|배당종결)' AND result !~ '재매각' THEN sale_price
+              WHEN result ~ '(재매각|재진행)' AND sale_price IS NOT NULL THEN sale_price
+              ELSE min_price END)""",
         # 유사거래 건수 — similar_index 블롭(jsonb) 전개 후 조인(변경분만). 舊 startup 블롭 방식 대체
         """UPDATE items i SET similar_count = kv.value::int
            FROM (SELECT key, value FROM api_cache, jsonb_each_text(data) WHERE cache_key='similar_index') kv
