@@ -1430,11 +1430,37 @@ def _compete_warm() -> None:
         pass
 
 
+_OVER85_SQL = """
+SELECT item_key FROM items
+ WHERE usage_name ILIKE '%%아파트%%'
+   AND COALESCE(
+         substring(building_area from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
+         substring(building_area from '([0-9]+(?:[.][0-9]+)?)'),
+         substring(area_text     from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
+         substring(area_text     from '([0-9]+(?:[.][0-9]+)?)'))::numeric > 85
+   AND (data_class <> '현황'                       -- 과거(매각완료)는 차익 조건 미적용(속성만)
+        OR (est_price IS NOT NULL AND est_price - CASE
+              WHEN result ~ '(매각|잔금납부|배당종결)' AND result !~ '재매각' THEN COALESCE(sale_price, min_price)
+              WHEN result ~ '(재매각|재진행)' AND sale_price IS NOT NULL THEN sale_price
+              ELSE min_price END >= %s))"""
+
+
 def _apt_over85_compute() -> set:
-    """[백필 전용·무거움] 아파트 전용 85㎡ 초과 + 차익(시세 − 기준가) 3,000만원 이상.
-    _col_sync_loop가 주기적으로 호출해 items.over85_ok 컬럼에 저장 → 필터는 컬럼을 읽음(_apt_over85_keys).
-    전용면적은 area_text의 '전용 NN㎡' 파싱(building_area 컬럼은 '51.84㎡ (15.68평)' 문자열이라 숫자비교 불가).
+    """아파트 전용 85㎡ 초과 + 차익(시세 − 기준가) 3,000만원 이상 → items.over85_ok 컬럼(필터는 컬럼만 읽음).
+    🔴2026-09-23 주인님 지적("85초과 지방비규제인데 9개뿐이냐"): 전용면적을 area_text의 '전용 NN'에서만 읽어
+      진행 아파트 4,152건 중 481건만 판정 대상이었고(나머지는 building_area에 전용면적이 있음), 시세도 apt 캐시로만 봐서
+      est_price 컬럼에 값이 있어도 캐시 미스면 빠졌다(실측 L01|2025|32398|1 전용 175㎡·시세 7.92억). → 면적 읽는 순서를
+      kb_count·_area_num과 동일하게(건물면적 전용 → 건물면적 숫자 → area_text 전용 → 숫자) + 시세는 est_price 컬럼, 한 쿼리로.
     기준가 = 목록 표시와 동일(낙찰=낙찰가, 재매각/재진행=이전낙찰가, 그 외=최저가)."""
+    rows = auction_db.query_pg(_OVER85_SQL, (_OVER85_MIN_PROFIT,))
+    if rows is None:
+        print("[col_sync] ⚠ 85㎡초과 계산 조회 실패 — 기존 값 유지", flush=True)
+        return None
+    return {r["item_key"] for r in rows if r.get("item_key")}
+
+
+def _apt_over85_compute_old() -> set:
+    """(구) area_text 전용 파싱 + apt 캐시 기반 — 누락이 커서 교체(위 함수). 비교·되돌리기용으로 남김."""
     import re as _re
     base_of: dict = {}; dc_of: dict = {}   # item_key -> 기준가(원) + data_class(과거 매각완료는 차익 미적용)
     # ⚠️DB 직접 조회(psycopg) — REST 페이징은 3초 제한에 걸려 빈 결과(0건)를 돌려줬다(2026-09-18 실측: 로그 over85=0 반복,
