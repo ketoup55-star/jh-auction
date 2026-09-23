@@ -4771,6 +4771,11 @@ def _col_enrich_sync() -> None:
            FROM (SELECT key, value FROM api_cache, jsonb_each_text(data) WHERE cache_key='similar_index') kv
            WHERE kv.key = i.item_key AND kv.value ~ '^[0-9]+$' AND i.similar_count IS DISTINCT FROM kv.value::int
              AND coalesce(i.usage_fix, i.usage_name, '') ~ '다세대|연립|빌라|도시형'""",
+        # 지분매각 표시(원천 sale_target·tags의 '지분') — 신규 물건도 자동. 면적 계산은 _share_loop가 명세서로 채움
+        """UPDATE items SET share_sale = TRUE WHERE data_class='현황'
+             AND (sale_target ~ '지분' OR tags ~ '지분') AND share_sale IS DISTINCT FROM TRUE""",
+        """UPDATE items SET share_sale = NULL, area_full = NULL, area_share = NULL, share_ratio = NULL
+           WHERE share_sale AND coalesce(sale_target,'') !~ '지분' AND coalesce(tags,'') !~ '지분'""",
         # 용도가 빌라·연립·도생이 아니게 된 물건의 옛 유사거래 건수는 비운다(2026-09-22: 아파트·오피스텔·상가에 옛 건수가 남아 표시)
         """UPDATE items SET similar_count = NULL
            WHERE similar_count IS NOT NULL AND coalesce(usage_fix, usage_name, '') !~ '다세대|연립|빌라|도시형'""",
@@ -5179,6 +5184,7 @@ def _start_prewarm() -> None:
         threading.Thread(target=_est_col_warm_loop, daemon=True).start()    # est 직접기록 예열(cache_save 우회) — 아파트 시세 커버리지 성장·유지
         threading.Thread(target=_brief_missing_loop, daemon=True).start()   # 준공·세대 brief 없음·옛형식 → 계산·Supabase 저장(DISABLE_PREWARM 무관)
         threading.Thread(target=_dosaeng_loop, daemon=True).start()         # 빌라로 들어온 도생 재분류(items.usage_fix) — 신규 자동
+        threading.Thread(target=_share_loop, daemon=True).start()           # 지분매각 물건 지분면적(명세서 전유×매각지분) — 신규 자동
     try:
         _kb_apply_token()   # Supabase 공유 토큰(api_cache kb:auth) 로드 — 시작 시 1회, 가벼움(브라우저 없음)
     except Exception:
@@ -6844,6 +6850,94 @@ def _dosaeng_loop() -> None:
         _t.sleep(60 if n else 600)
 
 
+_SHARE_SQL = """
+SELECT i.item_key, m.kind, m.r2_key FROM items i
+  JOIN LATERAL (SELECT kind, r2_key FROM media m2 WHERE m2.item_key=i.item_key
+                 AND m2.kind IN ('매각물건명세서','매각물건명세서_글자') AND m2.r2_key IS NOT NULL
+                 ORDER BY kind, seq LIMIT 1) m ON TRUE
+ WHERE i.data_class='현황' AND i.share_sale AND i.area_share IS NULL
+ ORDER BY i.item_key LIMIT %s"""
+
+
+def _share_fill(limit: int = 40) -> int:
+    """지분매각 물건: 매각물건명세서에서 전유면적 × 매각지분 → items.area_full(전체)·area_share(지분)·share_ratio 저장.
+    화면 규칙(주인님 지시 2026-09-23): 목록은 전체면적 + 빨간 [지분매각], 상세 물건정보는 실제 매각되는 지분면적.
+    🔴items의 building_area·area_excl은 원천마다 전체/지분이 뒤섞여 있어 쓰지 않는다(실측: 같은 지분매각인데 서로 반대)."""
+    if _IS_CLOUD:
+        return 0
+    from auction_analysis.sale_statement_parser import share_info
+    rows = auction_db.query_pg(_SHARE_SQL, (limit,))
+    if rows is None:                      # query_pg는 실패해도 None만 돌려준다(조용한 실패) → 직접 재조회해 원인을 남긴다
+        import psycopg
+        try:
+            with psycopg.connect(os.environ["SUPABASE_DB_URL"], prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+                rows = [dict(zip(("item_key", "kind", "r2_key"), r)) for r in c.execute(_SHARE_SQL, (limit,)).fetchall()]
+        except Exception as e:
+            print(f"[share] 대상 조회 실패: {str(e)[:120]}", flush=True)
+            return 0
+    if not rows:
+        return 0
+    import psycopg
+    done = 0
+    with psycopg.connect(os.environ["SUPABASE_DB_URL"], prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
+        for r in rows:
+            k, kind, rk = r["item_key"], r["kind"], r["r2_key"]
+            try:
+                resp = httpx.get(f"{auction_db.r2}/{rk}", timeout=40, follow_redirects=True)
+                if kind == "매각물건명세서_글자":
+                    from auction_analysis.sale_statement_parser import _json_pages, _blocks
+                    txt = " ".join(b[3] for p in _json_pages(resp.json()) for b in _blocks(p))
+                else:
+                    import pdfplumber
+                    import io as _io
+                    with _STMT_PDF_SEM:
+                        with pdfplumber.open(_io.BytesIO(resp.content)) as pdf:
+                            txt = " ".join((pg.extract_text() or "") for pg in pdf.pages[:3])
+                inf = share_info(txt)
+            except Exception as e:
+                print(f"[share] {k} 판독 실패: {str(e)[:60]}", flush=True)
+                continue
+            # 🔴계산값은 '크롤러 두 컬럼 중 하나와 일치할 때만' 저장한다(2026-09-23 실측: 근거가 약하면 대지권 비율을 지분으로
+            #  잡아 23건이 틀렸다). 이 작업의 목적은 building_area·area_excl 중 '어느 쪽이 지분인가'를 명세서로 가려내는 것이라,
+            #  둘 중 하나와 맞아떨어질 때만 확정하면 오답이 화면에 나가지 않는다. 맞는 게 없으면 보류(-2) = 기존 표시 유지.
+            if inf.get("share_area"):
+                try:
+                    _cols = c.execute("SELECT substring(building_area from '([0-9]+(?:[.][0-9]+)?)'), area_excl FROM items WHERE item_key=%s", (k,)).fetchone()
+                    _cand = [float(x) for x in (_cols or ()) if x is not None]
+                    if _cand and all(abs(float(inf["share_area"]) - v) > 0.5 for v in _cand):
+                        with _items_backfill_lock:
+                            c.execute("UPDATE items SET area_share=-2 WHERE item_key=%s", (k,))
+                        print(f"[share] {k} 보류: 계산 {inf['share_area']} vs 컬럼 {_cand}", flush=True)
+                        continue
+                except Exception:
+                    pass
+            if not inf.get("share_area"):
+                # 못 읽으면 -1로 표식(같은 물건 반복 시도 방지). 명세서가 갱신되면 20분 스윕이 다시 본다.
+                with _items_backfill_lock:
+                    c.execute("UPDATE items SET area_share=-1 WHERE item_key=%s AND area_share IS NULL", (k,))
+                continue
+            with _items_backfill_lock:
+                c.execute("UPDATE items SET area_full=%s, area_share=%s, share_ratio=%s WHERE item_key=%s",
+                          (inf["excl_area"], inf["share_area"], inf["ratio"], k))
+            done += 1
+    if done:
+        print(f"[share] 지분면적 계산 {done}/{len(rows)}건", flush=True)
+    return done
+
+
+def _share_loop() -> None:
+    """지분매각 물건 지분면적 채우기 — 밀린 게 있으면 1분, 없으면 10분마다(신규 물건 자동 반영)."""
+    import time as _t
+    _t.sleep(300)
+    while True:
+        n = 0
+        try:
+            n = _share_fill(40)
+        except Exception as e:
+            print(f"[share] 실패: {str(e)[:120]}", flush=True)
+        _t.sleep(60 if n else 600)
+
+
 def _brief_missing_loop() -> None:
     """밀린 게 있으면 1분 간격으로 연속 처리, 없으면 10분마다 신규 확인(신규 물건이 들어오면 10분 안에 채워짐)."""
     import time as _t
@@ -7610,6 +7704,18 @@ def _statement_sweep(limit: int = 100) -> int:
     print(f"[STMT-FILL] 명세서→임차인 채우기 대상 {len(ks)}건", flush=True)
     _statement_fill_bulk(ks, workers=3, tag="sweep")
     return len(ks)
+
+
+@app.post("/admin/share_fill")
+def admin_share_fill(limit: int = Query(20, ge=1, le=400), _u: dict = Depends(require_admin_or_local)) -> dict:
+    """지분매각 물건 지분면적(명세서 전유×매각지분) 채우기 — 로컬 전용. 20분 루프와 같은 본체(_share_fill)."""
+    if _IS_CLOUD:
+        raise HTTPException(400, "클라우드는 계산하지 않습니다(로컬 4011에서 실행).")
+    try:
+        n = _share_fill(limit)
+    except Exception as e:
+        raise HTTPException(500, f"실패: {str(e)[:200]}")
+    return {"done": n, "limit": limit}
 
 
 @app.post("/admin/statement_fill")

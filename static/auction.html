@@ -774,8 +774,8 @@ async function load(){
             <tr><th>소재지</th><td colspan="5">${d.address||"-"}</td></tr>
             <tr><th>용도</th><td>${d.usage_disp||d.usage||"-"}</td><th>채권자</th><td>${d.creditor||"-"}</td><th>감정가</th><td class="amt">${d.appraisal_raw?d.appraisal_raw+"원":won(d.appraisal_price)}</td></tr>
             <tr><td colspan="2"></td><th>채무자</th><td>${d.debtor||"-"}</td><th>최저가</th><td class="amt low">${ratio!=null?`(${ratio}%) `:""}${d.min_price_raw?d.min_price_raw+"원":won(d.min_price)}</td></tr>
-            <tr><th>토지면적</th><td>${d.land_area||"-"}</td><th>소유자</th><td>${d.owner||"-"}</td><th>보증금</th><td class="amt">${d.deposit||"-"}</td></tr>
-            <tr><th>건물면적</th><td>${d.building_area||"-"}</td><th>매각대상</th><td>${d.sale_target||"-"}</td><th>청구금액</th><td class="amt">${d.claim_amount||"-"}</td></tr>
+            <tr><th>토지면적</th><td>${(d.group==="차량외")?"-":(d.land_area||"-")}</td><th>소유자</th><td>${d.owner||"-"}</td><th>보증금</th><td class="amt">${d.deposit||"-"}</td></tr>
+            <tr><th>건물면적</th><td>${(d.group==="차량외")?"-":(d.area_share?`${d.area_share}㎡ <span style="color:#f01414;font-weight:700">(지분)</span>`:(d.building_area||"-"))}</td><th>매각대상</th><td>${d.sale_target||"-"}</td><th>청구금액</th><td class="amt">${d.claim_amount||"-"}</td></tr>
             <tr><th>사건접수</th><td>${d.case_received||"-"}</td><th>배당종기일</th><td>${d.dividend_deadline||"-"}</td><th>개시결정</th><td>${d.decision_date||"-"}</td></tr>
           </table>
           <div class="kglist">

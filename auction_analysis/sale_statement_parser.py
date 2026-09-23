@@ -651,3 +651,81 @@ def parse_sale_statement_json(data) -> dict:
     except Exception as e:
         return {"available": False, "reason": f"명세서 JSON 분석 실패: {type(e).__name__}"}
     return _parse_core(tables, full)
+
+
+# ── 지분매각: 전유면적 × 매각지분 비율 → 실제 매각되는 지분면적 (2026-09-23 주인님 지시) ──
+#  items의 building_area·area_excl은 원천마다 전체/지분이 뒤섞여 있어(실측: 같은 '지분매각'인데 A02|2024|65819|1은
+#  building_area=전체·area_excl=지분, A03|2026|50392|1은 그 반대) 컬럼만으로는 못 가린다. 명세서에는 전유부분 면적과
+#  '매각지분 … N분의 M'이 항상 적혀 있어 그것으로 계산한다.
+_NUM_FR = r"[0-9,]+(?:\.[0-9]+)?"        # 분모·분자에 소수가 온다(실측 '1345.8분의 281.23', '2438.6분의 4.09')
+_FRAC_A = re.compile(f"({_NUM_FR})\\s*분의\\s*({_NUM_FR})")        # 'N분의 M'
+_FRAC_B = re.compile(f"({_NUM_FR})\\s*/\\s*({_NUM_FR})")           # 'M/N' (실측 '임주현 지분 1/2 전부')
+_SHARE_SEG = re.compile(r"매각지분(.{0,220})")
+_EXCL_SEG = re.compile(r"전유부분의?\s*건물의?\s*표시(.{0,220}?)대지권")
+_AREA_ANY = re.compile(r"([0-9,]+(?:\.[0-9]+)?)\s*(?:㎡|m²)")
+
+
+def _share_num(s):
+    try:
+        return float(str(s).replace(",", ""))
+    except Exception:
+        return None
+
+
+_SHARE_STOP = re.compile(r"대지권의\s*비율|전유부분|부동산의\s*표시|감정평가|비고란")
+
+
+def _ratios_in(seg: str) -> list:
+    """구간 안의 지분 비율(0~1). 'N분의 M'·'M/N' 둘 다.
+    🔴2026-09-23 실측: '매각지분' 뒤 구간에 다음 목적물의 '대지권의비율'이 딸려 들어와 0.01·0.0614 같은 엉뚱한 값이 잡혔다
+      (23건). → ①다음 항목 머리말이 나오면 거기서 끊고 ②같은 분모의 지분만 합산한다(분모가 다르면 다른 목적물)."""
+    st = _SHARE_STOP.search(seg)
+    if st:
+        seg = seg[:st.start()]
+    pairs = []
+    for m in _FRAC_A.finditer(seg):
+        den, num = _share_num(m.group(1)), _share_num(m.group(2))
+        if den and num and 0 < num <= den:
+            pairs.append((den, num))
+    for m in _FRAC_B.finditer(seg):
+        num, den = _share_num(m.group(1)), _share_num(m.group(2))
+        if den and num and 0 < num <= den:
+            pairs.append((den, num))
+    if not pairs:
+        return []
+    den0 = pairs[0][0]
+    return [num / den0 for den, num in pairs if den == den0]
+
+
+def share_info(text: str) -> dict:
+    """명세서 글자 → {excl_area(전유 전체면적), ratio(매각지분 0~1), share_area(지분면적)}. 못 읽으면 값 None.
+
+    🔴규칙은 실측으로 다듬었다(2026-09-23, 크롤러 값과 어긋난 4건 원문 대조):
+      ①'매각지분' 뒤 구간에서만 비율을 찾는다 — 앞의 '대지권의비율 432.4분의 35.46'을 매각지분으로 오인했었다.
+      ②같은 사람의 지분이 여러 건이면 합산한다('갑구 1번 9분의 3 전부, 갑구 18번 9분의 2 전부' = 5/9).
+      ③전유부분 면적은 '전유부분의 건물의 표시'~'대지권' 사이의 면적을 모두 더한다(1층102호 68.50 + 지층 24.83 + 계단실 6)."""
+    t = re.sub(r"\s+", " ", text or "")
+    ratio = None
+    # ④건물(전유) 지분을 먼저 본다 — 명세서는 토지 지분과 건물 지분을 따로 적는데, 앞에 오는 토지 지분을 쓰면 틀린다
+    #  (실측 A03|2025|1111|1: 토지 '1549.4분의 41.219'를 잡아 30.51㎡, 실제 건물 지분 기준은 93.47㎡)
+    _ex_pos = t.find("전유부분")
+    segs = [m for m in _SHARE_SEG.finditer(t)]
+    after = [m for m in segs if _ex_pos >= 0 and m.start() > _ex_pos]
+    ratio_after = False
+    for seg in after + segs:
+        rs = _ratios_in(seg.group(1))
+        if rs:
+            s = sum(rs)
+            ratio = s if 0 < s <= 1 else rs[0]
+            ratio_after = seg in after
+            break
+    excl = None
+    eseg = _EXCL_SEG.search(t)
+    if eseg:
+        areas = [_share_num(x) for x in _AREA_ANY.findall(eseg.group(1))]
+        areas = [a for a in areas if a]
+        if areas:
+            excl = round(sum(areas), 2)
+    share = round(excl * ratio, 2) if (excl and ratio) else None
+    # ratio_after=True면 '전유부분(건물)' 뒤에서 읽은 지분 = 건물 지분이 확실. False면 토지 지분일 수 있어 호출측이 보수적으로 다룬다.
+    return {"excl_area": excl, "ratio": ratio, "share_area": share, "ratio_after_excl": ratio_after}

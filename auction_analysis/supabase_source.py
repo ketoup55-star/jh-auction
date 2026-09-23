@@ -984,7 +984,8 @@ class SupabaseSource:
                 "area_text,land_area,building_area,tags,appraisal_price,min_price,"
                 "sale_price,sale_rate,fail_count,sell_date,result,status_reason,"
                 "bid_count,sale_2nd_price,hit_count,thumb_url,buy_grade,data_class,"
-                "est_price,expected_bid,expbid_count,profit,kb_count,similar_count,apt_demand,usage_fix")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익·호가·유사거래·수요배지 포함(fetch 왕복·온-패스 compute 제거)
+                "est_price,expected_bid,expbid_count,profit,kb_count,similar_count,apt_demand,usage_fix,"
+                "share_sale,area_full,area_share")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익·호가·유사거래·수요배지 포함(fetch 왕복·온-패스 compute 제거)
         iks = kw.get("item_keys")
         if iks is not None and len(iks) > 600:
             # 큰 item_keys 집합 → 청크별 상위(offset+limit) 조회 후 병합·정렬·슬라이스(분산 top-k).
@@ -1223,6 +1224,10 @@ class SupabaseSource:
             "area_text": row.get("area_text"),
             "land_area": row.get("land_area"),
             "building_area": row.get("building_area"),
+            # 지분매각(2026-09-23 주인님 지시): 목록은 전체면적 + 빨간 [지분매각], 상세 물건정보는 지분면적
+            "share_sale": bool(row.get("share_sale")) or None,
+            "area_full": row.get("area_full"),
+            "area_share": (row.get("area_share") if (row.get("area_share") or 0) > 0 else None),
             "tags": row.get("tags"),
             "appraisal_price": row.get("appraisal_price"),
             "min_price": row.get("min_price"),
