@@ -1212,7 +1212,19 @@ function _aptCmp(key,a,b){
   if(bv==null) return -1;
   return desc? (bv-av) : (av-bv);
 }
+function saveAptSort(){                 // 정렬 선택 저장 — 새로고침(Ctrl+Shift+R)에 초기화돼 기본순서로 돌아가던 것(주인님 지적 2026-09-23)
+  try{ localStorage.setItem('auc_sort1', v('aptSort1')||''); localStorage.setItem('auc_sort2', v('aptSort2')||''); }catch(e){}
+}
+function restoreAptSort(){              // 저장된 정렬 복원(매수판정·규제 필터와 같은 방식)
+  try{
+    const s1=document.getElementById('aptSort1'), s2=document.getElementById('aptSort2');
+    const a=localStorage.getItem('auc_sort1')||'', b=localStorage.getItem('auc_sort2')||'';
+    if(s1 && a && [...s1.options].some(o=>o.value===a)) s1.value=a;
+    if(s2 && b && [...s2.options].some(o=>o.value===b)) s2.value=b;
+  }catch(e){}
+}
 function onAptSort(){
+  saveAptSort();
   // ★준공·세대·주행·차익·유사거래 = 서버 전역정렬(items 컬럼) → 재검색으로 서버가 정렬해 내려줌(클라 재정렬 폐지=요동 제거).
   //  baedang·t3m만 서버응답 즉시값이라 현재 페이지 클라이언트 정렬(요동 없음).
   var SRV=['sim_desc','year_desc','year_asc','hh_desc','hh_asc','km_asc','km_desc','diff_desc'];
@@ -1560,6 +1572,9 @@ function resetForm(){
   document.getElementById("sort").value="";
   document.getElementById("sort2").value="";
   document.getElementById("resultSel").value="진행물건";
+  const as1=document.getElementById("aptSort1"), as2=document.getElementById("aptSort2");   // 목록 위 정렬(차익·준공 등)도 초기화
+  if(as1) as1.value=""; if(as2) as2.value="";
+  try{ localStorage.setItem('auc_sort1',''); localStorage.setItem('auc_sort2',''); }catch(e){}
   // '검색 초기화' = 필터만 초기상태로 되돌림. 조회된 물건 목록은 그대로 유지(검색은 '검색하기' 버튼으로만) — 주인님 지정
 }
 function applyUrl(){
@@ -1631,7 +1646,7 @@ loadRegions().then(()=>{ applyUrl(); restorePageSize();
   if((new URLSearchParams(location.search)).get('caseno')){   // 사건번호 검색 = 저장된 매수판정 필터도 해제(UI·요청 모두 순수 조회)
     gradeFilter=""; try{localStorage.setItem('auc_grade','');}catch(e){}
     const _gs=document.getElementById('gradeSel'); if(_gs)_gs.value="";
-  } else { restoreBuyFilter(); }
+  } else { restoreBuyFilter(); restoreAptSort(); }
   doSearch(); });
 // 공용 플로팅 툴팁 — 칩(data-tip)에 호버 시 body에 fixed로 띄워 테이블 클리핑 회피
 (function(){
