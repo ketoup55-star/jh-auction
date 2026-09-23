@@ -97,6 +97,13 @@ async def _http_mw(request, call_next):
             _record_slow(request.method, path, str(request.url.query), _dur, response.status_code)
         except Exception:
             pass
+    # 🔎임시 추적(2026-09-23 주인님 "정렬 그대로다"): 정렬을 포함한 목록 검색은 조건을 그대로 남긴다.
+    #  서버는 맞게 정렬해 내려주는데 화면이 그대로라는 신고 → 실제로 어떤 조건이 오는지 확인용. 원인 확인 후 제거.
+    if path == "/auctions" and "sort=" in str(request.url.query):
+        try:
+            _record_slow("SORTCHK", path, str(request.url.query), _dur, response.status_code)
+        except Exception:
+            pass
     return response
 
 
