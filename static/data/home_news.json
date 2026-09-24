@@ -1,60 +1,69 @@
 {
  "items": [
   {
-   "keyword": "부동산 정책",
-   "title": "공급은 속도전, 세제는 브레이크...엇박자 부동산 정책[기자수첩] - v.daum.net",
-   "link": "https://v.daum.net/v/20260923085908844",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/23/552788-vZw4wcp/20260923085909653hvyz.png",
-   "source": "v.daum.net",
-   "published": "2026-09-23T08:59:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "[집값은 평탄화됐나①] 외곽 집값 상승률 강남 웃돌아…서민에겐 다른 ‘평탄화’ - daily.hankooki.com",
-   "link": "https://daily.hankooki.com/news/articleView.html?idxno=1409100",
-   "image": "https://cdn.daily.hankooki.com/news/thumbnail/202609/1409100_1588602_3738_v150.jpg",
-   "source": "daily.hankooki.com",
-   "published": "2026-09-23T08:51:42+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "이재명 정부 “부동산 정책 잘못” 59%…4개월 만에 긍정→부정 - 한겨레",
-   "link": "https://www.hani.co.kr/arti/politics/assembly/1279175.html",
-   "image": "https://flexible.img.hani.co.kr/flexible/normal/1029/618/imgdb/child/2026/0923/53_17901150606112_20260922504208.webp",
-   "source": "한겨레",
-   "published": "2026-09-23T07:11:00+09:00",
-   "has_time": true
-  },
-  {
    "keyword": "대출규제",
-   "title": "국민평형 30억 시대… “아파트 당첨돼도 대출 제한” 청약 딜레마 - v.daum.net",
-   "link": "https://v.daum.net/v/20260923061537798",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/23/kukminilbo/20260923061543890yefj.jpg",
-   "source": "v.daum.net",
-   "published": "2026-09-23T06:15:00+09:00",
+   "title": "전세제도, 폐지가 답인가 - 한국아파트신문",
+   "link": "https://www.hapt.co.kr/news/articleView.html?idxno=169568",
+   "image": "https://cdn.hapt.co.kr/news/photo/202609/169568_42040_5648.jpg",
+   "source": "한국아파트신문",
+   "published": "2026-09-24T08:50:10+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "[李 정부의 부동산 역설①] 4개월 만에 바꾸고 한 달 만에 되돌리고…정책 ‘오락가락’ - 데일리안",
+   "link": "https://www.dailian.co.kr/news/view/1693942/%E6%9D%8E-%EC%A0%95%EB%B6%80-%EB%B6%80%EB%8F%99%EC%82%B0-%EC%97%AD%EC%84%A4%E2%91%A0-4%EA%B0%9C%EC%9B%94-%EB%A7%8C%EC%97%90-2026",
+   "image": "https://cdnimage.dailian.co.kr/news/202609/news_1790123819595_1693942_m_1.jpg",
+   "source": "데일리안",
+   "published": "2026-09-24T08:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "아파트 경매",
-   "title": "시세보다 4억 싼 하남 미사 아파트…경기 아파트 추천 경매 6선 - 땅집고",
-   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026092203158",
-   "image": "https://image.chosun.com/sitedata/thumbnail/202609/22/2026092203152_0_thumb.jpg",
+   "title": "최저 2억대 일산 아파트 …경기 아파트 추천 경매 6선 - 땅집고",
+   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026092303660",
+   "image": "https://image.chosun.com/sitedata/thumbnail/202609/23/2026092303656_0_thumb.jpg",
    "source": "땅집고",
-   "published": "2026-09-23T06:00:00+09:00",
+   "published": "2026-09-24T06:13:00+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "하남 집값 8개월 만에 서울 상대가 1.14배↑ - 하남일보",
-   "link": "http://www.hanamilbo.net/news/articleView.html?idxno=12659",
-   "image": "http://www.hanamilbo.net/news/thumbnail/202609/12659_11227_2814_v150.jpg",
-   "source": "하남일보",
-   "published": "2026-09-23T01:27:57+09:00",
+   "title": "\"강남 떨어졌다고? 속지마라\"…전문가 전원 \"서울 집값 더 오른다\" - 머니투데이 - 머니투데이",
+   "link": "https://www.mt.co.kr/estate/2026/09/24/2026092321275983809",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=726,fit=cover,bg=white,f=auto,quality=high,sharpen=2,g=face/21/2026/09/2026092321275983809_1.jpg",
+   "source": "머니투데이",
+   "published": "2026-09-24T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "추석 이후에도 집값 ‘평탄화’ 지속…강남 쉬고 외곽·경기 뛴다 - edaily.co.kr",
+   "link": "https://www.edaily.co.kr/News/Read?newsId=01439926645583400&mediaCodeNo=257",
+   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/09/PS26092400074.jpg",
+   "source": "edaily.co.kr",
+   "published": "2026-09-24T05:12:02+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "부동산 정책 낙제점…66% \"집값 안 잡힐 것\" - edaily.co.kr",
+   "link": "https://www.edaily.co.kr/News/Read?newsId=01367766645583400&mediaCodeNo=257",
+   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/09/PS26092400047.jpg",
+   "source": "edaily.co.kr",
+   "published": "2026-09-24T05:00:14+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "\"동대문·성북 84㎡마저 20억 육박…서울 집값 '침묵의 랠리' 시작\" - 뉴시스",
+   "link": "https://www.newsis.com/view/NISX20260923_0003801589",
+   "image": "https://img1.newsis.com/2026/09/20/NISI20260920_0021446419_web.jpg",
+   "source": "뉴시스",
+   "published": "2026-09-24T00:00:00+09:00",
    "has_time": true
   }
  ],
- "count": 6,
- "date": "2026-09-23"
+ "count": 7,
+ "date": "2026-09-24"
 }
