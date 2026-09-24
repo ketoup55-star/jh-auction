@@ -547,44 +547,22 @@ _DEPOSIT_MIN_PROFIT = 30_000_000   # 보증금미상 필터: 차익(시세−기
 _REAUC_MIN_PROFIT = 20_000_000   # 재매각/재진행 필터: 차익(시세−이전낙찰가) 최소 2,000만원
 
 
+_REAUC_SQL = """
+SELECT item_key FROM items
+ WHERE usage_name ILIKE '%%아파트%%' AND (result LIKE '재매각%%' OR result LIKE '재진행%%')
+   AND sale_price > 0 AND est_price IS NOT NULL AND (est_price - sale_price) >= %s"""
+
+
 def _apt_reauction_profit_keys() -> set:
-    """아파트 재매각/재진행 물건 중 '이전 낙찰가(sale_price>0)'와 '추정시세(est)'가 모두 있고,
-    차익(시세 − 이전 낙찰가)이 2,000만원 이상인 물건."""
-    # 1) 아파트 재매각/재진행 + 이전 낙찰가 보유 item_key·sale_price 수집
-    sale: dict = {}
-    off = 0
-    while True:
-        r = auction_db._get("items", {"select": "item_key,sale_price", "order": "item_key",
-                                       "usage_name": "ilike.*아파트*",
-                                       "or": "(result.like.재매각*,result.like.재진행*)",
-                                       "sale_price": "gt.0",
-                                       "limit": "1000", "offset": str(off)})
-        rows = r.json() if r.status_code in (200, 206) else []
-        for x in rows:
-            k = x.get("item_key")
-            sp = _to_int(x.get("sale_price"))
-            if k and sp:
-                sale[k] = sp
-        if len(rows) < 1000:
-            break
-        off += 1000
-    keys = list(sale.keys())
-    if not keys:
-        return set()
-    # 2) 추정시세(est) 보유 + 차익(est − 이전낙찰가) ≥ 2,000만원 — apt 캐시 조회(계산 안 함)
-    match: set = set()
-    for i in range(0, len(keys), 150):
-        ch = keys[i:i + 150]
-        try:
-            ests = auction_apt_ests(",".join(ch), compute=False)
-        except Exception:
-            ests = {}
-        for k in ch:
-            v = ests.get(k)
-            if isinstance(v, dict) and v.get("price"):
-                if (v["price"] - sale[k]) >= _REAUC_MIN_PROFIT:
-                    match.add(k)
-    return match
+    """아파트 재매각/재진행 중 이전 낙찰가(sale_price>0)와 추정시세가 있고 차익(시세 − 이전 낙찰가) ≥ 2,000만원.
+    🔴2026-09-24 주인님 지적("물건통계 21인데 목록 2건"): 예전엔 시세를 apt 메모리 캐시(compute=False)에서만 봐서
+      캐시에 없는 물건이 통째로 빠졌다(실측 조건 충족 21건 중 목록 2건). 물건통계는 items.est_price 컬럼을 보므로 숫자가 갈렸다.
+      → 목록도 컬럼(est_price)으로 통일. 85㎡초과 필터와 같은 종류의 문제였다."""
+    rows = auction_db.query_pg(_REAUC_SQL, (_REAUC_MIN_PROFIT,))
+    if rows is None:
+        print("[type_filter] 재매각/재진행 조회 실패 — 기존 캐시 유지", flush=True)
+        return None
+    return {r["item_key"] for r in rows if r.get("item_key")}
 
 
 _OVER85_MIN_PROFIT = 30_000_000   # 85초과 필터: 차익(시세−기준가) 최소 3,000만원
@@ -6897,10 +6875,41 @@ def _share_fill(limit: int = 40) -> int:
             except Exception as e:
                 print(f"[share] {k} 판독 실패: {str(e)[:60]}", flush=True)
                 continue
+            try:
+                _st = (c.execute("SELECT coalesce(sale_target,'') FROM items WHERE item_key=%s", (k,)).fetchone() or ("",))[0]
+            except Exception:
+                _st = ""
+            # 🔴'건물전체매각'이면 건물면적에 지분을 곱하면 안 된다 — 지분은 토지에만 걸린 물건이다(실측 2026-09-24: 틀린 10건 중
+            #   9건이 '토지(일부)지분 /건물전체매각'. 집합건물이라 전유면적이 읽혀 토지 지분이 그대로 곱해졌다).
+            #   건물 표시는 크롤러 값이 맞으므로 보류(-2)로 두고 기존 표시를 유지한다.
+            if "건물전체" in _st.replace(" ", ""):
+                with _items_backfill_lock:
+                    c.execute("UPDATE items SET area_share=-2 WHERE item_key=%s", (k,))
+                continue
+            # 일반건물(전유부분 없음)은 명세서 층별 면적 합계를 건물 전체로 써서 지분면적을 만든다(2026-09-23: 판독불가 300건 대부분).
+            if not inf.get("share_area") and inf.get("ratio") and inf.get("bld_total"):
+                inf = {**inf, "excl_area": inf["bld_total"],
+                       "share_area": round(inf["bld_total"] * inf["ratio"], 2)}
             # 🔴계산값은 '크롤러 두 컬럼 중 하나와 일치할 때만' 저장한다(2026-09-23 실측: 근거가 약하면 대지권 비율을 지분으로
             #  잡아 23건이 틀렸다). 이 작업의 목적은 building_area·area_excl 중 '어느 쪽이 지분인가'를 명세서로 가려내는 것이라,
             #  둘 중 하나와 맞아떨어질 때만 확정하면 오답이 화면에 나가지 않는다. 맞는 게 없으면 보류(-2) = 기존 표시 유지.
+            #  예외: 건물면적 컬럼이 '명세서 전체면적'과 같고(= 컬럼이 전체) 지분을 '전유부분 뒤'(=건물 지분)에서 읽었을 때만
+            #   계산값을 확정한다. 지분 출처가 불확실하면(토지 지분일 수 있음) 아래 일반 규칙으로 보낸다.
             if inf.get("share_area"):
+                if inf.get("ratio_after_excl"):     # 건물 지분이 확실할 때만 '컬럼=전체' 예외로 확정
+                    try:
+                        _ba = c.execute("SELECT substring(building_area from '([0-9]+(?:[.][0-9]+)?)')::numeric FROM items WHERE item_key=%s", (k,)).fetchone()
+                        _base = inf.get("excl_area")
+                        if _ba and _ba[0] is not None and _base and abs(float(_ba[0]) - float(_base)) <= 0.5:
+                            with _items_backfill_lock:
+                                c.execute("UPDATE items SET area_full=%s, area_share=%s, share_ratio=%s WHERE item_key=%s",
+                                          (_base, inf["share_area"], inf["ratio"], k))
+                            done += 1
+                            continue
+                    except Exception:
+                        pass
+                # 🔴보류 검사는 '항상' 돈다 — 예전엔 위 예외 조건이 거짓이면 이 검사까지 건너뛰어 근거 없는 값이 그대로 저장됐다
+                #   (2026-09-24 실측 11건: 층별합×토지지분이 크롤러 값과 달라도 확정됐음).
                 try:
                     _cols = c.execute("SELECT substring(building_area from '([0-9]+(?:[.][0-9]+)?)'), area_excl FROM items WHERE item_key=%s", (k,)).fetchone()
                     _cand = [float(x) for x in (_cols or ()) if x is not None]
@@ -7372,7 +7381,9 @@ def _status_sa_run(keys: Optional[list] = None, dry: bool = False) -> dict:
         upd = []
         for k, res, sd, mp, ap in rows:
             if _schn.SA_FORMAT_RE.match(res.strip()):
-                new = _schn.sa_count_fix(res, sched.get(k, []), sd, mp, ap)   # 스피드옥션 정의·기일표가 같은 답일 때만
+                # ①기일현황에 대금미납·재매각이 있으면 머리글자를 재매각으로(주인님 지시 2026-09-24) ②그 외엔 N회만 정정
+                new = _schn.sa_reauction_fix(res, sched.get(k, [])) \
+                    or _schn.sa_count_fix(res, sched.get(k, []), sd, mp, ap)   # 스피드옥션 정의·기일표가 같은 답일 때만
                 if new is None:
                     continue
             else:

@@ -663,6 +663,8 @@ _FRAC_B = re.compile(f"({_NUM_FR})\\s*/\\s*({_NUM_FR})")           # 'M/N' (실�
 _SHARE_SEG = re.compile(r"매각지분(.{0,220})")
 _EXCL_SEG = re.compile(r"전유부분의?\s*건물의?\s*표시(.{0,220}?)대지권")
 _AREA_ANY = re.compile(r"([0-9,]+(?:\.[0-9]+)?)\s*(?:㎡|m²)")
+_FLOOR_AREA = re.compile(r"((?:지하\s*)?\d+층|옥탑\d*층?|지층)\s*([0-9,]+(?:\.[0-9]+)?)\s*(?:㎡|m²)")   # 층별 면적(건물 전체 합산용)
+_LAND_AREA = re.compile(r"(?:대|전|답|임야|잡종지|도로)\s+([0-9,]+(?:\.[0-9]+)?)\s*(?:㎡|m²)")            # 토지의 표시 '대 626㎡'
 
 
 def _share_num(s):
@@ -694,7 +696,15 @@ def _ratios_in(seg: str) -> list:
     if not pairs:
         return []
     den0 = pairs[0][0]
-    return [num / den0 for den, num in pairs if den == den0]
+    # 🔴같은 지분이 건물·토지에 각각 적히면 중복이다(실측 C01|2025|510699|1 '49분의14'가 두 번 → 28/49로 2배,
+    #   C02|2025|32813|1 '2분의 1' 두 번 → 1.0). 같은 (분모,분자)는 한 번만 센다. 서로 다른 분자는 합산(9분의 3 + 9분의 2).
+    seen, out = set(), []
+    for den, num in pairs:
+        if den != den0 or (den, num) in seen:
+            continue
+        seen.add((den, num))
+        out.append(num / den0)
+    return out
 
 
 def share_info(text: str) -> dict:
@@ -727,5 +737,14 @@ def share_info(text: str) -> dict:
         if areas:
             excl = round(sum(areas), 2)
     share = round(excl * ratio, 2) if (excl and ratio) else None
+    # 일반건물(단독·다가구·상가 등)은 전유부분이 없다 → 층별 면적 합계(건물 전체)와 토지 면적을 기준값으로 함께 돌려준다.
+    #  (2026-09-23 실측: 지분매각 407건 중 300건이 이 경우. 예 M01|2025|8396|1 '1층 60.59㎡ 2층 38.52㎡' = 99.11㎡ = 건물 전체)
+    floors = [_share_num(x[1]) for x in _FLOOR_AREA.findall(t)]
+    floors = [a for a in floors if a]
+    bld_total = round(sum(floors), 2) if floors else None
+    lands = [_share_num(x) for x in _LAND_AREA.findall(t)]
+    lands = [a for a in lands if a]
+    land_total = round(max(lands), 2) if lands else None
     # ratio_after=True면 '전유부분(건물)' 뒤에서 읽은 지분 = 건물 지분이 확실. False면 토지 지분일 수 있어 호출측이 보수적으로 다룬다.
-    return {"excl_area": excl, "ratio": ratio, "share_area": share, "ratio_after_excl": ratio_after}
+    return {"excl_area": excl, "ratio": ratio, "share_area": share, "ratio_after_excl": ratio_after,
+            "bld_total": bld_total, "land_total": land_total}

@@ -606,6 +606,26 @@ def _sa_steps(sale: list[dict], cur: dict, min_price=None, appraisal=None) -> in
     return len(levels)
 
 
+_UNPAID_RE = re.compile(r"미납|재매각")
+
+
+def sa_reauction_fix(label: str, rows: list[dict]) -> str | None:
+    """기일현황에 '대금미납'·'재매각' 기록이 있으면 결과 머리글자를 '재매각'으로 바로잡는다(횟수·%는 그대로).
+
+    🔴주인님 지시(2026-09-24). 실측: 기일현황에 미납·재매각이 있는데 목록은 '유찰 5회 (19%)'·'변경 12회 (7%)'로
+      나오던 물건이 진행중 120건. 대금미납이면 재매각이 맞다. 이미 '재매각/재진행'이면 건드리지 않고,
+      종결(매각·배당종결 등)도 대상이 아니다."""
+    s = (label or "").strip()
+    m = re.match(r"^(신건|유찰|변경|정지)(.*)$", s)
+    if not m:
+        return None                                   # 재매각·재진행이거나 종결 글자 → 그대로
+    if not any(_UNPAID_RE.search(str(r.get("result") or "")) or _UNPAID_RE.search(str(r.get("min_price") or ""))
+               for r in (rows or [])):
+        return None
+    new = "재매각" + m.group(2)
+    return new if new != s else None
+
+
 def sa_count_fix(label: str, rows: list[dict], sell_date: str, min_price, appraisal) -> str | None:
     """이미 스피드옥션 양식인 'X N회 (P%)'의 N이 틀렸으면 고친 값, 아니면 None. 원천 글자라 보수적으로 — 스피드옥션 정의(높은 단계 수)와
     기일현황 회차가 **같은 답**을 내는데 글자만 다를 때만 고친다(실측: '유찰 2회 (34%)'인데 34%=3단계·표도 4차)."""
