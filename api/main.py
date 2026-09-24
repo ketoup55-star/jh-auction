@@ -6833,7 +6833,7 @@ SELECT i.item_key, m.kind, m.r2_key FROM items i
   JOIN LATERAL (SELECT kind, r2_key FROM media m2 WHERE m2.item_key=i.item_key
                  AND m2.kind IN ('매각물건명세서','매각물건명세서_글자') AND m2.r2_key IS NOT NULL
                  ORDER BY kind, seq LIMIT 1) m ON TRUE
- WHERE i.data_class='현황' AND i.share_sale AND i.area_share IS NULL
+ WHERE i.data_class='현황' AND i.share_sale AND (i.area_share IS NULL OR coalesce(i.share_ver,0) < %s)
  ORDER BY i.item_key LIMIT %s"""
 
 
@@ -6843,13 +6843,13 @@ def _share_fill(limit: int = 40) -> int:
     🔴items의 building_area·area_excl은 원천마다 전체/지분이 뒤섞여 있어 쓰지 않는다(실측: 같은 지분매각인데 서로 반대)."""
     if _IS_CLOUD:
         return 0
-    from auction_analysis.sale_statement_parser import share_info
-    rows = auction_db.query_pg(_SHARE_SQL, (limit,))
+    from auction_analysis.sale_statement_parser import share_info, SHARE_VER
+    rows = auction_db.query_pg(_SHARE_SQL, (SHARE_VER, limit))
     if rows is None:                      # query_pg는 실패해도 None만 돌려준다(조용한 실패) → 직접 재조회해 원인을 남긴다
         import psycopg
         try:
             with psycopg.connect(os.environ["SUPABASE_DB_URL"], prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
-                rows = [dict(zip(("item_key", "kind", "r2_key"), r)) for r in c.execute(_SHARE_SQL, (limit,)).fetchall()]
+                rows = [dict(zip(("item_key", "kind", "r2_key"), r)) for r in c.execute(_SHARE_SQL, (SHARE_VER, limit)).fetchall()]
         except Exception as e:
             print(f"[share] 대상 조회 실패: {str(e)[:120]}", flush=True)
             return 0
@@ -6871,64 +6871,74 @@ def _share_fill(limit: int = 40) -> int:
                     with _STMT_PDF_SEM:
                         with pdfplumber.open(_io.BytesIO(resp.content)) as pdf:
                             txt = " ".join((pg.extract_text() or "") for pg in pdf.pages[:3])
-                inf = share_info(txt)
+                inf = share_info(txt, k.rsplit("|", 1)[-1])   # 다물건 사건은 '[물건 N]' 구간만 본다
             except Exception as e:
                 print(f"[share] {k} 판독 실패: {str(e)[:60]}", flush=True)
                 continue
+            # 매각대상 + 교차검증 심판 3종을 한 번에 읽는다. 심판은 모두 명세서와 무관한 독립 원천이다
+            #  (building_area=스피드옥션 상세 '건물면적' 칸, area_text=목록 '면적' 칸, area_excl=상세 전용면적).
             try:
-                _st = (c.execute("SELECT coalesce(sale_target,'') FROM items WHERE item_key=%s", (k,)).fetchone() or ("",))[0]
-            except Exception:
-                _st = ""
+                _row = c.execute(
+                    "SELECT coalesce(sale_target,''), substring(building_area from '([0-9]+(?:[.][0-9]+)?)')::numeric,"
+                    " area_excl, substring(area_text from '(?:건물|전용)\\s*([0-9.]+)')::numeric"
+                    " FROM items WHERE item_key=%s", (k,)).fetchone() or ("", None, None, None)
+            except Exception as e:
+                print(f"[share] {k} 컬럼 조회 실패: {str(e)[:60]}", flush=True)
+                continue
+            _st = _row[0]
+            _judges = [float(x) for x in _row[1:] if x is not None]
+
+            def _save(full, share, ratio, why):
+                with _items_backfill_lock:
+                    c.execute("UPDATE items SET area_full=%s, area_share=%s, share_ratio=%s, share_ver=%s"
+                              " WHERE item_key=%s", (full, share, ratio, SHARE_VER, k))
+                return why
+
+            def _mark(code, why):
+                """-1 판독불가 / -2 보류. 사유를 반드시 남긴다(예전엔 except: pass로 조용히 넘어가 원인이 안 남았다)."""
+                with _items_backfill_lock:
+                    c.execute("UPDATE items SET area_share=%s, area_full=NULL, share_ver=%s WHERE item_key=%s",
+                              (code, SHARE_VER, k))
+                print(f"[share] {k} {'판독불가' if code == -1 else '보류'}: {why}", flush=True)
             # 🔴'건물전체매각'이면 건물면적에 지분을 곱하면 안 된다 — 지분은 토지에만 걸린 물건이다(실측 2026-09-24: 틀린 10건 중
             #   9건이 '토지(일부)지분 /건물전체매각'. 집합건물이라 전유면적이 읽혀 토지 지분이 그대로 곱해졌다).
             #   건물 표시는 크롤러 값이 맞으므로 보류(-2)로 두고 기존 표시를 유지한다.
             if "건물전체" in _st.replace(" ", ""):
-                with _items_backfill_lock:
-                    c.execute("UPDATE items SET area_share=-2 WHERE item_key=%s", (k,))
+                _mark(-2, f"매각대상 '{_st}' — 지분은 토지에만 걸려 건물면적에 곱하면 안 됨")
                 continue
-            # 일반건물(전유부분 없음)은 명세서 층별 면적 합계를 건물 전체로 써서 지분면적을 만든다(2026-09-23: 판독불가 300건 대부분).
-            if not inf.get("share_area") and inf.get("ratio") and inf.get("bld_total"):
-                inf = {**inf, "excl_area": inf["bld_total"],
-                       "share_area": round(inf["bld_total"] * inf["ratio"], 2)}
-            # 🔴계산값은 '크롤러 두 컬럼 중 하나와 일치할 때만' 저장한다(2026-09-23 실측: 근거가 약하면 대지권 비율을 지분으로
-            #  잡아 23건이 틀렸다). 이 작업의 목적은 building_area·area_excl 중 '어느 쪽이 지분인가'를 명세서로 가려내는 것이라,
-            #  둘 중 하나와 맞아떨어질 때만 확정하면 오답이 화면에 나가지 않는다. 맞는 게 없으면 보류(-2) = 기존 표시 유지.
-            #  예외: 건물면적 컬럼이 '명세서 전체면적'과 같고(= 컬럼이 전체) 지분을 '전유부분 뒤'(=건물 지분)에서 읽었을 때만
-            #   계산값을 확정한다. 지분 출처가 불확실하면(토지 지분일 수 있음) 아래 일반 규칙으로 보낸다.
-            if inf.get("share_area"):
-                if inf.get("ratio_after_excl"):     # 건물 지분이 확실할 때만 '컬럼=전체' 예외로 확정
-                    try:
-                        _ba = c.execute("SELECT substring(building_area from '([0-9]+(?:[.][0-9]+)?)')::numeric FROM items WHERE item_key=%s", (k,)).fetchone()
-                        _base = inf.get("excl_area")
-                        if _ba and _ba[0] is not None and _base and abs(float(_ba[0]) - float(_base)) <= 0.5:
-                            with _items_backfill_lock:
-                                c.execute("UPDATE items SET area_full=%s, area_share=%s, share_ratio=%s WHERE item_key=%s",
-                                          (_base, inf["share_area"], inf["ratio"], k))
-                            done += 1
-                            continue
-                    except Exception:
-                        pass
-                # 🔴보류 검사는 '항상' 돈다 — 예전엔 위 예외 조건이 거짓이면 이 검사까지 건너뛰어 근거 없는 값이 그대로 저장됐다
-                #   (2026-09-24 실측 11건: 층별합×토지지분이 크롤러 값과 달라도 확정됐음).
-                try:
-                    _cols = c.execute("SELECT substring(building_area from '([0-9]+(?:[.][0-9]+)?)'), area_excl FROM items WHERE item_key=%s", (k,)).fetchone()
-                    _cand = [float(x) for x in (_cols or ()) if x is not None]
-                    if _cand and all(abs(float(inf["share_area"]) - v) > 0.5 for v in _cand):
-                        with _items_backfill_lock:
-                            c.execute("UPDATE items SET area_share=-2 WHERE item_key=%s", (k,))
-                        print(f"[share] {k} 보류: 계산 {inf['share_area']} vs 컬럼 {_cand}", flush=True)
-                        continue
-                except Exception:
-                    pass
-            if not inf.get("share_area"):
-                # 못 읽으면 -1로 표식(같은 물건 반복 시도 방지). 명세서가 갱신되면 20분 스윕이 다시 본다.
-                with _items_backfill_lock:
-                    c.execute("UPDATE items SET area_share=-1 WHERE item_key=%s AND area_share IS NULL", (k,))
+            _ratio = inf.get("ratio")
+            if not _ratio:
+                _mark(-1, "매각지분 비율을 못 읽음")
                 continue
-            with _items_backfill_lock:
-                c.execute("UPDATE items SET area_full=%s, area_share=%s, share_ratio=%s WHERE item_key=%s",
-                          (inf["excl_area"], inf["share_area"], inf["ratio"], k))
-            done += 1
+            # 건물 전체면적 후보 — 전유부분(집합건물) > 층별 합계 > 옛 등기 표기 합산(평·홉·작·부속건물·단위없는 숫자).
+            #  층별 정규식이 일부만 잡는 명세서가 있어 한 값만 믿지 않고, 교차검증을 통과하는 후보를 고른다
+            #  (2026-09-24 전수검수 L01|2025|32334|1: '1층 68.67㎡'만 잡히고 '지하실 22.44·변소 0.91'이 빠져 92.02가 정답).
+            _bases, _seen = [], set()
+            for _b in (inf.get("excl_area"), inf.get("bld_total"), inf.get("bld_alt")):
+                if _b and round(float(_b), 2) not in _seen:
+                    _seen.add(round(float(_b), 2))
+                    _bases.append(float(_b))
+            if not _bases:
+                _mark(-1, "전유·건물 전체면적을 명세서에서 못 읽음")
+                continue
+            # 🔴계산값은 '독립 원천 중 하나와 맞을 때만' 확정한다. 근거가 약하면 대지권 비율을 지분으로 잡는 식으로 틀리고
+            #  (2026-09-23 실측 23건), 지분면적은 입찰가 판단에 바로 쓰이므로 틀린 값을 띄우느니 안 띄운다.
+            #  심판은 상세 '건물면적'·전용면적·목록 '면적' 칸 — 셋 다 명세서와 무관한 독립 원천이다(크롤러 화면값).
+            #  ①계산된 '지분면적'이 심판과 맞으면 확정 ②건물 지분이 확실(ratio_after_excl)하고 '전체면적'이 맞으면 확정
+            _hit = None
+            for _full in _bases:
+                _sh = round(_full * _ratio, 2)
+                if any(abs(_sh - v) <= 0.5 for v in _judges):
+                    _hit = (_full, _sh, "지분면적 일치")
+                    break
+                if inf.get("ratio_after_excl") and any(abs(_full - v) <= 0.5 for v in _judges):
+                    _hit = (_full, _sh, "전체면적 일치")
+                    break
+            if _hit:
+                _save(_hit[0], _hit[1], _ratio, _hit[2])
+                done += 1
+                continue
+            _mark(-2, f"교차검증 실패 — 전체면적 후보 {_bases} × 지분 {round(_ratio, 4)} vs 원천 {_judges}")
     if done:
         print(f"[share] 지분면적 계산 {done}/{len(rows)}건", flush=True)
     return done

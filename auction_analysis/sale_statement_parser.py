@@ -657,11 +657,18 @@ def parse_sale_statement_json(data) -> dict:
 #  items의 building_area·area_excl은 원천마다 전체/지분이 뒤섞여 있어(실측: 같은 '지분매각'인데 A02|2024|65819|1은
 #  building_area=전체·area_excl=지분, A03|2026|50392|1은 그 반대) 컬럼만으로는 못 가린다. 명세서에는 전유부분 면적과
 #  '매각지분 … N분의 M'이 항상 적혀 있어 그것으로 계산한다.
+#  🔴판정 파서 버전. 규칙을 고치면 반드시 +1 한다 — _share_fill이 share_ver가 낮은 물건을 전량 자동 재판정한다
+#  (2026-09-24 전수검수: 예전엔 area_share가 한 번 찍히면 다시 보지 않아, 파서를 고쳐도 320건이 옛 판정에 굳어 있었다).
+SHARE_VER = 2
 _NUM_FR = r"[0-9,]+(?:\.[0-9]+)?"        # 분모·분자에 소수가 온다(실측 '1345.8분의 281.23', '2438.6분의 4.09')
 _FRAC_A = re.compile(f"({_NUM_FR})\\s*분의\\s*({_NUM_FR})")        # 'N분의 M'
 _FRAC_B = re.compile(f"({_NUM_FR})\\s*/\\s*({_NUM_FR})")           # 'M/N' (실측 '임주현 지분 1/2 전부')
 _SHARE_SEG = re.compile(r"매각지분(.{0,220})")
-_EXCL_SEG = re.compile(r"전유부분의?\s*건물의?\s*표시(.{0,220}?)대지권")
+# 🔴2026-09-24 전수검수: 종료 앵커가 '대지권' 하나뿐이라, 대지권 문구가 없는 명세서는 전유부분이 적혀 있는데도
+#  못 읽고 '1동의 건물' 층별합을 전유로 오인했다(400건 전수 9건 — 확정 2건이 화면에 틀린 면적 노출:
+#  J04|2025|31414|1 전유 99.53×1/17=5.85인데 962.36÷17=56.61로 저장). → 다음 항목 머리말 어느 것으로든 끊는다.
+_EXCL_SEG = re.compile(r"전유부분의?\s*건물의?\s*표시(.{0,220}?)"
+                       r"(?:대지권|매각지분|부동산의\s*표시|감정평가|1동의\s*건물|$)")
 _AREA_ANY = re.compile(r"([0-9,]+(?:\.[0-9]+)?)\s*(?:㎡|m²)")
 _FLOOR_AREA = re.compile(r"((?:지하\s*)?\d+층|옥탑\d*층?|지층)\s*([0-9,]+(?:\.[0-9]+)?)\s*(?:㎡|m²)")   # 층별 면적(건물 전체 합산용)
 _LAND_AREA = re.compile(r"(?:대|전|답|임야|잡종지|도로)\s+([0-9,]+(?:\.[0-9]+)?)\s*(?:㎡|m²)")            # 토지의 표시 '대 626㎡'
@@ -707,7 +714,89 @@ def _ratios_in(seg: str) -> list:
     return out
 
 
-def share_info(text: str) -> dict:
+_PYEONG = 3.305785
+#  토지 항목('대 400㎡', '대 169평')은 건물 면적 합산에서 빼야 한다(실측 I02|2025|10691|1: '대 169평'을 건물로 세어 558㎡)
+_LAND_ITEM = re.compile(
+    r"(?:^|\s)(?:대|전|답|임야|잡종지|도로|과수원|목장용지|공장용지|학교용지|묘지|구거|유지|하천|제방|"
+    r"체육용지|주차장용지|창고용지|주유소용지|철도용지|수도용지|양어장|염전|광천지|사적지|종교용지)"
+    r"\s+[0-9,]+(?:\.[0-9]+)?\s*(?:㎡|m²|평)")
+#  옛 등기 표기 '건평 31평4홉 지하실 5평3홉2작'
+_PY_AREA = re.compile(r"(\d+)\s*평\s*(?:(\d)\s*홉)?\s*(?:(\d)\s*작)?")
+#  단위(㎡)가 빠진 숫자 '단층 주택,일용품소매점 236.04 지하1층 3.63'
+_BARE_AREA = re.compile(
+    r"(?:주택|점포|상가|창고|차고|주차장|축사|농업생산시설|소매점|사무실|공장|근린생활시설|다용도실|부속건물|건물)"
+    r"[^\d]{0,12}([0-9,]+\.[0-9]+|\d{2,4})(?!\s*(?:분의|/|평|년|층))")
+_ITEM_HEAD = re.compile(r"\[물건\s*(\d+)\]")
+
+
+def _item_seg(t: str, item_no=None) -> str:
+    """'부동산의 표시'~'감정평가액' 구간. item_no를 주면 그 '[물건 N]' 구간만(다물건 사건에서 남의 면적을 읽지 않게)."""
+    i = t.find("부동산의 표시")
+    if i < 0:
+        return t          # 🔴이 문구가 없는 양식이 있다(A02|2025|51713|1) — 자르면 헤더만 남아 지분을 못 읽는다
+    s = t[i:]
+    j = s.find("감정평가액")
+    if j > 0:
+        s = s[:j]
+    if item_no:
+        ms = list(_ITEM_HEAD.finditer(s))
+        for a, m in enumerate(ms):
+            if m.group(1) == str(item_no):
+                return s[m.end():(ms[a + 1].start() if a + 1 < len(ms) else len(s))]
+    return s
+
+
+def _drop_jesioe(s: str) -> str:
+    """제시외 건물은 등기된 건물 면적이 아니다 → 전체면적 합산에서 뺀다(실측: 포함하면 42건 중 32건이 원천값과 어긋난다)."""
+    out, pos = [], 0
+    for m in re.finditer(r"제시외", s):
+        out.append(s[pos:m.start()])
+        nxt = s.find("매각지분", m.start())
+        pos = nxt if nxt > 0 else len(s)
+    out.append(s[pos:])
+    return " ".join(out)
+
+
+def bld_total_general(text: str, item_no=None):
+    """전유부분이 없는 일반건물(주택·근린주택 등)의 건물 전체면적 → (면적, 방식) / 못 읽으면 (None, None).
+
+    🔴2026-09-24 전수검수로 추가. 판독불가 95건은 전부 옛 등기 표기라 '1층 00.00㎡' 형태가 없었다:
+      ①'건평 31평4홉 지하실 5평3홉2작'(평·홉·작) ②'단층주택 98.28㎡'(층 표기 없음)
+      ③'주택 39.67㎡ 부속 농업생산시설 19.83㎡ 축사 32.2㎡'(부속건물 분산) ④'주택,일용품소매점 236.04'(단위 없음)"""
+    t = re.sub(r"\s+", " ", text or "")
+    core = _drop_jesioe(_item_seg(t, item_no))
+    core = _LAND_ITEM.sub(" ", core)
+    core = re.sub(r"매각지분.{0,80}?전부", " ", core)      # '9분의 2 전부' 같은 지분 문구가 면적으로 읽히지 않게
+    m2 = _AREA_ANY.findall(core)
+    bare = _BARE_AREA.findall(core)
+    pys = list(_PY_AREA.finditer(core))
+    if m2 or bare:
+        seen, tot = set(), 0.0
+        for x in m2:
+            v = _share_num(x)
+            if v:
+                tot += v
+                seen.add(x)
+        for x in bare:
+            v = _share_num(x)
+            if v and x not in seen:
+                tot += v
+        how = "㎡합산"
+        for m in pys:                                      # ㎡와 평이 섞여 적힌 명세서가 있다
+            v = float(m.group(1)) + (float(m.group(2)) / 10 if m.group(2) else 0) + (float(m.group(3)) / 100 if m.group(3) else 0)
+            tot += v * _PYEONG
+            how = "㎡+평"
+        return (round(tot, 2), how) if tot else (None, None)
+    if pys:
+        tot = 0.0
+        for m in pys:
+            v = float(m.group(1)) + (float(m.group(2)) / 10 if m.group(2) else 0) + (float(m.group(3)) / 100 if m.group(3) else 0)
+            tot += v * _PYEONG
+        return round(tot, 2), "평환산"
+    return None, None
+
+
+def share_info(text: str, item_no=None) -> dict:
     """명세서 글자 → {excl_area(전유 전체면적), ratio(매각지분 0~1), share_area(지분면적)}. 못 읽으면 값 None.
 
     🔴규칙은 실측으로 다듬었다(2026-09-23, 크롤러 값과 어긋난 4건 원문 대조):
@@ -715,6 +804,12 @@ def share_info(text: str) -> dict:
       ②같은 사람의 지분이 여러 건이면 합산한다('갑구 1번 9분의 3 전부, 갑구 18번 9분의 2 전부' = 5/9).
       ③전유부분 면적은 '전유부분의 건물의 표시'~'대지권' 사이의 면적을 모두 더한다(1층102호 68.50 + 지층 24.83 + 계단실 6)."""
     t = re.sub(r"\s+", " ", text or "")
+    #  🔴다물건 사건은 '[물건 2]' 구간만 본다 — 안 자르면 남의 목적물 면적·지분을 읽는다
+    #   (실측 E04|2026|34|1: 전유 165.6㎡짜리인데 다른 물건까지 합쳐 5292.48㎡로 저장돼 있었다)
+    if item_no:
+        seg = _item_seg(t, item_no)
+        if seg and seg != t:
+            t = seg
     ratio = None
     # ④건물(전유) 지분을 먼저 본다 — 명세서는 토지 지분과 건물 지분을 따로 적는데, 앞에 오는 토지 지분을 쓰면 틀린다
     #  (실측 A03|2025|1111|1: 토지 '1549.4분의 41.219'를 잡아 30.51㎡, 실제 건물 지분 기준은 93.47㎡)
@@ -745,6 +840,11 @@ def share_info(text: str) -> dict:
     lands = [_share_num(x) for x in _LAND_AREA.findall(t)]
     lands = [a for a in lands if a]
     land_total = round(max(lands), 2) if lands else None
+    #  🔴층별 정규식은 '1층 68.67㎡'만 잡고 '지하실 22.44㎡·부속건물 변소 0.91㎡'는 못 잡는다 → 층별합이 나와도
+    #   옛 표기 합산(bld_alt)을 함께 돌려주고, 호출측이 교차검증에 통과하는 쪽을 고른다(L01|2025|32334|1 실측: 68.67 vs 92.02).
+    bld_alt, _how = bld_total_general(t, item_no)
+    if not bld_total:
+        bld_total = bld_alt
     # ratio_after=True면 '전유부분(건물)' 뒤에서 읽은 지분 = 건물 지분이 확실. False면 토지 지분일 수 있어 호출측이 보수적으로 다룬다.
     return {"excl_area": excl, "ratio": ratio, "share_area": share, "ratio_after_excl": ratio_after,
-            "bld_total": bld_total, "land_total": land_total}
+            "bld_total": bld_total, "bld_alt": bld_alt, "land_total": land_total}
