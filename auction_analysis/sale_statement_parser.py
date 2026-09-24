@@ -659,7 +659,7 @@ def parse_sale_statement_json(data) -> dict:
 #  '매각지분 … N분의 M'이 항상 적혀 있어 그것으로 계산한다.
 #  🔴판정 파서 버전. 규칙을 고치면 반드시 +1 한다 — _share_fill이 share_ver가 낮은 물건을 전량 자동 재판정한다
 #  (2026-09-24 전수검수: 예전엔 area_share가 한 번 찍히면 다시 보지 않아, 파서를 고쳐도 320건이 옛 판정에 굳어 있었다).
-SHARE_VER = 2
+SHARE_VER = 3
 _NUM_FR = r"[0-9,]+(?:\.[0-9]+)?"        # 분모·분자에 소수가 온다(실측 '1345.8분의 281.23', '2438.6분의 4.09')
 _FRAC_A = re.compile(f"({_NUM_FR})\\s*분의\\s*({_NUM_FR})")        # 'N분의 M'
 _FRAC_B = re.compile(f"({_NUM_FR})\\s*/\\s*({_NUM_FR})")           # 'M/N' (실측 '임주현 지분 1/2 전부')
@@ -848,3 +848,48 @@ def share_info(text: str, item_no=None) -> dict:
     # ratio_after=True면 '전유부분(건물)' 뒤에서 읽은 지분 = 건물 지분이 확실. False면 토지 지분일 수 있어 호출측이 보수적으로 다룬다.
     return {"excl_area": excl, "ratio": ratio, "share_area": share, "ratio_after_excl": ratio_after,
             "bld_total": bld_total, "bld_alt": bld_alt, "land_total": land_total}
+
+# ── 감정평가 면적표(items.detail_text)에서 건물 전체/지분 면적 (2026-09-24 추가) ──
+#  명세서보다 확실한 원천이다. 상세 화면 '면적(단위:㎡)'의 건물 블록은 항목마다 전체와 지분을 함께 적는다:
+#    '1층 주택' '15.26㎡ (4.62평)' '시멘벽돌조' '68.67면적중' 'OOO지분' '15.26전부'
+#  → 전체 = Σ(N면적중), 지분 = Σ(M전부). 제시외('매각제외')는 '면적중' 표기가 없어 자연히 빠진다.
+#  실측 회귀검증(확정 142건 중 표기 있는 115건): 전체·지분 모두 일치 112건(97.4%).
+#  어긋난 K01|2025|31626|1은 감정평가표(73.25/18.31)가 맞고 명세서 계산(63.46/15.87)이 부속건물을 빠뜨린 것이었다.
+_APPR_MID = re.compile(r"([0-9,]+(?:\.[0-9]+)?)\s*면적중")
+_APPR_ALL = re.compile(r"([0-9,]+(?:\.[0-9]+)?)\s*(?:전부|일부)")
+_APPR_M2 = re.compile(r"([0-9,]+(?:\.[0-9]+)?)\s*(?:㎡|m²)")
+
+
+def share_from_detail(area_bldg) -> tuple:
+    """crawler_analysis.parse_detail_text()['area_bldg'] → (전체면적, 지분면적, 항목수). 못 읽으면 (None, None, 0).
+
+    항목 구조: ['1층 주택', '15.26㎡ (4.62평)', '시멘벽돌조', '68.67면적중', 'OOO지분', '15.26전부']
+      → 전체 = '면적중' 값, 지분 = 그 앞의 'N㎡' 칸(가장 가까운 것). '전부' 값은 보조로만 쓴다.
+    🔴지분을 'N전부'에서 읽으면 안 된다 — 실측 L01|2025|34674|1은 '부속건물 43.16면적중' 다음이 '87전부'로,
+      토지면적 87㎡가 잘못 들어가 있다(같은 항목의 '7.19㎡'가 실제 지분). 반대로 'N㎡' 칸은 항상 그 항목의 지분면적이다.
+    """
+    lines = list(area_bldg or [])
+    tot = shr = 0.0
+    n = 0
+    for i, ln in enumerate(lines):
+        m = _APPR_MID.search(ln or "")
+        if not m:
+            continue
+        full = _share_num(m.group(1))
+        part = None
+        for j in range(i, max(-1, i - 4), -1):              # 같은 항목의 'N㎡ (M평)' 칸
+            a = _APPR_M2.search(lines[j] or "")
+            if a:
+                part = _share_num(a.group(1))
+                break
+        if part is None:                                    # 폴백: 'N전부'('외2인 522.466전부'처럼 앞에 글자가 붙기도)
+            for j in range(i + 1, min(i + 4, len(lines))):
+                a = _APPR_ALL.search(lines[j] or "")
+                if a:
+                    part = _share_num(a.group(1))
+                    break
+        if full and part and 0 < part <= full:
+            tot += full
+            shr += part
+            n += 1
+    return (round(tot, 2), round(shr, 2), n) if n else (None, None, 0)

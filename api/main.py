@@ -6843,7 +6843,7 @@ def _share_fill(limit: int = 40) -> int:
     🔴items의 building_area·area_excl은 원천마다 전체/지분이 뒤섞여 있어 쓰지 않는다(실측: 같은 지분매각인데 서로 반대)."""
     if _IS_CLOUD:
         return 0
-    from auction_analysis.sale_statement_parser import share_info, SHARE_VER
+    from auction_analysis.sale_statement_parser import share_info, share_from_detail, SHARE_VER
     rows = auction_db.query_pg(_SHARE_SQL, (SHARE_VER, limit))
     if rows is None:                      # query_pg는 실패해도 None만 돌려준다(조용한 실패) → 직접 재조회해 원인을 남긴다
         import psycopg
@@ -6880,13 +6880,13 @@ def _share_fill(limit: int = 40) -> int:
             try:
                 _row = c.execute(
                     "SELECT coalesce(sale_target,''), substring(building_area from '([0-9]+(?:[.][0-9]+)?)')::numeric,"
-                    " area_excl, substring(area_text from '(?:건물|전용)\\s*([0-9.]+)')::numeric"
-                    " FROM items WHERE item_key=%s", (k,)).fetchone() or ("", None, None, None)
+                    " area_excl, substring(area_text from '(?:건물|전용)\\s*([0-9.]+)')::numeric, detail_text"
+                    " FROM items WHERE item_key=%s", (k,)).fetchone() or ("", None, None, None, None)
             except Exception as e:
                 print(f"[share] {k} 컬럼 조회 실패: {str(e)[:60]}", flush=True)
                 continue
             _st = _row[0]
-            _judges = [float(x) for x in _row[1:] if x is not None]
+            _judges = [float(x) for x in _row[1:4] if x is not None]
 
             def _save(full, share, ratio, why):
                 with _items_backfill_lock:
@@ -6903,6 +6903,20 @@ def _share_fill(limit: int = 40) -> int:
             # 🔴'건물전체매각'이면 건물면적에 지분을 곱하면 안 된다 — 지분은 토지에만 걸린 물건이다(실측 2026-09-24: 틀린 10건 중
             #   9건이 '토지(일부)지분 /건물전체매각'. 집합건물이라 전유면적이 읽혀 토지 지분이 그대로 곱해졌다).
             #   건물 표시는 크롤러 값이 맞으므로 보류(-2)로 두고 기존 표시를 유지한다.
+            # 🔴1순위 원천: 감정평가 면적표(detail_text). 항목마다 '68.67면적중 … 15.26전부'처럼 전체와 지분을
+            #  함께 적어, 명세서에서 비율을 추정할 필요가 없다. 실측 회귀검증(확정 142건 중 표기 있는 115건)
+            #  전체·지분 모두 일치 112건(97.4%), 어긋난 건은 감정평가표 쪽이 맞았다(K01|2025|31626|1 부속건물 누락).
+            if _row[4]:
+                try:
+                    from auction_analysis.crawler_analysis import parse_detail_text
+                    _ab = (parse_detail_text(_row[4]) or {}).get("area_bldg") or []
+                    _at, _ash2, _n = share_from_detail(_ab)
+                    if _n and _at and _ash2:
+                        _save(_at, _ash2, round(_ash2 / _at, 10), "감정평가 면적표")
+                        done += 1
+                        continue
+                except Exception as e:
+                    print(f"[share] {k} 감정평가표 판독 실패: {str(e)[:60]}", flush=True)
             if "건물전체" in _st.replace(" ", ""):
                 _mark(-2, f"매각대상 '{_st}' — 지분은 토지에만 걸려 건물면적에 곱하면 안 됨")
                 continue
