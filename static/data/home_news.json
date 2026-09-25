@@ -1,69 +1,42 @@
 {
  "items": [
   {
-   "keyword": "대출규제",
-   "title": "전세제도, 폐지가 답인가 - 한국아파트신문",
-   "link": "https://www.hapt.co.kr/news/articleView.html?idxno=169568",
-   "image": "https://cdn.hapt.co.kr/news/photo/202609/169568_42040_5648.jpg",
-   "source": "한국아파트신문",
-   "published": "2026-09-24T08:50:10+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "[李 정부의 부동산 역설①] 4개월 만에 바꾸고 한 달 만에 되돌리고…정책 ‘오락가락’ - 데일리안",
-   "link": "https://www.dailian.co.kr/news/view/1693942/%E6%9D%8E-%EC%A0%95%EB%B6%80-%EB%B6%80%EB%8F%99%EC%82%B0-%EC%97%AD%EC%84%A4%E2%91%A0-4%EA%B0%9C%EC%9B%94-%EB%A7%8C%EC%97%90-2026",
-   "image": "https://cdnimage.dailian.co.kr/news/202609/news_1790123819595_1693942_m_1.jpg",
-   "source": "데일리안",
-   "published": "2026-09-24T08:00:00+09:00",
+   "keyword": "부동산 세금",
+   "title": "주식투자·부동산·세금 상담에에 상생금융마켓까지…머니페스타 ‘재테크 축제’ 펼친다 [헤럴드머니페스타 2026] - 헤럴드경제",
+   "link": "https://biz.heraldcorp.com/article/10884078",
+   "image": "https://wimg.heraldcorp.com/news/cms/2026/09/24/news-p.v1.20260922.e84560a3fe9e48158164d7941487789e_P1.png",
+   "source": "헤럴드경제",
+   "published": "2026-09-25T09:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "아파트 경매",
-   "title": "최저 2억대 일산 아파트 …경기 아파트 추천 경매 6선 - 땅집고",
-   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026092303660",
-   "image": "https://image.chosun.com/sitedata/thumbnail/202609/23/2026092303656_0_thumb.jpg",
+   "title": "경기도 아파트가 1억대부터… 양주, 의정부, 일산 소액 아파트 경매 6선 - 땅집고",
+   "link": "https://realty.chosun.com/site/data/html_dir/2026/09/23/2026092303662.html",
+   "image": "https://image.chosun.com/sitedata/image/202609/23/2026092303658_0.jpg",
    "source": "땅집고",
-   "published": "2026-09-24T06:13:00+09:00",
+   "published": "2026-09-25T06:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "\"강남 떨어졌다고? 속지마라\"…전문가 전원 \"서울 집값 더 오른다\" - 머니투데이 - 머니투데이",
-   "link": "https://www.mt.co.kr/estate/2026/09/24/2026092321275983809",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/w=1200,h=726,fit=cover,bg=white,f=auto,quality=high,sharpen=2,g=face/21/2026/09/2026092321275983809_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-09-24T06:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "추석 이후에도 집값 ‘평탄화’ 지속…강남 쉬고 외곽·경기 뛴다 - edaily.co.kr",
-   "link": "https://www.edaily.co.kr/News/Read?newsId=01439926645583400&mediaCodeNo=257",
-   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/09/PS26092400074.jpg",
-   "source": "edaily.co.kr",
-   "published": "2026-09-24T05:12:02+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "부동산 정책 낙제점…66% \"집값 안 잡힐 것\" - edaily.co.kr",
-   "link": "https://www.edaily.co.kr/News/Read?newsId=01367766645583400&mediaCodeNo=257",
-   "image": "https://image.edaily.co.kr/images/Photo/files/NP/S/2026/09/PS26092400047.jpg",
-   "source": "edaily.co.kr",
-   "published": "2026-09-24T05:00:14+09:00",
+   "title": "서울 집값 평탄화? 시장에선 \"상향 평준화\" - YTN",
+   "link": "https://www.ytn.co.kr/_ln/0102_202609250519431209",
+   "image": "https://image.ytn.co.kr/general/jpg/2026/0925/202609250519431209_t.jpg",
+   "source": "YTN",
+   "published": "2026-09-25T05:19:00+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "\"동대문·성북 84㎡마저 20억 육박…서울 집값 '침묵의 랠리' 시작\" - 뉴시스",
-   "link": "https://www.newsis.com/view/NISX20260923_0003801589",
-   "image": "https://img1.newsis.com/2026/09/20/NISI20260920_0021446419_web.jpg",
-   "source": "뉴시스",
-   "published": "2026-09-24T00:00:00+09:00",
+   "title": "LA 집값 작년보다 4.3% 올랐다 - 미주중앙일보",
+   "link": "https://www.koreadaily.com/article/20260924105648490",
+   "image": "https://www.koreadaily.com/resources/usa/thumbnail_image/2026/08/25/3d586e73-fbd3-46f2-b188-f2c4f7222aff.jpg",
+   "source": "미주중앙일보",
+   "published": "2026-09-25T02:56:00+09:00",
    "has_time": true
   }
  ],
- "count": 7,
- "date": "2026-09-24"
+ "count": 4,
+ "date": "2026-09-25"
 }
