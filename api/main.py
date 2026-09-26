@@ -1551,6 +1551,46 @@ def _apt_new_keys() -> set:
 _SENIOR_LEASE_MIN_GAP = 30_000_000   # 선순위 임차권 필터: 시세 − 보증금 최소 3,000만원
 
 
+#  🔴보증기관(HUG·SGI·LH·HF)이 임차보증금 채권을 승계·양수한 물건 → 목록에 '인수조건변경' (주인님 지시 2026-09-27).
+#   근거는 **매각물건명세서**만 쓴다(임차인 비고의 '[명세서]' 표식). 법원 문건접수 목록은 근거로 쓰지 않는다.
+#   items.tags는 크롤러가 쓰는 칸이라 직접 고치면 다음 수집 때 덮어쓰인다 → 파생 컬럼 agency_takeover에 넣고
+#   목록 표시(_summary)에서 tags와 합성한다. 20분 col_sync가 매번 재계산해 신규 물건도 자동 반영된다.
+_AGENCY_SQL_HIT = """
+SELECT DISTINCT t.item_key FROM item_tenants t
+ WHERE t.status ~ '(주택도시보증공사|서울보증보험|한국토지주택공사|한국주택금융공사|주택금융공사)'
+   AND t.status ~ '(승계|양수|양도|대위변제|구상권)'
+   AND t.status LIKE '%[명세서]%'"""
+
+
+def _agency_takeover_sync() -> int:
+    """명세서에 보증기관 채권 승계가 적힌 물건에 agency_takeover=true. 해제도 함께(멤버십 full 재동기). 처리 건수 반환."""
+    if _IS_CLOUD:
+        return 0
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return 0
+    try:
+        import psycopg
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=20, autocommit=True) as c:
+            c.execute("SET lock_timeout='25s'")
+            hits = {r[0] for r in c.execute(_AGENCY_SQL_HIT).fetchall()}
+            if not hits:                      # 조회가 비면 기존 값을 지우지 않는다(조회 실패 보호 — over85/senior와 같은 규칙)
+                print("[agency] 대상 0건 — 기존 값 유지", flush=True)
+                return 0
+            cur = {r[0] for r in c.execute("SELECT item_key FROM items WHERE agency_takeover").fetchall()}
+            add, rem = hits - cur, cur - hits
+            if add:
+                c.execute("UPDATE items SET agency_takeover=true WHERE item_key = ANY(%s)", (list(add),))
+            if rem:
+                c.execute("UPDATE items SET agency_takeover=NULL WHERE item_key = ANY(%s)", (list(rem),))
+            if add or rem:
+                print(f"[agency] 인수조건변경(기관 승계) +{len(add)} -{len(rem)} → 총 {len(hits)}건", flush=True)
+            return len(add) + len(rem)
+    except Exception as e:
+        print(f"[agency] 실패: {str(e)[:120]}", flush=True)
+        return 0
+
+
 def _apt_senior_lease_keys() -> set:
     """아파트 중 '대항력 있는 선순위 임차인(전입 O + 확정 O + 배당요구 X)'이 있고,
     그 임차인의 보증금이 시세(est)보다 3,000만원 이상 낮은 물건.
@@ -1613,6 +1653,28 @@ def _apt_senior_lease_keys() -> set:
             if isinstance(v, dict) and v.get("price"):
                 if (v["price"] - cand[k]) >= _SENIOR_LEASE_MIN_GAP:
                     match.add(k)
+    # 🔴말소동의·대항력 포기 확약서가 제출된 물건은 뺀다(주인님 지시 2026-09-27).
+    #  확약서가 나오면 낙찰자가 미배당 보증금을 인수하지 않아, '선순위 임차권 인수 리스크'라는 이 필터의 취지에 맞지 않는다.
+    #  근거는 매각물건명세서(+현황)만 본다 — _detect_waiver가 법원 문건접수 줄을 이미 걷어낸다.
+    #  (실측 B01|2025|23282|1은 명세서에 확약서 전문이 있어 제외, J06|2026|20123|1은 문건접수에만 있어 유지)
+    if match:
+        from auction_analysis.crawler_analysis import _detect_waiver as _dw
+        _mk = list(match)
+        _wv: set = set()
+        for i in range(0, len(_mk), 500):
+            _ch = _mk[i:i + 500]
+            _rw = auction_db.query_pg(
+                "SELECT item_key, detail_text, tags FROM items WHERE item_key = ANY(%s) AND ("
+                "detail_text LIKE %s OR detail_text LIKE %s OR detail_text LIKE %s OR tags LIKE %s)",
+                (_ch, "%확약%", "%반환청구권을 포기%", "%반환채권을 포기%", "%인수조건변경%"))
+            if _rw is None:
+                print("[col_sync] ⚠ 선순위임차권 확약서 조회 실패 — 이번 주기는 제외 없이 진행", flush=True)
+                break
+            _wv |= {x["item_key"] for x in _rw
+                    if ("인수조건변경" in (x.get("tags") or "")) or _dw(x.get("detail_text") or "")}
+        if _wv:
+            print(f"[col_sync] 선순위임차권: 확약서 제출 {len(_wv)}건 제외 ({len(match)} → {len(match - _wv)})", flush=True)
+            match -= _wv
     return match
 
 
@@ -2048,7 +2110,7 @@ def _grade_buckets(force: bool = False) -> dict:
             _wr = None
             for _ in range(3):
                 _wr = db.query_pg(
-                    "SELECT item_key FROM items WHERE item_key = ANY(%s) AND ("
+                    "SELECT item_key, detail_text, tags FROM items WHERE item_key = ANY(%s) AND ("
                     "(detail_text LIKE %s AND (detail_text LIKE %s OR detail_text LIKE %s)) "
                     "OR detail_text LIKE %s OR detail_text LIKE %s OR tags LIKE %s)",
                     (_batch, "%확약%", "%포기%", "%말소동의%", "%반환청구권을 포기%", "%반환채권을 포기%", "%인수조건변경%"))
@@ -2057,7 +2119,12 @@ def _grade_buckets(force: bool = False) -> dict:
                 _t.sleep(1.0)
             if _wr is None:
                 _wok = False; break
-            _wv |= {x["item_key"] for x in _wr}
+            # 🔴LIKE는 '후보'만 고른다. 확정은 _detect_waiver로 — 법원 문건접수 줄('2026-08-11 … 확약서 제출')은
+            #  근거에서 빠진다(주인님 지시 2026-09-27: 매각물건명세서에 있는 내용만 보고 판단).
+            #  실측: 확약 문구 3,399건 중 1,072건이 문건접수 목록에만 있어 명세서와 정반대로 표시됐다.
+            from auction_analysis.crawler_analysis import _detect_waiver as _dw
+            _wv |= {x["item_key"] for x in _wr
+                    if ("인수조건변경" in (x.get("tags") or "")) or _dw(x.get("detail_text") or "")}
         if _wok:
             _waiver_cache["set"] = _wv; _waiver_cache["ts"] = _t.time()
             print(f"[buy_grade] waiver 재스캔 {len(_wv)}건 (배치·6h캐시 갱신)", flush=True)
@@ -2718,6 +2785,7 @@ def auctions(
               result_prefix=status, special=special, item_keys=item_keys,
               buy_grade=(grade if _use_col else None), reg=(reg if _reg_use_col else None),
               exclude_grade=("매수금지" if type_filter else None),   # 유형별 필터 검색엔 매수금지 제외(주인님 지시)
+              exclude_share=(True if type_filter else None),        # 유형별 필터 검색엔 지분매각 제외(주인님 지시 2026-09-27)
               appraisal_min=appraisal_min, appraisal_max=appraisal_max,
               price_min=price_min, price_max=price_max,
               fail_min=fail_min, fail_max=fail_max,
@@ -4850,6 +4918,12 @@ def _col_sync_loop() -> None:
             _statement_sweep()             # ★명세서→임차인 채우기 유지(새 법원 수집분도 20분 안에 권리분석 반영) — 2026-09-18
         except Exception as _e:
             print(f"[stmt_sweep] skip: {str(_e)[:80]}", flush=True)
+        try:
+            # ★보증기관(HUG·SGI·LH·HF) 채권 승계 → '인수조건변경' 유지(명세서 근거만) — 2026-09-27 주인님 지시.
+            #  _statement_sweep 뒤에 둔다(명세서가 임차인 비고에 채워진 다음 그 비고를 읽어야 하므로).
+            _agency_takeover_sync()
+        except Exception as _e:
+            print(f"[agency] skip: {str(_e)[:80]}", flush=True)
         try:
             _stale_analysis_sweep()        # ★물건 갱신 뒤 옛 분석 캐시 재계산(freshness 루프 안전망) — 2026-09-18
         except Exception as _e:

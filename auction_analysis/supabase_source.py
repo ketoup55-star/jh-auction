@@ -502,7 +502,8 @@ class SupabaseSource:
                  sell_from=None, sell_to=None, buy_grade=None, reg=None,
                  has_expbid=None, has_est=None,
                  fuel=None, brand=None, car_ok=None, invest_min=None, invest_max=None, zone=None,
-                 over85_ok=None, deposit_unknown=None, type_or=None, exclude_grade=None) -> list[tuple]:
+                 over85_ok=None, deposit_unknown=None, type_or=None, exclude_grade=None,
+                 exclude_share=None) -> list[tuple]:
         """PostgREST 필터를 (key,value) 튜플 리스트로. 같은 컬럼 범위(gte+lte) 지원."""
         if caseno:                     # 특정 사건번호 검색 = 상태·매각기일 무관하게 그 물건을 찾는다
             result_prefix = None       #  프론트가 기본 status=진행물건 + 매각기일범위(오늘~+3개월)를 항상 붙이는데,
@@ -522,6 +523,10 @@ class SupabaseSource:
                 f.append(("buy_grade", f"eq.{buy_grade}"))
         if exclude_grade:                      # 유형별 필터 검색 시 '매수금지'는 제외(주인님 지시) — 미판정(NULL)은 살림
             f.append(("or", f"(buy_grade.neq.{exclude_grade},buy_grade.is.null)"))
+        if exclude_share:                      # 🔴유형별 필터 검색엔 지분매각 제외(주인님 지시 2026-09-27).
+            #  지분만 사는 물건은 유형필터(차익 기준)의 취지에 맞지 않는다.
+            #  share_sale은 지분매각만 true이고 나머지는 대부분 NULL이라, is.false만 쓰면 일반 물건이 통째로 사라진다.
+            f.append(("or", "(share_sale.is.false,share_sale.is.null)"))
         if reg:                                # 규제 구분 컬럼 직접필터 — reg 컬럼(백필됨) 존재 시 main이 전달.
             f.append(("reg", f"eq.{reg}"))     #  기존 _reg_filter_keys(5천여 item_key IN-리스트, 2.5초)를 인덱스 대체
         if has_expbid:                         # '백데이터' 유형필터 = 예상낙찰가 있음(컬럼). 기존 키셋(전체 페이지네이션+캐시왕복+3.6천 IN-리스트 15청크 count) 대체
@@ -985,7 +990,7 @@ class SupabaseSource:
                 "sale_price,sale_rate,fail_count,sell_date,result,status_reason,"
                 "bid_count,sale_2nd_price,hit_count,thumb_url,buy_grade,data_class,"
                 "est_price,expected_bid,expbid_count,profit,kb_count,similar_count,apt_demand,usage_fix,"
-                "share_sale,area_full,area_share")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익·호가·유사거래·수요배지 포함(fetch 왕복·온-패스 compute 제거)
+                "share_sale,area_full,area_share,agency_takeover")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익·호가·유사거래·수요배지 포함(fetch 왕복·온-패스 compute 제거)
         iks = kw.get("item_keys")
         if iks is not None and len(iks) > 600:
             # 큰 item_keys 집합 → 청크별 상위(offset+limit) 조회 후 병합·정렬·슬라이스(분산 top-k).
@@ -1228,7 +1233,11 @@ class SupabaseSource:
             "share_sale": bool(row.get("share_sale")) or None,
             "area_full": row.get("area_full"),
             "area_share": (row.get("area_share") if (row.get("area_share") or 0) > 0 else None),
-            "tags": row.get("tags"),
+            # 🔴보증기관(HUG·SGI·LH·HF) 채권 승계는 목록에 '인수조건변경'으로 뜬다(주인님 지시 2026-09-27).
+            #  items.tags는 크롤러 칸이라 직접 못 넣는다 → 파생 컬럼 agency_takeover를 여기서 합성한다.
+            "tags": (row.get("tags") if not row.get("agency_takeover")
+                     else ("인수조건변경" if not row.get("tags")
+                           else (row["tags"] if "인수조건변경" in row["tags"] else row["tags"] + ",인수조건변경"))),
             "appraisal_price": row.get("appraisal_price"),
             "min_price": row.get("min_price"),
             "sale_price": row.get("sale_price"),
