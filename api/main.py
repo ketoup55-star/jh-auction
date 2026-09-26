@@ -1551,32 +1551,51 @@ def _apt_new_keys() -> set:
 _SENIOR_LEASE_MIN_GAP = 30_000_000   # 선순위 임차권 필터: 시세 − 보증금 최소 3,000만원
 
 
-#  🔴보증기관(HUG·SGI·LH·HF)이 임차보증금 채권을 승계·양수한 물건 → 목록에 '인수조건변경' (주인님 지시 2026-09-27).
-#   근거는 **매각물건명세서**만 쓴다(임차인 비고의 '[명세서]' 표식). 법원 문건접수 목록은 근거로 쓰지 않는다.
+#  🔴'인수조건변경' = 보증기관(HUG·SGI·LH·HF)이 채권을 승계·양수 **하고** 대항력 포기 확약서·말소동의서가
+#   제출된 경우다(주인님 지시 2026-09-27 정정). 기관이 채권을 가져갔다는 것만으로는 인수조건이 바뀌지 않는다.
+#   예: J06|2026|20123|1은 '신청채권자가 대위변제 후 구상권 행사'로 기관 승계는 맞지만 확약서·말소동의가
+#   없어 표시하지 않는다(실측: 승계 1,538건 중 확약서까지 있는 것은 548건).
+#   근거는 **매각물건명세서**만 쓴다 — 법원 문건접수 목록은 확약서 판단 근거로 쓰지 않는다.
 #   items.tags는 크롤러가 쓰는 칸이라 직접 고치면 다음 수집 때 덮어쓰인다 → 파생 컬럼 agency_takeover에 넣고
 #   목록 표시(_summary)에서 tags와 합성한다. 20분 col_sync가 매번 재계산해 신규 물건도 자동 반영된다.
+_AGENCY_RE_ORG = r"(주택도시보증공사|서울보증보험|한국토지주택공사|한국주택금융공사|주택금융공사)"
+_AGENCY_RE_ACT = r"(승계|양수|양도|대위변제|구상권)"
 _AGENCY_SQL_HIT = """
-SELECT DISTINCT t.item_key FROM item_tenants t
- WHERE t.status ~ '(주택도시보증공사|서울보증보험|한국토지주택공사|한국주택금융공사|주택금융공사)'
-   AND t.status ~ '(승계|양수|양도|대위변제|구상권)'
-   AND t.status LIKE '%[명세서]%'"""
+SELECT t.item_key, string_agg(coalesce(t.status,''), ' ') AS notes
+  FROM item_tenants t
+ WHERE t.status ~ %s AND t.status ~ %s AND t.status LIKE '%%[명세서]%%'
+ GROUP BY t.item_key"""
+_WAIVER_TEXT_RE = None
 
 
 def _agency_takeover_sync() -> int:
-    """명세서에 보증기관 채권 승계가 적힌 물건에 agency_takeover=true. 해제도 함께(멤버십 full 재동기). 처리 건수 반환."""
+    """명세서에 '기관 채권 승계 + 대항력 포기 확약서/말소동의'가 함께 있는 물건에 agency_takeover=true.
+    해제도 함께(멤버십 full 재동기). 처리 건수 반환."""
     if _IS_CLOUD:
         return 0
     dburl = os.environ.get("SUPABASE_DB_URL")
     if not dburl:
         return 0
+    global _WAIVER_TEXT_RE
+    if _WAIVER_TEXT_RE is None:
+        _WAIVER_TEXT_RE = re.compile(r"(확약서|말소\s*동의|말소동의|대항력[을를]?\s*포기|반환(?:청구권|채권)[을를의\s]{0,4}포기)")
     try:
         import psycopg
+        from auction_analysis.crawler_analysis import _detect_waiver as _dw, drop_doc_receipt as _ddr
         with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=20, autocommit=True) as c:
             c.execute("SET lock_timeout='25s'")
-            hits = {r[0] for r in c.execute(_AGENCY_SQL_HIT).fetchall()}
-            if not hits:                      # 조회가 비면 기존 값을 지우지 않는다(조회 실패 보호 — over85/senior와 같은 규칙)
-                print("[agency] 대상 0건 — 기존 값 유지", flush=True)
+            cand = c.execute(_AGENCY_SQL_HIT, (_AGENCY_RE_ORG, _AGENCY_RE_ACT)).fetchall()
+            if not cand:                      # 조회가 비면 기존 값을 지우지 않는다(조회 실패 보호)
+                print("[agency] 후보 0건 — 기존 값 유지", flush=True)
                 return 0
+            hits = set()
+            for k, notes in cand:
+                if _WAIVER_TEXT_RE.search(_ddr(notes or "")):      # ①명세서 비고에 확약서·말소동의
+                    hits.add(k)
+                    continue
+                _dt = c.execute("SELECT detail_text FROM items WHERE item_key=%s", (k,)).fetchone()
+                if _dt and _dw(_dt[0] or ""):                      # ②명세서 본문(문건접수 줄 제외)
+                    hits.add(k)
             cur = {r[0] for r in c.execute("SELECT item_key FROM items WHERE agency_takeover").fetchall()}
             add, rem = hits - cur, cur - hits
             if add:
@@ -1584,7 +1603,8 @@ def _agency_takeover_sync() -> int:
             if rem:
                 c.execute("UPDATE items SET agency_takeover=NULL WHERE item_key = ANY(%s)", (list(rem),))
             if add or rem:
-                print(f"[agency] 인수조건변경(기관 승계) +{len(add)} -{len(rem)} → 총 {len(hits)}건", flush=True)
+                print(f"[agency] 인수조건변경(기관승계+확약서) +{len(add)} -{len(rem)} → 총 {len(hits)}건 "
+                      f"(승계 후보 {len(cand)}건 중)", flush=True)
             return len(add) + len(rem)
     except Exception as e:
         print(f"[agency] 실패: {str(e)[:120]}", flush=True)
