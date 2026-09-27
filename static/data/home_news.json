@@ -1,24 +1,69 @@
 {
  "items": [
   {
+   "keyword": "부동산 세금",
+   "title": "박정, 평화경제특구 부동산 취득세·재산세 감면 추진… 지방세특례법 개정안 발의 - 세정일보",
+   "link": "https://www.sejungilbo.com/news/articleView.html?idxno=60301",
+   "image": "https://cdn.sejungilbo.com/news/thumbnail/202609/60301_95600_4529_v150.jpg",
+   "source": "세정일보",
+   "published": "2026-09-27T08:45:52+09:00",
+   "has_time": true
+  },
+  {
    "keyword": "부동산 정책",
-   "title": "'쉿→의견 제시'…달라진 與 부동산 메시지 배경엔 '심상찮은 서울 민심' - v.daum.net",
-   "link": "https://v.daum.net/v/20260926070128807",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/26/NEWS1/20260926070129013iddv.jpg",
-   "source": "v.daum.net",
-   "published": "2026-09-26T07:01:28+09:00",
+   "title": "[데스크칼럼] 규제는 오늘, 공급은 몇 년 뒤…엇갈린 부동산의 시간 - 데일리안",
+   "link": "https://www.dailian.co.kr/news/view/1694059",
+   "image": "https://cdnimage.dailian.co.kr/news/202609/news_1790129958652_1694059_m_1.jpg",
+   "source": "데일리안",
+   "published": "2026-09-27T08:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "아파트 경매",
-   "title": "양주시 아파트가 2.9억부터… 일산, 부천 등 아파트 추천 경매 6선 - 땅집고",
-   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026092401646",
-   "image": "https://image.chosun.com/sitedata/thumbnail/202609/24/2026092401644_0_thumb.jpg",
-   "source": "땅집고",
-   "published": "2026-09-26T06:00:00+09:00",
+   "title": "\"잃은 돈 찾으려다 아파트 경매까지\"…본전심리에 갇힌 2030 - 뉴시스",
+   "link": "https://www.newsis.com/view/NISX20260922_0003800456",
+   "image": "https://img1.newsis.com/2020/10/06/NISI20201006_0016753533_web.jpg",
+   "source": "뉴시스",
+   "published": "2026-09-27T07:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "송도 국평 아파트가 4.9억부터…인천 아파트 추천 경매 6선 - realty.chosun.com",
+   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026092401663",
+   "image": "https://image.chosun.com/sitedata/thumbnail/202609/24/2026092401661_0_thumb.jpg",
+   "source": "realty.chosun.com",
+   "published": "2026-09-27T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "변호사비 밀린 김세의…'전 MBC 사장' 부친이 산 압구정 아파트 경매로 - 뉴스1",
+   "link": "https://www.news1.kr/society/general-society/6301854",
+   "image": "https://i3n.news1.kr/system/photos/2026/5/26/7925005/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-09-27T05:30:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "투자자들 안도… 노동당, 주택 임대 이자비용 공제 유지 - 위클리코리아",
+   "link": "https://www.weeklykoreanz.com/post/%ED%88%AC%EC%9E%90%EC%9E%90%EB%93%A4-%EC%95%88%EB%8F%84-%EB%85%B8%EB%8F%99%EB%8B%B9-%EC%A3%BC%ED%83%9D-%EC%9E%84%EB%8C%80-%EC%9D%B4%EC%9E%90%EB%B9%84%EC%9A%A9-%EA%B3%B5%EC%A0%9C-%EC%9C%A0%EC%A7%80",
+   "image": "https://static.wixstatic.com/media/658fe5_b79f40031a214bd8be0ce7091bb82088~mv2.jpg/v1/fill/w_1000,h_561,al_c,q_85,usm_0.66_1.00_0.01/658fe5_b79f40031a214bd8be0ce7091bb82088~mv2.jpg",
+   "source": "위클리코리아",
+   "published": "2026-09-27T00:53:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "집값 부담에 '탈서울'하는데…경기도마저 4년 만에 2억 올랐다 - v.daum.net",
+   "link": "https://v.daum.net/v/qNbIDCfzNK",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/27/THEFACT/20260927000221622ebob.jpg",
+   "source": "v.daum.net",
+   "published": "2026-09-27T00:02:00+09:00",
    "has_time": true
   }
  ],
- "count": 2,
- "date": "2026-09-26"
+ "count": 7,
+ "date": "2026-09-27"
 }
