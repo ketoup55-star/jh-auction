@@ -1432,12 +1432,13 @@ def collect_apartments(limit: int | None = None, resume: bool = True, dry: bool 
                     log.info("수집완료 item=%s → %s 매매 %d건 (conf %.2f)",
                              item_key, m.get("kb_name"), len(listings), m.get("confidence") or 0)
         except KbAuthError as e:
-            con.rollback(); stat["errors"] += 1; stat["status"] = "auth_failed"
+            _safe_rollback(con); stat["errors"] += 1; stat["status"] = "auth_failed"
             log.error("KB 인증 만료 — 아파트 수집 중단(매물 비활성화 안 함) :: %s", e)
             break
         except Exception as e:  # noqa: BLE001
-            con.rollback()
             stat["errors"] += 1
+            if not _safe_rollback(con) or _is_conn_lost(e):   # 풀러가 끊은 연결이면 재연결해 이어 간다
+                con, cur = _reconnect(con, cur)
             # 전체 트레이스백을 파일로그에 남김 → 사후 원인분석
             log.exception("수집오류 item=%s 주소='%s' :: %s", item_key, (address or "")[:40], e)
             stat["errors_detail"].append({"item_key": item_key, "error": str(e)[:200],
@@ -1575,11 +1576,13 @@ def collect_gongmae(limit: int | None = None, only_new: bool = True, skip_proces
                     con.commit()
                     log.info("공매 신규단지 %s → %s (매물 누적 %d)", cno, m.get("kb_name"), stat["listings"])
         except KbAuthError as e:
-            con.rollback(); stat["errors"] += 1; stat["status"] = "auth_failed"
+            _safe_rollback(con); stat["errors"] += 1; stat["status"] = "auth_failed"
             log.error("KB 인증 만료 — 공매 수집 중단(매물 비활성화 안 함) :: %s", e)
             break
         except Exception as e:  # noqa: BLE001
-            con.rollback(); stat["errors"] += 1
+            stat["errors"] += 1
+            if not _safe_rollback(con) or _is_conn_lost(e):   # 풀러가 끊은 연결이면 재연결해 이어 간다
+                con, cur = _reconnect(con, cur)
             log.exception("공매 수집오류 %s :: %s", item_key, e)
         stat["processed"] += 1
         if progress is not None:
@@ -1615,11 +1618,13 @@ def refresh_kb_all(limit: int | None = None, with_photos: bool = True,
             _collect_complex(cur, cno, None, None, "01", with_photos, stat, dedup_by_complex=True)
             con.commit()
         except KbAuthError as e:
-            con.rollback(); stat["errors"] += 1; stat["status"] = "auth_failed"
+            _safe_rollback(con); stat["errors"] += 1; stat["status"] = "auth_failed"
             log.error("KB 인증 만료 — 전체 새로고침 중단(매물 비활성화 안 함) :: %s", e)
             break
         except Exception as e:  # noqa: BLE001
-            con.rollback(); stat["errors"] += 1
+            stat["errors"] += 1
+            if not _safe_rollback(con) or _is_conn_lost(e):
+                con, cur = _reconnect(con, cur)
             log.exception("새로고침 오류 단지 %s :: %s", cno, e)
         stat["processed"] += 1
         if progress is not None:
@@ -1811,6 +1816,42 @@ STALE_SQL = """
 """
 
 
+#  🔴2026-09-28 실측: --refresh-all 이 2,073/4,779 단지에서 죽었다.
+#   Supabase 트랜잭션 풀러(6543)는 장시간 작업 중 연결을 끊는데, 루프의 except 절이 con.rollback() 을
+#   부르는 순간 '연결이 이미 없어서' rollback 이 또 예외를 던져 루프 밖으로 튀어 프로세스가 종료됐다
+#   (psycopg.OperationalError: the connection is lost). 단지 하나의 오류가 전체 수집을 끝내면 안 된다.
+#   → rollback 은 절대 예외를 올리지 않게 하고, 연결이 끊겼으면 새로 맺어 그 자리에서 이어 간다.
+def _safe_rollback(con) -> bool:
+    """rollback 시도. 성공=True, 연결이 죽어 실패=False(호출측이 재연결)."""
+    try:
+        con.rollback()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _is_conn_lost(e: BaseException) -> bool:
+    import psycopg
+    if isinstance(e, psycopg.OperationalError):
+        return True
+    t = str(e).lower()
+    return ("connection is lost" in t or "server closed the connection" in t
+            or "connection already closed" in t or "ssl connection has been closed" in t)
+
+
+def _reconnect(con, cur):
+    """끊긴 연결을 새로 맺는다. (con, cur) 반환."""
+    for x in (cur, con):
+        try:
+            x.close()
+        except Exception:  # noqa: BLE001
+            pass
+    c = _db_connect()
+    c.autocommit = False
+    log.warning("DB 연결이 끊겨 재연결했습니다 — 이어서 진행")
+    return c, c.cursor()
+
+
 def refresh_stale_complexes(days: int | None = None, limit: int | None = None,
                             with_photos: bool = False, progress: dict | None = None) -> dict:
     """[매일] 묵은 단지·매물 0건 단지를 limit 개만 갱신 — 호가 신선도 유지."""
@@ -1831,11 +1872,13 @@ def refresh_stale_complexes(days: int | None = None, limit: int | None = None,
             _collect_complex(cur, cno, None, None, "01", with_photos, stat, dedup_by_complex=True)
             con.commit()
         except KbAuthError as e:
-            con.rollback(); stat["errors"] += 1; stat["status"] = "auth_failed"
+            _safe_rollback(con); stat["errors"] += 1; stat["status"] = "auth_failed"
             log.error("KB 인증 만료 — 재방문 중단(매물 비활성화 안 함) :: %s", e)
             break
         except Exception as e:  # noqa: BLE001
-            con.rollback(); stat["errors"] += 1
+            stat["errors"] += 1
+            if not _safe_rollback(con) or _is_conn_lost(e):
+                con, cur = _reconnect(con, cur)
             log.exception("재방문 오류 단지 %s :: %s", cno, e)
         stat["processed"] += 1
         if progress is not None:

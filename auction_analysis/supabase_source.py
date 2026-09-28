@@ -97,6 +97,27 @@ _JIBEOP_ORDER = [
 ]
 
 
+_TAG_SPLIT = re.compile(r"[,\[\]]")
+
+
+def _land_flag(land_area):
+    """land_area 칸이 숫자가 아니면 면적이 아니라 표식이다('대지권미등기'·'토지 매각제외'·'대지권 매각제외')."""
+    t = (land_area or "").strip()
+    if not t or t[0].isdigit():
+        return []
+    return [t]
+
+
+def _merge_tags(base, extras):
+    """태그를 '[a,b,c]' 한 덩어리로 합친다. 중복은 넣지 않는다."""
+    items = [x.strip() for x in _TAG_SPLIT.split(base or "") if x.strip()]
+    for e in extras:
+        e = (e or "").strip()
+        if e and e not in items:
+            items.append(e)
+    return ("[" + ",".join(items) + "]") if items else None
+
+
 def court_display_name(court_code: str | None) -> str:
     """법원코드 → 표시용 법원명. 예: B03→'부산서부지원', A01→'서울중앙지방법원'."""
     t = COURT_CODE_MAP.get(court_code or "")
@@ -1233,11 +1254,13 @@ class SupabaseSource:
             "share_sale": bool(row.get("share_sale")) or None,
             "area_full": row.get("area_full"),
             "area_share": (row.get("area_share") if (row.get("area_share") or 0) > 0 else None),
-            # 🔴보증기관(HUG·SGI·LH·HF) 채권 승계는 목록에 '인수조건변경'으로 뜬다(주인님 지시 2026-09-27).
-            #  items.tags는 크롤러 칸이라 직접 못 넣는다 → 파생 컬럼 agency_takeover를 여기서 합성한다.
-            "tags": (row.get("tags") if not row.get("agency_takeover")
-                     else ("인수조건변경" if not row.get("tags")
-                           else (row["tags"] if "인수조건변경" in row["tags"] else row["tags"] + ",인수조건변경"))),
+            # 🔴목록 태그는 항상 대괄호 한 덩어리로 낸다(주인님 지시 2026-09-28) — '[대항력있는임차인,인수조건변경]'.
+            #  예전엔 agency_takeover 를 대괄호 밖에 붙여 '인수조건변경'·'[..],인수조건변경' 처럼 나왔다.
+            #  대지권미등기·토지 매각제외처럼 land_area 칸에 들어온 글자도 면적이 아니라 '표식'이라 여기서 태그로 옮긴다
+            #  (그래야 목록 면적칸이 '대지권 대지권미등기' 처럼 겹쳐 보이지 않는다).
+            "tags": _merge_tags(row.get("tags"),
+                                (["인수조건변경"] if row.get("agency_takeover") else [])
+                                + _land_flag(row.get("land_area"))),
             "appraisal_price": row.get("appraisal_price"),
             "min_price": row.get("min_price"),
             "sale_price": row.get("sale_price"),

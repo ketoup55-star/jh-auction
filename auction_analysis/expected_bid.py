@@ -69,15 +69,60 @@ def _to_int(v):
         return None
 
 
+_PAREN_TAIL = re.compile(r"\(([^)]*)\)\s*$")
+_DONG_ONLY = re.compile(r"^[가-힣]+(?:동|리|가)\d*$")
+_ROAD_NO = re.compile(r"([가-힣0-9]+(?:대?로|길))\s*(\d+(?:-\d+)?)")
+
+
+def building_name(addr):
+    """주소 끝 괄호에서 건물명만. '(덕포동,대동레미안화승빌)' → '대동레미안화승빌'.
+    '(덕포동)'처럼 법정동만 있으면 None(건물 식별에 못 씀)."""
+    if not addr:
+        return None
+    m = _PAREN_TAIL.search(str(addr))
+    if not m:
+        return None
+    parts = [p.strip() for p in m.group(1).split(",") if p.strip()]
+    if not parts:
+        return None
+    name = parts[-1]
+    if _DONG_ONLY.fullmatch(name):
+        return None
+    return name or None
+
+
 def building_key(addr):
-    """주소 → (건물주소 prefix, '법정동 지번'). 동/층/호 앞까지가 건물주소(동일건물 매칭용),
-    '법정동 지번'은 조회용 ilike 키(예 '용전리 696')."""
+    """주소 → (건물주소 prefix, 조회용 ilike 키). 동/층/호 앞까지가 건물주소(동일건물 매칭용).
+
+    🔴2026-09-28 보강: 예전엔 '법정동 지번'만 찾아, 도로명 주소('백양대로703번길 51-30')와
+      '동N가'('송천동1가 101-3')에서 키가 None 이 됐다. 호출측(sold_cases)은 키가 없으면
+      조회 자체를 건너뛰어 **무조건 '매각사례가 없습니다'** 가 떴다(진행중 11,291건 중 2,010건).
+      같은 함수를 예상낙찰(expected_bid.compute)도 써서 '조건 만족 사례 없음' 의 원인이기도 했다.
+      → ①법정동+지번 ②괄호 안 건물명 ③도로명+건물번호 순으로 키를 만든다."""
     if not addr:
         return None, None
     pre = re.split(r"\s+(?:제?\d+동|지하\s*\d*층|제?\d+층|[Bb]\d+|\d+호)", addr)[0].strip()
-    m = re.search(r"([가-힣]+(?:동|리|가))\s+(\d+(?:-\d+)?)", pre)
-    bunji = (m.group(1) + " " + m.group(2)) if m else None
+    #  '송천동1가'(동+숫자+가) → 먼저 시도, 그 다음 일반 '동/리/가'
+    #  법정동 '남대문로5가'·'송천동1가'(이름+숫자+가) → 먼저, 그 다음 일반 '동/리/가'
+    #  '산89-3'(산 번지)도 지번이다 — 앞에 '산 ' 이 붙는 형태까지 받는다
+    m = re.search(r"([가-힣]+\d+가|[가-힣]+(?:동|리|가)\d*)\s+(산\s*)?(\d+(?:-\d+)?)", pre)
+    bunji = (m.group(1) + " " + (m.group(2) or "").strip() + m.group(3)) if m else None
+    if not bunji:
+        bunji = building_name(addr)                       # 도로명 주소 → 괄호 건물명으로 조회
+    if not bunji:
+        m2 = _ROAD_NO.search(pre)                         # 괄호도 없으면 도로명+건물번호
+        if m2:
+            bunji = m2.group(1) + " " + m2.group(2)
     return pre, bunji
+
+
+def same_building(a, b):
+    """두 주소가 같은 건물인가 — 괄호 건물명이 같거나, 건물주소 prefix 가 같으면 동일.
+    도로명/지번이 섞여 들어와도(같은 사건 안에서도 섞인다) 건물명으로 가려낸다."""
+    na, nb = building_name(a), building_name(b)
+    if na and nb:
+        return _norm(na) == _norm(nb)
+    return _norm(building_key(a)[0] or "") == _norm(building_key(b)[0] or "")
 
 
 def compute(cur, cases, est_price=None):
@@ -106,7 +151,7 @@ def compute(cur, cases, est_price=None):
             if ik in seen:                                              # 같은 물건(item_key) 중복 사례는 1회만(페이지네이션 중복 방어)
                 continue
             seen.add(ik)
-        if _norm(building_key(c.get("address"))[0]) != cur_pre:          # 동일 건물만
+        if not same_building(c.get("address"), cur.get("address")):     # 동일 건물만(건물명·prefix)
             continue
         sp = _to_int(c.get("sale_price"))
         ca = _to_int(c.get("appraisal_price"))

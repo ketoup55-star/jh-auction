@@ -174,6 +174,33 @@ def drop_doc_receipt(text: str) -> str:
     return _DOC_RECEIPT_LINE.sub(" ", text or "")
 
 
+#  🔴확약서 판정은 **매각물건명세서 근거만** 쓴다(주인님 지시 2026-09-27·28).
+#   detail_text 는 스피드옥션 화면 전체라 '물건현황/토지이용계획'·'감정평가현황' 구간에도 문장이 섞여 들어온다.
+#   실측 H04|2025|51246|1: 명세서 3쪽 전문에 '확약'·'말소'·'포기' 가 0회이고 오히려
+#   "배당에서 보증금이 전액 변제되지 아니하면 잔액을 매수인이 인수함" 인데,
+#   '물건현황' 구간의 '…확약서가 제출됨' 한 줄 때문에 화면이 정반대로 '낙찰자 미인수' 라고 표시했다.
+#   → 명세서 출처 구간만 남기고 나머지(물건현황·감정평가·면적·등기·종합공부)는 근거에서 뺀다.
+_STMT_SECTIONS = ("명세서요약사항", "주의사항/법원문건접수요약")
+
+
+def statement_only(text: str) -> str:
+    """detail_text → 매각물건명세서 근거 구간만(명세서 요약사항 + 주의사항/비고)."""
+    if not text:
+        return ""
+    try:
+        secs = _split_sections(text)
+    except Exception:  # noqa: BLE001
+        return text
+    if not secs:
+        return text
+    out = []
+    for name, lines in secs.items():
+        key = re.sub(r"\s+", "", name or "")
+        if key in _STMT_SECTIONS:
+            out.append("\n".join(lines))
+    return "\n".join(out)
+
+
 def _detect_waiver(text: str) -> Optional[str]:
     """미배당 보증금 인수 면제 조건 감지 → 두 형태 모두 인정.
     ① 확약서: '말소동의·대항력 포기 확약서 제출'.
@@ -182,7 +209,8 @@ def _detect_waiver(text: str) -> Optional[str]:
     🔴근거는 매각물건명세서(+현황)만 쓴다. 법원 문건접수 목록은 제외(주인님 지시 2026-09-27)."""
     if not text:
         return None
-    flat = re.sub(r"\s+", " ", drop_doc_receipt(text))
+    #  명세서 구간만 추린 뒤, 그 안에서 다시 법원 문건접수 줄(날짜로 시작)을 걷어낸다.
+    flat = re.sub(r"\s+", " ", drop_doc_receipt(statement_only(text)))
     if "확약" in flat and any(k in flat for k in _WAIVER_KW):     # ① 확약서 형태
         return _waiver_seg(flat, "확약",
                            "말소동의 또는 대항력 포기 확약서가 제출되어 미배당 보증금을 낙찰자가 인수하지 않음")

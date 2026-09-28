@@ -632,7 +632,10 @@ function areaLabel(L){
   if(L.group==="차량외"||/차량|자동차|중장비|중기/.test(L.usage||"")) return "";
   var jh=/아파트|다세대|연립|도시형|오피스텔|빌라/.test(L.usage||"");
   // 지분매각 물건은 목록에 '전체면적'을 보여준다(주인님 지시 2026-09-23). 실제 매각되는 지분면적은 상세 물건정보에.
-  var la=L.land_area, ba=(L.share_sale&&L.area_full)?(L.area_full+"㎡"):L.building_area, p=[];
+  // 🔴land_area 칸에 '대지권미등기'·'토지 매각제외' 같은 글자가 들어오면 면적이 아니라 표식이다.
+  //   그대로 두면 목록에 '대지권 대지권미등기' 처럼 겹쳐 보인다 → 면적칸에서 빼고 빨간 [태그]로 내보낸다(서버가 tags에 합성).
+  var la=(L.land_area&&/^[0-9]/.test(L.land_area))?L.land_area:null;
+  var ba=(L.share_sale&&L.area_full)?(L.area_full+"㎡"):L.building_area, p=[];
   if(jh){   // 집합건물: 대지권+전용 분리 표기(둘 다 있으면 area_text보다 우선 — '전용만'이던 것도 대지권 보강)
     if(la) p.push("대지권 "+la);
     if(ba) p.push("전용 "+ba);
