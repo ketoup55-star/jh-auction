@@ -4859,6 +4859,9 @@ def _col_enrich_sync() -> None:
              ) it
              LEFT JOIN kb_listing l ON l.complex_no::text=it.cno AND l.trade_type='매매'
                   AND coalesce(l.feature,'') !~ '경매' AND coalesce(l.agent_name,'') !~ '경매'   -- 경매 광고 매물 제외(2026-09-19)
+                  AND l.is_active                                                                -- 🔴살아있는 매물만(2026-09-28)
+                  AND l.last_seen > now() - interval '30 days'   -- 🔴묵은 호가 제외. 목록 집계는 30일 고정
+                                                                  --   (상세 경쟁매물은 KB_FRESH_DAYS 환경변수)
                   AND (it.area IS NULL OR (l.area_excl IS NOT NULL AND abs(l.area_excl-it.area)<=3))
              GROUP BY it.item_key
            ) sub WHERE i.item_key=sub.item_key AND i.kb_count IS DISTINCT FROM sub.cnt""",
@@ -9149,6 +9152,8 @@ def gongmae_competing_listings(mng: str, cdtn: Optional[str] = None) -> dict:
     params = [("select", "listing_id,area_excl,price,floor,dong,ho,unit_price,"
                          "direction,room_cnt,bath_cnt,feature,agent_name,confirm_date"),
               ("complex_no", f"eq.{cno}"), ("trade_type", "eq.매매"),
+              ("is_active", "is.true"),                       # 🔴살아있는 매물만(2026-09-28)
+              ("last_seen", f"gte.{_kb_fresh_since()}"),      # 🔴묵은 호가 제외
               ("order", "price.asc"), ("limit", "300")]
     if area:
         params += [("area_excl", f"gte.{round(area - 3, 2)}"),
@@ -10660,7 +10665,8 @@ def _prewarm_expbid(keys=None):
         except Exception:
             break
         for c in rows:
-            pre = eb._norm(eb.building_key(c.get("address"))[0] or "")
+            #  건물명이 있으면 그것을 묶음키로(도로명/지번 혼재 대응). 없으면 기존 prefix.
+            pre = eb._norm(eb.building_name(c.get("address")) or eb.building_key(c.get("address"))[0] or "")
             if pre:
                 cases_by.setdefault(pre, []).append(c)
         if len(rows) < 1000:
@@ -10692,7 +10698,7 @@ def _prewarm_expbid(keys=None):
             v = cc.get("expbid:" + k)
             if isinstance(v, dict) and v.get("v") == _EXPBID_V:
                 continue
-            pre = eb._norm(eb.building_key(x.get("address"))[0] or "")
+            pre = eb._norm(eb.building_name(x.get("address")) or eb.building_key(x.get("address"))[0] or "")
             ev = ests.get(k) if isinstance(ests, dict) else None
             est = ev.get("price") if isinstance(ev, dict) else None
             res = eb.compute(x, cases_by.get(pre, []), est_price=est)
@@ -11047,18 +11053,20 @@ def auction_sold_cases(item_key: str, mode: str = "bunji") -> dict:
         cur_pre = eb._norm(pre)
         rows = []
         if bunji:
+            #  🔴용도 필터를 걸면 같은 건물인데 용도가 갈린 물건이 통째로 빠진다.
+            #   실측 B03|2023|105977: 대상은 '아파트', 같은 건물 다른 호실 20건은 전부 '도시형생활주택'
+            #   → usage_name ilike '아파트' 로 거르면 0건이 되어 "매각사례가 없습니다" 가 떴다.
+            #   아래에서 same_building() 으로 같은 건물임을 이미 확인하므로 용도 조건은 쓰지 않는다.
             params = {"select": fields, "address": f"ilike.*{bunji}*", "sale_price": "gt.0", "limit": "3000"}
-            if is_apt:
-                params["usage_name"] = "ilike.*아파트*"
-            else:
-                params["or"] = _VILLA_OR
             try:
                 r = auction_db._get("items", params)
                 rows = r.json() if r.status_code in (200, 206) else []
             except Exception:
                 rows = []
         for c in rows:
-            if _final_sale(c) and eb._norm(eb.building_key(c.get("address"))[0]) == cur_pre:
+            #  🔴prefix 만 비교하면 같은 건물인데 도로명/지번으로 갈린 물건이 통째로 빠진다
+            #   (실측 B03|2023|105977: 28개 물번 중 4개가 도로명 → "매각사례가 없습니다")
+            if _final_sale(c) and eb.same_building(c.get("address"), cur.get("address")):
                 cases.append(c)
     cases.sort(key=lambda c: (c.get("sell_date") or ""), reverse=True)
     for c in cases:                                    # 썸네일 http→https(앱 cleartext 차단 회피)
@@ -11790,6 +11798,33 @@ def _kb_int(v):
         return None
 
 
+#  🔴2026-09-28 전수검수: 읽기 경로 어디에도 is_active·신선도 조건이 없어, KB 수집이 멈춘 뒤에도
+#   죽은 매물이 '현재 호가'로 계속 표시됐다. 실측 — 화면 집계에 들어간 매물 144,812건 전량 is_active=false,
+#   last_seen 이 2026-06(48,765) / 07(2,611) / 08(84,413) 로 최소 38일 최대 90일 묵은 값이었다.
+#   입찰가 판단에 직결되는 숫자라, 틀린 값을 띄우느니 안 띄운다(지분면적과 같은 원칙).
+#   수집이 이 일수 넘게 멈추면 호가가 비워지고, 동시에 kb_crawler 가 kb:alert 경보를 남긴다(조치7).
+KB_FRESH_DAYS = int(os.environ.get("KB_FRESH_DAYS", "30"))
+
+
+def _kb_fresh_since() -> str:
+    """호가로 인정할 최소 last_seen (ISO). KB_FRESH_DAYS 이전 매물은 현재 호가로 보지 않는다."""
+    import datetime as _dt
+    return (_dt.datetime.now(_dt.timezone.utc) - _dt.timedelta(days=KB_FRESH_DAYS)).isoformat()
+
+
+def _kb_rt_auth_fail(cno, e) -> None:
+    """KB 실시간 조회 실패 기록. 인증 만료는 경보 수준(한 달간 조용히 비어 있던 원인)."""
+    msg = str(e)[:200]
+    auth = ("KbAuthError" in type(e).__name__) or ("10402" in msg) or ("UNAUTHORIZED" in msg.upper())
+    print(f"[kb_realtime] {'인증만료' if auth else '조회실패'} complex={cno} :: {msg}", flush=True)
+    if auth:
+        try:
+            auction_db.cache_save("kb:alert", {"ts": time.time(), "kind": "auth_expired",
+                                               "where": "realtime_listings", "msg": msg})
+        except Exception:
+            pass
+
+
 def _kb_realtime_listings(cno, prop_type: str = "01") -> dict:
     """우리 DB(kb_listing)에 매물이 없는 미수집 단지 → KB부동산 실시간 매물 조회.
     🔴근본: 우리는 전국 KB 중 2,604단지만 수집 → 미수집 단지는 경쟁매물이 0건이던 것.
@@ -11821,8 +11856,13 @@ def _kb_realtime_listings(cno, prop_type: str = "01") -> dict:
                 "feature": p.get("특징광고내용"), "agent_name": p.get("중개업소명"),
                 "confirm_date": p.get("매물확인년월일"),
             })
-    except Exception:
-        out, cname = [], None
+    except Exception as e:                       # noqa: BLE001
+        #  🔴2026-09-28 전수검수: 예전엔 여기서 예외를 통째로 삼키고 out=[] 를 아래 캐시에 저장했다.
+        #   KB 토큰이 죽으면(8/29~) 인증거절이 '매물 0건'으로 1시간 고착되고 로그도 한 줄 안 남아,
+        #   화면은 '경쟁매물 없음'만 보여 줬다. 토큰을 고친 뒤에도 캐시 만료까지 계속 0건이었다.
+        #   → 인증/네트워크 실패는 캐시하지 않고(다음 요청에 재시도) 원인을 로그에 남긴다.
+        _kb_rt_auth_fail(cno, e)
+        return {"listings": [], "cname": None, "error": "kb_unavailable"}
     try:
         auction_db.cache_save(_ck, {"ts": _time.time(), "listings": out, "cname": cname})
     except Exception:
@@ -11882,6 +11922,8 @@ def auction_competing_listings(item_key: str) -> dict:
     params = [("select", "listing_id,area_excl,price,floor,dong,ho,unit_price,"
                          "direction,room_cnt,bath_cnt,feature,agent_name,confirm_date"),
               ("complex_no", f"eq.{cno}"), ("trade_type", "eq.매매"),
+              ("is_active", "is.true"),                       # 🔴살아있는 매물만(2026-09-28)
+              ("last_seen", f"gte.{_kb_fresh_since()}"),      # 🔴묵은 호가 제외
               ("order", "price.asc"), ("limit", "300")]
     if area:                                       # 동일 평형 = 전용 ±3㎡(같은 ㎡타입만, 59/84 등 구분)
         params += [("area_excl", f"gte.{round(area - 3, 2)}"),
@@ -14194,6 +14236,64 @@ def admin_kb_set_token(body: dict = Body(...), admin: dict = Depends(require_adm
         raise HTTPException(500, f"Supabase 저장 실패: {e}")
     return {"ok": True, "saved": True, "auto_refresh": bool(rt),
             "expires_hours": round(exp / 3600, 1) if exp else None}
+
+
+def _dt_now_iso() -> str:
+    import datetime as _d
+    return _d.datetime.now(_d.timezone.utc).isoformat(timespec="seconds")
+
+
+def _dt_days_ago(n: int) -> str:
+    import datetime as _d
+    return (_d.date.today() - _d.timedelta(days=n)).isoformat()
+
+
+@app.get("/admin/kb/health")
+def admin_kb_health(_u: dict = Depends(require_admin_or_local)) -> dict:
+    """KB 수집 건강검진 — 토큰 유효·최근 수집일·묵은 단지 수·마지막 경보.
+    🔴2026-09-28: 인증이 8/29 만료된 뒤 30일간(10402 2,157회) 아무도 몰랐다. 매일 05:00 작업은
+    Task Scheduler 결과 0(성공)으로 끝나 워치독이 잡을 수 없었다 → 한 번에 보는 자리를 만든다."""
+    import kb_crawler as _kb
+    out: dict = {"checked_at": _dt_now_iso()}
+    try:
+        out["token_valid"] = bool(_kb._probe_token(_kb.AUTH.get_token()))
+    except Exception as e:  # noqa: BLE001
+        out["token_valid"] = False
+        out["token_error"] = str(e)[:200]
+    try:
+        st = _kb._load_token_store() or {}
+    except Exception:  # noqa: BLE001
+        st = {}
+    out["token_saved_at"] = st.get("at")
+    out["has_refresh_token"] = bool(st.get("refresh_token"))
+    rows = auction_db.query_pg(
+        """select (select max(last_seen)::date from kb_listing) last_collect,
+                  (select count(*) from kb_listing where is_active) active_cnt,
+                  (select count(*) from kb_listing where is_active
+                     and last_seen > now() - interval '30 days') fresh_cnt,
+                  (select count(*) from kb_complex) complex_cnt,
+                  (select count(*) from kb_complex c where c.last_seen is null
+                     or c.last_seen < now() - interval '7 days') stale_cnt,
+                  (select count(*) from kb_complex c where not exists
+                     (select 1 from kb_listing l where l.complex_no=c.complex_no)) empty_cnt""") or []
+    if rows:
+        out.update({k: rows[0].get(k) for k in
+                    ("last_collect", "active_cnt", "fresh_cnt", "complex_cnt", "stale_cnt", "empty_cnt")})
+    try:
+        out["last_alert"] = (auction_db.cache_get_many(["kb:alert"]) or {}).get("kb:alert")
+    except Exception:  # noqa: BLE001
+        out["last_alert"] = None
+    problems = []
+    if not out.get("token_valid"):
+        problems.append("KB 인증 만료 — kbland 재로그인 필요")
+    if not out.get("fresh_cnt"):
+        problems.append("30일 내 신선한 매물 0건 — 수집이 멈췄습니다")
+    lc = str(out.get("last_collect") or "")
+    if lc and lc < _dt_days_ago(3):
+        problems.append(f"마지막 수집 {lc} — 3일 넘게 갱신 없음")
+    out["ok"] = not problems
+    out["problems"] = problems
+    return out
 
 
 @app.get("/admin/kb/token_status")

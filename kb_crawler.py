@@ -150,6 +150,7 @@ from __future__ import annotations
 
 import base64
 import datetime
+import datetime as _dt
 import json
 import logging
 import os
@@ -369,20 +370,98 @@ def refresh_site_token(refresh_token: str) -> dict | None:
             "expires_in": int(d.get("expires_in") or 0)}
 
 
-def _load_token_store() -> dict:
+#  🔴2026-09-28 전수검수: 토큰 저장소가 3곳(.kb_token.json / .env / Supabase api_cache 'kb:auth')인데
+#   _Auth 는 Supabase 를 읽지도 쓰지도 않았다. 서버(클라우드)가 새 토큰을 저장해도 로컬 크롤러는 못 쓰고,
+#   크롤러가 갱신해도 서버는 못 썼다 → 한쪽만 살아 있어도 다른 쪽이 8/21 죽은 토큰을 계속 재사용.
+#   → 읽기: 두 곳 중 at(저장시각)이 최신인 것. 쓰기: 두 곳 모두. 이러면 어느 쪽이 갱신해도 함께 살아난다.
+_SB_TOKEN_KEY = "kb:auth"
+
+
+def _sb_token_load() -> dict:
+    """Supabase api_cache('kb:auth') → dict(token/refresh_token/at/expires_in). 실패 시 {}."""
+    if not DB_URL:
+        return {}
     try:
-        with open(KB_TOKEN_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
+        import psycopg
+        with psycopg.connect(DB_URL, connect_timeout=10, prepare_threshold=None) as con:
+            with con.cursor() as cur:
+                cur.execute("select data from api_cache where cache_key=%s", (_SB_TOKEN_KEY,))
+                row = cur.fetchone()
+        d = row[0] if row else None
+        return d if isinstance(d, dict) else {}
+    except Exception as e:  # noqa: BLE001
+        log.debug("Supabase 토큰 읽기 실패: %s", e)
         return {}
 
 
+def _sb_token_save(d: dict) -> None:
+    if not DB_URL:
+        return
+    try:
+        import psycopg
+        from psycopg.types.json import Jsonb
+        with psycopg.connect(DB_URL, connect_timeout=10, prepare_threshold=None) as con:
+            with con.cursor() as cur:
+                cur.execute("""insert into api_cache (cache_key,data,updated_at) values (%s,%s,now())
+                               on conflict (cache_key) do update set data=excluded.data, updated_at=now()""",
+                            (_SB_TOKEN_KEY, Jsonb(d)))
+            con.commit()
+    except Exception as e:  # noqa: BLE001
+        log.warning("Supabase 토큰 저장 실패: %s", e)
+
+
+def _load_token_store() -> dict:
+    """로컬 파일 + Supabase 중 at(ISO 시각)이 더 최신인 쪽. 한쪽만 있으면 그쪽."""
+    loc = {}
+    try:
+        with open(KB_TOKEN_FILE, encoding="utf-8") as f:
+            loc = json.load(f) or {}
+    except Exception:
+        loc = {}
+    rem = _sb_token_load()
+    if not rem:
+        return loc
+    if not loc:
+        return rem
+    if str(rem.get("at") or "") > str(loc.get("at") or ""):
+        log.debug("토큰 저장소: Supabase 쪽이 최신(at=%s)", rem.get("at"))
+        return rem
+    return loc
+
+
 def _save_token_store(d: dict) -> None:
+    """두 곳 모두에 저장(at = 저장시각). 한쪽이 실패해도 다른 쪽은 남는다."""
+    d = dict(d)
+    d.setdefault("at", _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"))
     try:
         with open(KB_TOKEN_FILE, "w", encoding="utf-8") as f:
             json.dump(d, f, ensure_ascii=False)
     except Exception as e:  # noqa: BLE001
         log.warning("토큰 저장 실패(%s): %s", KB_TOKEN_FILE, e)
+    _sb_token_save(d)
+
+
+#  정적/주입 토큰이 실제로 살아 있는지 서명 API 1회로 확인. 30570(실존 단지) 1건만 요청해 가볍게.
+#  kb_list_complex 를 쓰지 않는 이유: 그 함수는 401 이면 AUTH.get_token(force=True) 로 재귀한다.
+_PROBE_COMPLEX = os.environ.get("KB_PROBE_COMPLEX", "30570")
+
+
+def _probe_token(token: str) -> bool:
+    if not token:
+        return False
+    try:
+        body = {"단지기본일련번호": _PROBE_COMPLEX, "매물종별구분": "01", "페이지번호": 1,
+                "페이지목록수": 1, "중복타입": "02", "정렬타입": "date",
+                "매물거래구분": "1", "면적일련번호": "", "전자계약여부": "0"}
+        r = _api("POST", PROP_MAIN_URL, ctx="probe",
+                 data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+                 headers=_signed_headers(token), timeout=15)
+        if r.status_code == 401 or _is_unauthorized(r):
+            return False
+        return r.status_code == 200
+    except Exception as e:  # noqa: BLE001
+        log.debug("토큰 프로브 실패(네트워크 추정): %s", e)
+        return False
 
 
 class _Auth:
@@ -425,15 +504,24 @@ class _Auth:
             if self._try_refresh():
                 return self.token
             # 2) 정적 토큰 주입 (KB_SITE_TOKEN)
+            #  🔴2026-09-28 전수검수: 예전엔 '설정돼 있으면 무조건 사용'이라, .env 에 남은 죽은 토큰이
+            #   3순위 자동로그인을 영구 차단했다. 실측 — refresh 만료(8/29) 후 30일간 10402 가 2,157회
+            #   찍히는 동안 카카오 자동로그인 시도는 로그 전량에서 0회. 매일 05:00 수집이 매물 0건으로
+            #   조용히 끝났다. → 실제 서명 API 1회로 살아있는지 확인하고, 죽었으면 3)으로 넘어간다.
             if KB_SITE_TOKEN_ENV:
-                self.token = KB_SITE_TOKEN_ENV
-                self.expires_at = time.monotonic() + 3600
-                return self.token
+                if _probe_token(KB_SITE_TOKEN_ENV):
+                    self.token = KB_SITE_TOKEN_ENV
+                    self.expires_at = time.monotonic() + 3600
+                    return self.token
+                log.warning("KB_SITE_TOKEN 무효(서명 API 거절) — 정적 토큰 건너뛰고 자동로그인 시도")
             # 3) 카카오 자동로그인 (최후)
             tok, hdrs = _kakao_login_capture(KB_EMAIL, KB_PW)
             if tok:
                 self.token, self.captured_headers = tok, hdrs
                 self.expires_at = time.monotonic() + 3600
+                #  저장은 _kakao_login_capture 가 refresh_token 과 함께 수행한다.
+                #  방금 저장된 refresh_token 을 메모리에도 반영해 이 프로세스에서 바로 갱신에 쓴다.
+                self.refresh_token = (_load_token_store() or {}).get("refresh_token") or self.refresh_token
                 return self.token
             raise RuntimeError(
                 "KB 인증 실패: KB_REFRESH_TOKEN(권장) 또는 KB_SITE_TOKEN 을 설정하거나 "
@@ -485,6 +573,41 @@ def refresh_site_token(refresh_token: str) -> dict | None:
         return None
 
 
+def _click_login_entry(page, PWT, timeout_ms: int) -> None:
+    """kbland 홈 → 로그인 화면 진입. 버튼 이름이 바뀌어도 견디게 후보를 순차 시도."""
+    names = ("로그인", "로그인하기")
+    for nm in names:
+        try:
+            page.get_by_role("button", name=nm, exact=True).first.click(timeout=6000)
+            log.info("[kakao] 로그인 버튼 '%s' 클릭", nm)
+            return
+        except Exception:  # noqa: BLE001
+            continue
+    # 메뉴 안에 숨어 있는 경우
+    for menu in ("메뉴", "전체메뉴"):
+        try:
+            page.get_by_role("button", name=menu, exact=True).first.click(timeout=6000)
+            for nm in names:
+                try:
+                    page.get_by_role("button", name=nm, exact=True).first.click(timeout=6000)
+                    log.info("[kakao] %s > '%s' 클릭", menu, nm)
+                    return
+                except Exception:  # noqa: BLE001
+                    continue
+        except Exception:  # noqa: BLE001
+            continue
+    # 마지막 수단: 로그인 페이지로 직접 이동
+    for url in (f"{KBLAND_HOME.rstrip('/')}/login", "https://kbland.kr/login"):
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            if page.locator(".btn.btn-login.kakao").count():
+                log.info("[kakao] 로그인 페이지 직접 이동 %s", url)
+                return
+        except Exception:  # noqa: BLE001
+            continue
+    raise RuntimeError("kbland 로그인 진입 실패 — 버튼명/경로가 또 바뀌었습니다(셀렉터 확인 필요)")
+
+
 def _kakao_login_capture(email: str, password: str):
     """카카오 자동로그인 → (siteToken, 캡처 인증헤더). playwright 필요."""
     if not email or not password:
@@ -495,7 +618,7 @@ def _kakao_login_capture(email: str, password: str):
         raise RuntimeError("playwright 미설치: `pip install playwright && playwright install chromium` "
                            "또는 KB_SITE_TOKEN 환경변수로 토큰을 주입하세요.")
     KB_API_PAT = re.compile(r"^https://api\.kbland\.kr/")
-    captured: dict = {"request_headers": {}}
+    captured: dict = {"request_headers": {}, "refresh_candidates": {}}
     timeout_ms = 30000
 
     with sync_playwright() as pw:
@@ -520,15 +643,16 @@ def _kakao_login_capture(email: str, password: str):
                 page.locator(".homePopupcon.open .btn.btn-close").first.click(timeout=2000)
             except PWT:
                 pass
-            try:
-                page.get_by_role("button", name="로그인하기", exact=True).click(timeout=timeout_ms)
-            except PWT:
-                page.get_by_role("button", name="메뉴", exact=True).click(timeout=timeout_ms)
-                page.get_by_role("button", name="로그인하기", exact=True).click(timeout=timeout_ms)
+            #  🔴2026-09-28: kbland.kr 버튼명이 '로그인하기' → '로그인' 으로 바뀌어 여기서 30초 타임아웃으로
+            #   죽어 있었다(중개사수집기.py:117 주석의 '구 셀렉터'가 이것). 한 이름에 매달리지 않고
+            #   후보를 차례로 시도하고, 어느 단계에서 실패했는지 로그로 남긴다(다음에 또 바뀌어도 바로 보이게).
+            _click_login_entry(page, PWT, timeout_ms)
+            log.info("[kakao] 로그인 진입 클릭 완료 — 카카오 버튼 대기")
             page.locator(".btn.btn-login.kakao").wait_for(timeout=timeout_ms)
             with page.expect_popup(timeout=timeout_ms) as pop:
                 page.locator(".btn.btn-login.kakao").click(timeout=timeout_ms)
             popup = pop.value
+            log.info("[kakao] 카카오 로그인 팝업 열림")
             popup.locator("input[name='loginId']").fill(email, timeout=timeout_ms)
             popup.locator("input[name='password']").fill(password, timeout=timeout_ms)
             popup.locator("button[type='submit']").click(timeout=timeout_ms)
@@ -539,6 +663,9 @@ def _kakao_login_capture(email: str, password: str):
             page.bring_to_front()
 
             # siteToken (vuex.member.siteToken) 폴링
+            #  🔴2026-09-28: 예전엔 siteToken 만 가져오고 refreshToken 을 버렸다. siteToken 은 수명이 짧아
+            #   로그인해도 곧 만료되고, refresh_token 이 없으니 무한 갱신 경로(_try_refresh)가 살아나지 않는다.
+            #   → member 안의 refresh 계열 키를 함께 건져 저장한다(키 이름이 바뀔 수 있어 후보를 넓게 본다).
             token = None
             deadline = time.monotonic() + 60
             while time.monotonic() < deadline:
@@ -547,6 +674,11 @@ def _kakao_login_capture(email: str, password: str):
                     " catch(e){ return {}; } }") or {}
                 if member.get("isLogin") and member.get("siteToken"):
                     token = member.get("siteToken")
+                    for k, v in (member or {}).items():
+                        if "refresh" in str(k).lower() and isinstance(v, str) and len(v) >= 20:
+                            captured["refresh_candidates"][k] = v
+                    log.info("[kakao] siteToken 확보 (refresh 후보 %d개: %s)",
+                             len(captured["refresh_candidates"]), list(captured["refresh_candidates"]))
                     break
                 page.wait_for_timeout(1500)
 
@@ -557,6 +689,16 @@ def _kakao_login_capture(email: str, password: str):
             except PWT:
                 pass
             hdrs = dict(captured.get("request_headers") or {})
+            #  refresh_token 을 건졌으면 저장소에 넣어 다음 실행부터 무한 갱신이 돌게 한다.
+            rts = captured.get("refresh_candidates") or {}
+            if token:
+                rt = next(iter(rts.values()), None)
+                _save_token_store({"refresh_token": rt, "site_token": token,
+                                   "expires_in": None, "via": "kakao_login"})
+                if rt:
+                    log.info("[kakao] refresh_token 저장 — 다음부터 자동 갱신 가능")
+                else:
+                    log.warning("[kakao] refresh_token 을 찾지 못함 — 만료 시 다시 로그인 필요")
             return token, (hdrs or None)
         finally:
             browser.close()
@@ -1614,6 +1756,100 @@ def _kb_lock(max_age_h: float = 8.0) -> bool:
     return True
 
 
+#  🔴2026-09-28 전수검수: 매일 05:00 수집이 인증만료 상태에서도 Task Scheduler 결과 0(성공)으로 끝나
+#   30일간(10402 2,157회) 아무 경보가 없었다. 예약작업 '마지막 결과'만 보는 워치독은 절대 못 잡는다.
+#   → 인증만료/전량 0건은 경보를 Supabase(kb:alert)에 남기고 종료코드를 비정상(2)으로 만든다.
+def _kb_alert(kind: str, where: str, detail: dict | None = None) -> None:
+    rec = {"ts": time.time(), "at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+           "kind": kind, "where": where, "detail": detail or {}}
+    log.error("[KB경보] %s @%s :: %s", kind, where, json.dumps(detail or {}, ensure_ascii=False))
+    if not DB_URL:
+        return
+    try:
+        import psycopg
+        from psycopg.types.json import Jsonb
+        with psycopg.connect(DB_URL, connect_timeout=10, prepare_threshold=None) as con:
+            with con.cursor() as cur:
+                cur.execute("""insert into api_cache (cache_key,data,updated_at) values ('kb:alert',%s,now())
+                               on conflict (cache_key) do update set data=excluded.data, updated_at=now()""",
+                            (Jsonb(rec),))
+            con.commit()
+    except Exception as e:  # noqa: BLE001
+        log.warning("경보 저장 실패: %s", e)
+
+
+def _kb_exit(stat: dict, where: str) -> int:
+    """수집 결과 → 종료코드. 0=정상, 2=인증만료, 3=처리했는데 매물 전량 0건(수집 이상)."""
+    if str(stat.get("status") or "") == "auth_failed" or stat.get("auth_failed"):
+        _kb_alert("auth_expired", where, {k: stat.get(k) for k in ("target", "processed", "listings", "errors")})
+        return 2
+    if (stat.get("processed") or 0) > 0 and (stat.get("listings") or 0) == 0:
+        _kb_alert("zero_listings", where, {k: stat.get(k) for k in ("target", "processed", "listings", "errors")})
+        return 3
+    return 0
+
+
+#  🔴2026-09-28 전수검수 결과 도입 — 호가가 38~90일 묵는 근본 원인 차단.
+#   기존 구조: 매일 05:00 --collect 는 `item_key not in kb_item_match` (resume) 라 **신규 물건만** 본다.
+#   한 번 매칭된 단지의 매물은 두 번 다시 안 보고, 갱신은 오직 2주 주기 --refresh-all 하나에 달려 있었다.
+#   그 작업은 StartWhenAvailable=False 로 PC가 꺼져 있으면 통째로 건너뛰어, 로그 전량에 실행 흔적이 0건이었다.
+#   실측(2026-09-28): 화면 호가에 들어가는 매물 144,812건의 last_seen 이 2026-06/07/08 — 최소 38일 최대 90일.
+#   → 단일 장치에 기대지 않고 **매일 조금씩** 오래된 단지를 재방문한다. 2주 작업이 또 실패해도 메워진다.
+STALE_DAYS = int(os.environ.get("KB_STALE_DAYS", "7"))          # 이 일수 넘으면 '묵은 단지'
+STALE_DAILY_LIMIT = int(os.environ.get("KB_STALE_LIMIT", "400"))  # 하루 재방문 단지 수
+
+#  우선순위: ① 매물이 한 건도 없는 단지(실측 911/4,733단지 = 19.3%, 화면에 '경쟁매물 없음'으로 보이던 것)
+#            ② last_seen 이 오래된 순
+STALE_SQL = """
+    select c.complex_no
+      from kb_complex c
+     where c.last_seen is null or c.last_seen < now() - (%s || ' days')::interval
+        or not exists (select 1 from kb_listing l where l.complex_no = c.complex_no)
+     order by (exists (select 1 from kb_listing l where l.complex_no = c.complex_no)),
+              c.last_seen asc nulls first
+     limit %s
+"""
+
+
+def refresh_stale_complexes(days: int | None = None, limit: int | None = None,
+                            with_photos: bool = False, progress: dict | None = None) -> dict:
+    """[매일] 묵은 단지·매물 0건 단지를 limit 개만 갱신 — 호가 신선도 유지."""
+    days = STALE_DAYS if days is None else days
+    limit = STALE_DAILY_LIMIT if limit is None else limit
+    log.info("묵은 단지 재방문 시작 (%d일 초과 또는 매물0건, 최대 %d단지)", days, limit)
+    AUTH.get_token()
+    con = _db_connect(); con.autocommit = False; cur = con.cursor()
+    cur.execute(STALE_SQL, (str(days), int(limit)))
+    complexes = [r[0] for r in cur.fetchall()]
+    stat = {"target": len(complexes), "processed": 0, "listings": 0, "photos": 0,
+            "errors": 0, "status": "running"}
+    log.info("재방문 대상 단지 %d개", len(complexes))
+    if progress is not None:
+        progress.update(stat)
+    for cno in complexes:
+        try:
+            _collect_complex(cur, cno, None, None, "01", with_photos, stat, dedup_by_complex=True)
+            con.commit()
+        except KbAuthError as e:
+            con.rollback(); stat["errors"] += 1; stat["status"] = "auth_failed"
+            log.error("KB 인증 만료 — 재방문 중단(매물 비활성화 안 함) :: %s", e)
+            break
+        except Exception as e:  # noqa: BLE001
+            con.rollback(); stat["errors"] += 1
+            log.exception("재방문 오류 단지 %s :: %s", cno, e)
+        stat["processed"] += 1
+        if progress is not None:
+            progress.update(stat)
+        if stat["processed"] % 100 == 0:
+            log.info("재방문 진행 %d/%d (매물%d)", stat["processed"], stat["target"], stat["listings"])
+    cur.close(); con.close()
+    stat["status"] = "auth_failed" if stat.get("status") == "auth_failed" else "done"
+    log.info("묵은 단지 재방문 완료: %s", {k: stat[k] for k in ("target", "processed", "listings", "errors")})
+    if progress is not None:
+        progress.update(stat)
+    return stat
+
+
 def _cli(argv: list[str]) -> int:
     import argparse
     ap = argparse.ArgumentParser(description="KB부동산 수집 (자체완결 단일 파일)")
@@ -1624,6 +1860,10 @@ def _cli(argv: list[str]) -> int:
     ap.add_argument("--collect", action="store_true", help="경매 아파트 매매 수집(모드A, DB 적재)")
     ap.add_argument("--gongmae", action="store_true", help="[매일] 공매 아파트+오피 신규단지 수집→적재")
     ap.add_argument("--refresh-all", action="store_true", help="[2주] kb_complex 전체(경매+공매) 매물+사진 새로고침")
+    ap.add_argument("--refresh-stale", action="store_true",
+                    help="[매일] 묵은 단지(KB_STALE_DAYS 초과)·매물0건 단지만 KB_STALE_LIMIT 개 갱신")
+    ap.add_argument("--stale-days", type=int, help="--refresh-stale 신선도 기준 일수(기본 7)")
+    ap.add_argument("--no-stale", action="store_true", help="--collect 뒤 자동 재방문 생략")
     ap.add_argument("--all", action="store_true", help="--gongmae 시 신규뿐 아니라 기존단지도 처리")
     ap.add_argument("--reprocess", action="store_true", help="--gongmae 시 이미 매칭한 공매물건도 재처리")
     ap.add_argument("--no-photos", action="store_true", help="사진 수집 생략")
@@ -1632,7 +1872,8 @@ def _cli(argv: list[str]) -> int:
     a = ap.parse_args(argv)
 
     # 🔴KB 수집(gongmae/refresh-all/collect) 동시 실행 방지 — 스케줄 겹침 시 나중 것 스킵(KB API 부하·중복 방지). 스킵분은 다음 스케줄에 재시도됨.
-    if (a.gongmae or getattr(a, "refresh_all", False) or a.collect) and not _kb_lock():
+    if (a.gongmae or getattr(a, "refresh_all", False) or a.collect
+            or getattr(a, "refresh_stale", False)) and not _kb_lock():
         log.info("다른 KB 수집이 실행 중 - 종료(중복/겹침 방지)")
         return 0
 
@@ -1659,19 +1900,30 @@ def _cli(argv: list[str]) -> int:
         return 0
     if a.collect:
         stat = collect_apartments(limit=a.limit, dry=a.dry)
-        print(json.dumps({k: stat[k] for k in
-              ("target", "processed", "matched", "unmatched", "listings", "zero_listing", "errors")},
-              ensure_ascii=False, indent=2))
-        return 0
+        out = {k: stat[k] for k in
+               ("target", "processed", "matched", "unmatched", "listings", "zero_listing", "errors")}
+        rc = 0 if a.dry else _kb_exit(stat, "collect")
+        #  신규 물건이 0건인 날에도(9월 대부분이 그랬다) 묵은 단지 갱신은 반드시 돈다.
+        if not a.dry and not a.no_stale and rc != 2:
+            st2 = refresh_stale_complexes(days=a.stale_days, with_photos=not a.no_photos)
+            out["stale"] = {k: st2[k] for k in ("target", "processed", "listings", "errors")}
+            if rc == 0:
+                rc = _kb_exit(st2, "refresh_stale")
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+        return rc
     if a.gongmae:
         stat = collect_gongmae(limit=a.limit, only_new=not a.all,
                                skip_processed=not a.reprocess, with_photos=not a.no_photos)
         print(json.dumps(stat, ensure_ascii=False, indent=2))
-        return 0
+        return _kb_exit(stat, "gongmae")
+    if getattr(a, "refresh_stale", False):
+        stat = refresh_stale_complexes(days=a.stale_days, limit=a.limit, with_photos=not a.no_photos)
+        print(json.dumps(stat, ensure_ascii=False, indent=2))
+        return _kb_exit(stat, "refresh_stale")
     if getattr(a, "refresh_all"):
         stat = refresh_kb_all(limit=a.limit, with_photos=not a.no_photos)
         print(json.dumps(stat, ensure_ascii=False, indent=2))
-        return 0
+        return _kb_exit(stat, "refresh_all")
     ap.print_help()
     return 0
 

@@ -43,3 +43,6 @@ kapt_lists.json
 kapt_lists.json.tmp
 kapt_addrs.json
 kapt_addrs.json.tmp
+
+# KB 인증 토큰 — 저장소에 올리지 않는다(Supabase api_cache 'kb:auth' 로 공유)
+.kb_token.json
