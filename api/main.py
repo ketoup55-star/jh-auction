@@ -4605,10 +4605,19 @@ def _prewarm_docs() -> None:
 
         def warm(prefix, keys, analyze):
             have = set()
+            #  🔴2026-09-28 전수검수: 예전엔 '캐시 키가 있으면' 무조건 완료로 쳤다. 스키마를 올리면
+            #   (_cached_doc 의 schema_ver) 읽기 쪽은 옛 캐시를 무효로 보는데, 워머는 그 키가 있다고
+            #   건너뛰어 **영원히 재계산되지 않는다**. 실측 aptdemand 307건이 available=true 인데도
+            #   _sv 가 없어 컬럼에 실리지 못한 채 방치됐다(목록 배지가 안 뜸).
+            #   → prefix 가 스키마를 쓰면 그 값이 맞는 캐시만 '있음'으로 친다.
+            _need_sv = _WARM_SCHEMA.get(prefix)
             for i in range(0, len(keys), 100):
                 try:
                     rows = auction_db.cache_get_many([prefix + ":" + k for k in keys[i:i + 100]])
-                    have |= {ck.split(prefix + ":", 1)[1] for ck in rows}
+                    for ck, cv in rows.items():
+                        if _need_sv and not (isinstance(cv, dict) and cv.get("_sv") == _need_sv):
+                            continue          # 옛 스키마 캐시 → 대상으로 남긴다
+                        have.add(ck.split(prefix + ":", 1)[1])
                 except Exception:
                     pass
             todo = _docs_shard([k for k in keys if k not in have])   # 멀티프로세스 샤딩(DOCS_SHARD=i/N) — GIL 회피 병렬
@@ -4685,6 +4694,10 @@ def _flush_all_caches() -> None:
     _save_similar_cache()
     _save_geo_cache()
 
+
+#  스킵 판정에 쓰는 '현재 스키마' — 읽기 쪽(_cached_doc schema_ver)과 반드시 같은 값.
+#  여기에 없는 prefix 는 키 존재만으로 완료로 본다(스키마 개념이 없는 것들).
+_WARM_SCHEMA = {"aptdemand": "demand_v2"}
 
 _CACHE_PREFIXES = ("brief", "apt", "nearby", "analysis", "appraisal",
                    "docsummary", "docrents", "aptdemand", "vehicle2", "encar", "encar2", "review")
@@ -4818,6 +4831,21 @@ def _col_enrich_sync() -> None:
         f"""UPDATE items i SET expected_bid=(c.data->>'expected_bid')::numeric::bigint, expbid_count=(c.data->>'count')::int
             FROM api_cache c WHERE c.cache_key='carexpbid:'||i.item_key AND (c.data->>'available')::bool AND (c.data->>'v')::int={_CAREXPBID_V}
               AND (c.data->>'expected_bid') ~ '^[0-9.]+$' AND i.expected_bid IS DISTINCT FROM (c.data->>'expected_bid')::numeric::bigint""",
+        #  🔴2026-09-28 전수검수: 위 세 UPDATE 는 available=true 일 때만 컬럼을 채우고,
+        #   나중에 재계산에서 '조건 만족 사례 없음'(available=false)이 되어도 옛 값을 되돌리지 않았다.
+        #   실측 238건이 캐시는 '없음' 판정인데 컬럼엔 1.8억·2.6억 같은 숫자가 남아 화면에 떴다
+        #   — 주인님 지적 "매각사례도 없는데 예상낙찰가가 뜬다"의 잔재가 정확히 이것이다.
+        #   바로 아래 profit 이 '한쪽이 비면 옛 차익을 비운다'로 이미 막고 있는 것과 같은 원리를
+        #   expected_bid 자체에는 걸지 않았던 것. 근거가 사라지면 값도 사라져야 한다.
+        #   (캐시가 아예 없는 경우는 워머 미계산일 수 있어 건드리지 않는다 — 실측 그런 건 0건)
+        """UPDATE items i SET expected_bid=NULL, expbid_count=NULL
+            WHERE i.expected_bid IS NOT NULL
+              AND EXISTS (SELECT 1 FROM api_cache c
+                    WHERE c.cache_key IN ('expbid:'||i.item_key,'vexpbid:'||i.item_key,'carexpbid:'||i.item_key)
+                      AND (c.data->>'available')='false')
+              AND NOT EXISTS (SELECT 1 FROM api_cache c2
+                    WHERE c2.cache_key IN ('expbid:'||i.item_key,'vexpbid:'||i.item_key,'carexpbid:'||i.item_key)
+                      AND (c2.data->>'available')='true')""",   # _EXPBID_REVERT
         "UPDATE items SET profit=est_price-expected_bid WHERE est_price IS NOT NULL AND expected_bid IS NOT NULL AND profit IS DISTINCT FROM est_price-expected_bid",
         # 차익은 시세·예상낙찰가 둘 다 있을 때만 — 한쪽이 비면(오매칭 시세 제거 등) 옛 차익이 목록·보증금미상 필터에 남지 않게 비운다
         "UPDATE items SET profit=NULL WHERE profit IS NOT NULL AND (est_price IS NULL OR expected_bid IS NULL)",
@@ -14256,9 +14284,11 @@ def admin_kb_health(_u: dict = Depends(require_admin_or_local)) -> dict:
     import kb_crawler as _kb
     out: dict = {"checked_at": _dt_now_iso()}
     try:
-        out["token_valid"] = bool(_kb._probe_token(_kb.AUTH.get_token()))
+        #  3상태(True/False/None) — None 은 '서버에 닿지 못해 판정 불가'이며 만료가 아니다.
+        #  단발 확인으로 '만료'라고 경보하면 거짓 양성이 난다(크롤러팀 실측 지적, 2026-09-28).
+        out["token_valid"] = _kb._probe_token(_kb.AUTH.get_token())
     except Exception as e:  # noqa: BLE001
-        out["token_valid"] = False
+        out["token_valid"] = None
         out["token_error"] = str(e)[:200]
     try:
         st = _kb._load_token_store() or {}
@@ -14284,8 +14314,10 @@ def admin_kb_health(_u: dict = Depends(require_admin_or_local)) -> dict:
     except Exception:  # noqa: BLE001
         out["last_alert"] = None
     problems = []
-    if not out.get("token_valid"):
+    if out.get("token_valid") is False:
         problems.append("KB 인증 만료 — kbland 재로그인 필요")
+    elif out.get("token_valid") is None:
+        out["token_note"] = "토큰 생사 판정 불가(KB 서버에 닿지 못함) — 만료로 단정하지 않음"
     if not out.get("fresh_cnt"):
         problems.append("30일 내 신선한 매물 0건 — 수집이 멈췄습니다")
     lc = str(out.get("last_collect") or "")

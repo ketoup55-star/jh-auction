@@ -446,22 +446,35 @@ def _save_token_store(d: dict) -> None:
 _PROBE_COMPLEX = os.environ.get("KB_PROBE_COMPLEX", "30570")
 
 
-def _probe_token(token: str) -> bool:
+def _probe_token(token: str):
+    """토큰 생사 확인. True=살아있음 / False=확실히 죽음 / None=판정 불가.
+
+    🔴2026-09-28 크롤러팀 실측 지적 반영: 단발 확인으로 생사를 단정하면 거짓 양성이 난다.
+      그쪽에서 멀쩡한 프록시를 1회 확인으로 '죽음'이라 판정한 사례가 나왔다(외부 서버가 504·타임아웃을
+      원래 자주 준다). 여기서도 네트워크 오류를 False 로 돌리면 **멀쩡한 토큰을 버리고 카카오
+      자동로그인 브라우저를 띄운다**(수집 중이면 창이 뜨고 멈춘다). 서버가 명시적으로 거절한
+      경우(401·10402)만 죽음으로 보고, 닿지 못한 경우는 판정하지 않는다.
+    """
     if not token:
         return False
-    try:
-        body = {"단지기본일련번호": _PROBE_COMPLEX, "매물종별구분": "01", "페이지번호": 1,
-                "페이지목록수": 1, "중복타입": "02", "정렬타입": "date",
-                "매물거래구분": "1", "면적일련번호": "", "전자계약여부": "0"}
-        r = _api("POST", PROP_MAIN_URL, ctx="probe",
-                 data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
-                 headers=_signed_headers(token), timeout=15)
-        if r.status_code == 401 or _is_unauthorized(r):
-            return False
-        return r.status_code == 200
-    except Exception as e:  # noqa: BLE001
-        log.debug("토큰 프로브 실패(네트워크 추정): %s", e)
-        return False
+    body = {"단지기본일련번호": _PROBE_COMPLEX, "매물종별구분": "01", "페이지번호": 1,
+            "페이지목록수": 1, "중복타입": "02", "정렬타입": "date",
+            "매물거래구분": "1", "면적일련번호": "", "전자계약여부": "0"}
+    last = None
+    for attempt in (1, 2):                       # 일시 오류 1회 재시도
+        try:
+            r = _api("POST", PROP_MAIN_URL, ctx=f"probe{attempt}",
+                     data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+                     headers=_signed_headers(token), timeout=15)
+            if r.status_code == 401 or _is_unauthorized(r):
+                return False                     # 서버가 명시적으로 거절 = 확실히 죽음
+            if r.status_code == 200:
+                return True
+            last = f"HTTP {r.status_code}"       # 5xx 등은 서버 사정 — 토큰 탓이 아니다
+        except Exception as e:  # noqa: BLE001
+            last = repr(e)[:120]
+    log.warning("토큰 프로브 판정 불가(%s) — 토큰을 버리지 않고 그대로 씁니다", last)
+    return None
 
 
 class _Auth:
@@ -509,7 +522,9 @@ class _Auth:
             #   찍히는 동안 카카오 자동로그인 시도는 로그 전량에서 0회. 매일 05:00 수집이 매물 0건으로
             #   조용히 끝났다. → 실제 서명 API 1회로 살아있는지 확인하고, 죽었으면 3)으로 넘어간다.
             if KB_SITE_TOKEN_ENV:
-                if _probe_token(KB_SITE_TOKEN_ENV):
+                #  '확실히 죽음'(False)일 때만 건너뛴다. 판정 불가(None)면 일단 쓰고,
+                #  실제 API 호출이 거절되면 그때 KbAuthError 로 드러난다(거짓 양성으로 브라우저를 띄우지 않는다).
+                if _probe_token(KB_SITE_TOKEN_ENV) is not False:
                     self.token = KB_SITE_TOKEN_ENV
                     self.expires_at = time.monotonic() + 3600
                     return self.token
