@@ -2,23 +2,59 @@
  "items": [
   {
    "keyword": "대출규제",
-   "title": "국민 10명 중 6명 “부동산 정책 잘못하고 있다”…대출 규제 체감도↑ - v.daum.net",
-   "link": "https://v.daum.net/v/20260929085045977",
-   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/29/ned/20260929085045674rgva.jpg",
-   "source": "v.daum.net",
-   "published": "2026-09-29T08:50:45+09:00",
+   "title": "[단독]다주택자 규제 이후, 4개월 만에 4000억 대출 회수…만기대출 6% 연체 - 아시아경제",
+   "link": "https://www.asiae.co.kr/article/2026092918085913228",
+   "image": "https://cphoto.asiae.co.kr/listimglink/1/2026092917114044563_1790669501.png",
+   "source": "아시아경제",
+   "published": "2026-09-30T08:29:24+09:00",
    "has_time": true
   },
   {
-   "keyword": "부동산 정책",
-   "title": "광명시흥 ‘땅 보상’ 변호사만 성업… 공급책임 LH 사실상 ‘뒷짐’[부동산 정책, 문제는 공급이다] - 문화일보",
-   "link": "https://www.munhwa.com/article/11619864",
-   "image": "https://wimg.munhwa.com/news/cms/2026/09/29/news-p.v1.20260927.b0290aa9b53c4a899d4e40276ba7702d_R.jpeg",
-   "source": "문화일보",
-   "published": "2026-09-29T07:59:56+09:00",
+   "keyword": "부동산 세금",
+   "title": "오피스텔 잘못 사면 세금 n억 더 낸다 | 연수원 - 한국경제",
+   "link": "https://www.hankyung.com/article/202609303286i",
+   "image": "https://img.hankyung.com/photo/202609/01.45878948.1.jpg",
+   "source": "한국경제",
+   "published": "2026-09-30T07:07:17+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "‘경기 집값 맞아?’ 화성·광명·의왕 평균가격, 구로·도봉 추월했다[부동산360] - 헤럴드경제",
+   "link": "https://biz.heraldcorp.com/article/10887835",
+   "image": "https://wimg.heraldcorp.com/news/cms/2026/09/30/news-p.v1.20260629.68e15e87e18d4937bb864c50d99c767b_P1.jpg",
+   "source": "헤럴드경제",
+   "published": "2026-09-30T07:00:01+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "서울 재건축 단지가 3억대?…도봉구 아파트 경매 3건 - 땅집고",
+   "link": "https://realty.chosun.com/site/data/html_dir/2026/09/29/2026092904481.html",
+   "image": "https://image.chosun.com/sitedata/image/202609/29/2026092904482_0.jpg",
+   "source": "땅집고",
+   "published": "2026-09-30T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "내일부터 ‘일시적 2주택자’ 2년 내 기존 집 팔아야 1주택 과세 - v.daum.net",
+   "link": "https://v.daum.net/v/20260930043533677",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202609/30/donga/20260930043535145ekdf.jpg",
+   "source": "v.daum.net",
+   "published": "2026-09-30T04:35:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "강남 꺾이고 노원 뛰었다...85주째 오른 서울 집값, 과거와 다른 점은 - 머니투데이 - 머니투데이",
+   "link": "https://www.mt.co.kr/estate/2026/09/30/2026092911531628189",
+   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/09/2026092911531628189_2.jpg",
+   "source": "머니투데이",
+   "published": "2026-09-30T04:30:00+09:00",
    "has_time": true
   }
  ],
- "count": 2,
- "date": "2026-09-29"
+ "count": 6,
+ "date": "2026-09-30"
 }
