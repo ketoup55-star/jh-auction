@@ -1,51 +1,33 @@
 {
  "items": [
   {
-   "keyword": "대출규제",
-   "title": "이성훈 LH 사장, “15억 원 이하 주택 6억 원 주택대출 한도규제 강화해야” - 문화일보",
-   "link": "https://www.munhwa.com/article/11621001",
-   "image": "https://wimg.munhwa.com/news/cms/2026/10/02/news-p.v1.20261002.34f0083687044e2b8c340f78054e0224_R.jpg",
-   "source": "문화일보",
-   "published": "2026-10-02T08:43:42+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "\"6억 대출로 어디 사지?\"…부동산 전문가들이 찍은 '이곳' - 한국경제",
-   "link": "https://www.hankyung.com/article/2026100184871",
-   "image": "https://img.hankyung.com/photo/202610/AA.45904230.1.jpg",
-   "source": "한국경제",
-   "published": "2026-10-02T06:00:09+09:00",
+   "keyword": "아파트 경매",
+   "title": "“뜨거운 서울 아파트 경매시장… 대출 유리한 15억 이하에 실수요자 몰려” - 동아일보",
+   "link": "https://www.donga.com/news/Economy/article/all/20261003/134779895/1",
+   "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/10/03/134779893.1.jpg",
+   "source": "동아일보",
+   "published": "2026-10-03T08:28:00+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "\"경기도면 괜찮을 줄 알았는데\"…서울 인접지 집값에 한숨 - 뉴시스",
-   "link": "https://www.newsis.com/view/NISX20261001_0003811005",
-   "image": "https://img1.newsis.com/2026/09/07/NISI20260907_0021426670_web.jpg",
-   "source": "뉴시스",
-   "published": "2026-10-02T06:00:00+09:00",
+   "title": "[사설] ’86주 상승' 집값 기록 세운 날, 증세론자를 새 정책실장에 - 조선일보",
+   "link": "https://www.chosun.com/opinion/editorial/2026/10/03/CX2HTCK5EBH3XCDNAJ7LP3HPJQ/",
+   "image": "https://www.chosun.com/resizer/v2/MU3TSNLDMNTDQYRVMMYTKOBUHA.jpg?auth=9e4b359945148ae28088f1ff7171280e172025670c515f62aec67077f85af00b&width=1200&height=630&smart=true",
+   "source": "조선일보",
+   "published": "2026-10-03T00:10:00+09:00",
    "has_time": true
   },
   {
-   "keyword": "대출규제",
-   "title": "[사설]서울 집값 86주↑ 규제보다 공급확대를 - 머니투데이 - 머니투데이",
-   "link": "https://www.mt.co.kr/opinion/2026/10/02/2026100117054574542",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/10/2026100117054574542_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-10-02T04:00:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "집값",
-   "title": "집값 언제까지 오를지… \"공급부족, 더 간다\" vs \"세제·금리, 다 갔다\" - 머니투데이 - 머니투데이",
-   "link": "https://www.mt.co.kr/estate/2026/10/02/2026100119190011019",
-   "image": "https://thumb.mt.co.kr/cdn-cgi/image/f=avif/21/2026/10/2026100119190011019_1.jpg",
-   "source": "머니투데이",
-   "published": "2026-10-02T03:05:00+09:00",
+   "keyword": "부동산 정책",
+   "title": "[사설] 부동산 난맥 속 靑 정책실장 내부승진… 기조 변화 안 보인다 - 한국일보",
+   "link": "https://www.hankookilbo.com/news/article/A2026100215340005208",
+   "image": "https://newsimg.hankookilbo.com/2026/10/02/9e33a7a5-7aea-4b40-91c2-be0306f36f83.jpg",
+   "source": "한국일보",
+   "published": "2026-10-03T00:10:00+09:00",
    "has_time": true
   }
  ],
- "count": 5,
- "date": "2026-10-02"
+ "count": 3,
+ "date": "2026-10-03"
 }
