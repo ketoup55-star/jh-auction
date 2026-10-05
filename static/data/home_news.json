@@ -2,23 +2,41 @@
  "items": [
   {
    "keyword": "대출규제",
-   "title": "대출 규제 강화에 서울 외곽 '노도강' 주택시장 타격, 무주택자들 고민 깊어져 - 공감신문",
-   "link": "https://www.gokorea.kr/news/articleView.html?idxno=880394",
-   "image": "https://cdn.gokorea.kr/news/thumbnail/202610/880394_157758_1914_v150.jpg",
-   "source": "공감신문",
-   "published": "2026-10-04T09:19:16+09:00",
+   "title": "[국감 2026] '땜질식 대출 규제', 예측 가능성 급락에 실수요자 눈물 - 파이낸셜포스트",
+   "link": "https://www.financialpost.co.kr/news/articleView.html?idxno=278705",
+   "image": "https://cdn.financialpost.co.kr/news/thumbnail/202610/278705_366347_2154_v150.jpg",
+   "source": "파이낸셜포스트",
+   "published": "2026-10-05T08:22:09+09:00",
    "has_time": true
   },
   {
    "keyword": "부동산 정책",
-   "title": "정부 정책자금으로 부동산 사업 벌인 업체 40곳 적발 - KBC광주방송",
-   "link": "https://www.ikbc.co.kr/article/view/kbc202610040003",
-   "image": "https://www.ikbc.co.kr/data/kbc/image/2026/10/04/kbc202610040002.jpg",
-   "source": "KBC광주방송",
-   "published": "2026-10-04T06:43:18+09:00",
+   "title": "[국감 전운]③인사실패·부동산·레버리지ETF·지뢰폭발 등…與野 전방위 격돌 예고 - 뉴시스",
+   "link": "https://www.newsis.com/view/NISX20261002_0003812916",
+   "image": "https://img1.newsis.com/2026/10/01/NISI20261001_0021471148_web.jpg",
+   "source": "뉴시스",
+   "published": "2026-10-05T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "'똑순이' 한 총리, 추진력·정무감각 호평…'인사·부동산·경찰개혁' 과제 - v.daum.net",
+   "link": "https://v.daum.net/v/20261005050634332",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202610/05/NEWS1/20261005050636772neou.jpg",
+   "source": "v.daum.net",
+   "published": "2026-10-05T05:06:34+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "LH 사장 \"주담대 더 조여야\"…집값 잡을까, 실수요 막을까 - 뉴스1",
+   "link": "https://www.news1.kr/realestate/general/6309203",
+   "image": "https://i3n.news1.kr/system/photos/2026/10/2/8140198/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-10-05T05:05:00+09:00",
    "has_time": true
   }
  ],
- "count": 2,
- "date": "2026-10-04"
+ "count": 4,
+ "date": "2026-10-05"
 }
