@@ -1,42 +1,105 @@
 {
  "items": [
   {
-   "keyword": "대출규제",
-   "title": "외국인 해외자금으로 국내 주택 매입 … 대출 규제 사각지대 논란 - Queen 이코노미퀸",
-   "link": "https://www.queen.co.kr/news/articleView.html?idxno=464283",
-   "image": "http://www.queen.co.kr/news/thumbnail/202610/464283_211058_5847_v150.jpg",
-   "source": "Queen 이코노미퀸",
-   "published": "2026-10-06T07:58:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 세금",
-   "title": "부동산 세제 개편의 효과 [이창희의 국가, 기업, 조세] - 매일경제",
-   "link": "https://www.mk.co.kr/news/society/12168638",
-   "image": "https://pimg.mk.co.kr/news/cms/202610/05/news-p.v1.20260713.5a9347ccc4f744369d2bf4a65638c56b_R.png",
-   "source": "매일경제",
-   "published": "2026-10-06T07:00:00+09:00",
+   "keyword": "빌라 경매",
+   "title": "서현진 전세금 26억 어쩌나… '집주인 파산' 청담동 빌라, '반값 경매'로 나와 - Daum",
+   "link": "https://v.daum.net/v/20261007085116699",
+   "image": "https://img1.daumcdn.net/thumb/S1200x630/?fname=https://t1.daumcdn.net/news/202610/07/fnnewsi/20261007085116626hyhi.jpg",
+   "source": "Daum",
+   "published": "2026-10-07T08:51:16+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "집값 이대로 오르면…‘노도강 재산세’ 4년 뒤 76% 뛴다 - 문화일보",
-   "link": "https://www.munhwa.com/article/11621467",
-   "image": "https://wimg.munhwa.com/news/cms/2026/10/06/news-p.v1.20261005.acbcf98a026949c2a4fc12a444bcf52f_R.jpg",
-   "source": "문화일보",
-   "published": "2026-10-06T05:28:57+09:00",
+   "title": "미분양 났던 아파트의 반전…역 생기자 집값 달라졌다 - 한국경제",
+   "link": "https://www.hankyung.com/article/2026100771106",
+   "image": "https://img.hankyung.com/photo/202610/AA.27208492.1.jpg",
+   "source": "한국경제",
+   "published": "2026-10-07T08:48:55+09:00",
    "has_time": true
   },
   {
    "keyword": "대출규제",
-   "title": "공급 늘린다며 대출은 막고…엇박자 주택정책 도마 위 [한눈에 보는 2026 국감 - 건설부동산] - 한국금융신문",
-   "link": "https://www.fntimes.com/html/view.php?ud=202610022303269122dd55077bc2_18",
-   "image": "https://cfnimage.commutil.kr/phpwas/restmb_allidxmake.php?pp=002&idx=999&simg=20261002230417040180dd55077bc212411124362.jpg&nmt=18",
-   "source": "한국금융신문",
-   "published": "2026-10-06T00:00:00+09:00",
+   "title": "[단독] 은퇴할 나이에 ’30년 만기' 빚… 고령층 장기 주담대 늘었다 - 조선일보",
+   "link": "https://www.chosun.com/economy/stock-finance/2026/10/07/POURWXT4M5AS7LOKXEWQTYOOLQ/",
+   "image": "https://www.chosun.com/resizer/v2/5NPYC4QQABKMVD4VRZOPPXKUKA.JPG?auth=6410dbb69ac21bacc09e8d2898469acdea37e3605b932a5d08c1334538f96bdf&width=1200&height=630&smart=true",
+   "source": "조선일보",
+   "published": "2026-10-07T07:55:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "[李정부 '닥공' 시험대①] 집값 86주 신기록…강남 꺾여도 외곽·전세는 뛴다 - 데일리한국",
+   "link": "https://daily.hankooki.com/news/articleView.html?idxno=1412409",
+   "image": "https://cdn.daily.hankooki.com/news/thumbnail/202610/1412409_1591687_3155_v150.jpg",
+   "source": "데일리한국",
+   "published": "2026-10-07T07:10:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "부동산 신탁으로 세금 회피 안 통한다… 강남구, 신탁부동산 고액체납 정조준 - www.newszoom.kr",
+   "link": "https://www.newszoom.kr/2062286",
+   "image": "https://www.newszoom.kr/data/newszoom_kr/mainimages/202610/20261007060325-36678.jpg?t=1791333010",
+   "source": "www.newszoom.kr",
+   "published": "2026-10-07T06:03:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "송도더샵 아파트가 시세의 60%대…3억대부터 쏟아지는 인천 알짜 경매 - 땅집고",
+   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026100602638",
+   "image": "https://image.chosun.com/sitedata/thumbnail/202610/06/2026100602636_0_thumb.jpg",
+   "source": "땅집고",
+   "published": "2026-10-07T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "대출규제",
+   "title": "주담대 한도 6억 더 줄어드나…서울 집값 장기 상승에 규제론 고개 - 뉴스핌",
+   "link": "https://www.newspim.com/news/view/20261006001236",
+   "image": "https://img.newspim.com/news/2019/10/20/191020133303339_909_tc.jpg",
+   "source": "뉴스핌",
+   "published": "2026-10-07T06:00:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 정책",
+   "title": "10개 상임위 국감…DMZ 지뢰폭발·부동산 정책·선관위 개혁 등 도마 - 동아일보",
+   "link": "https://www.donga.com/news/Politics/article/all/20261007/134798431/1",
+   "image": "https://dimg.donga.com/wps/NEWS/IMAGE/2026/10/07/134798432.1.jpg",
+   "source": "동아일보",
+   "published": "2026-10-07T05:41:12+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "아파트 경매",
+   "title": "지난 10월, 호치민시는 투티엠 지역에 3,790채의 재정착 아파트를 건설할 부지를 경매에 부쳤습니다. - Vietnam.vn",
+   "link": "https://www.vietnam.vn/ko/thang-10-tphcm-dau-gia-cac-lo-dat-voi-3-790-can-ho-tai-dinh-cu-o-thu-thiem",
+   "image": "https://vstatic.vietnam.vn/vietnam/resource/IMAGE/2026/10/06/1791299458315_thuthiem-cropped-1791278855224.jpeg",
+   "source": "Vietnam.vn",
+   "published": "2026-10-07T01:13:11+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "부동산을 매각한 후에도 세금 납부 독촉에 시달리고 있다. 재무부 차관은 누가 책임이 있는지 솔직하게 밝혔다. - Vietnam.vn",
+   "link": "https://www.vietnam.vn/ko/ban-nha-dat-roi-van-bi-doi-thue-thu-truong-bo-tai-chinh-noi-thang-trach-nhiem-thuoc-ve-ai",
+   "image": "https://vstatic.vietnam.vn/vietnam/resource/IMAGE/2026/10/06/1791298187378_thu-truong-jpg.webp",
+   "source": "Vietnam.vn",
+   "published": "2026-10-07T00:14:47+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "집값",
+   "title": "AI 데이터센터가 동해안 집값 갈랐다 - 강원도민일보",
+   "link": "https://www.kado.net/news/articleView.html?idxno=2076782",
+   "image": "https://cdn.kado.net/news/photo/202610/2076782_886595_3216.jpg",
+   "source": "강원도민일보",
+   "published": "2026-10-07T00:05:00+09:00",
    "has_time": true
   }
  ],
- "count": 4,
- "date": "2026-10-06"
+ "count": 11,
+ "date": "2026-10-07"
 }
