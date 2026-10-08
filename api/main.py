@@ -5784,6 +5784,13 @@ def _kb_match_sweep(limit: int = 20) -> int:
                 auction_db.query_pg("DELETE FROM api_cache WHERE cache_key = ANY(%s)",
                                     ([f"apt:{ik}", f"analysis:{ik}", f"expbid:{ik}",
                                       f"vexpbid:{ik}", f"kbmatch:{ik}"],))
+                #  🔴로컬 디스크 캐시도 지운다(2026-10-08). _apt_cache 는 DiskDict(cache_apt_info.json)라
+                #    Supabase 만 지우면 화면이 **옛 단지의 호가로 계산된 시세**를 계속 보여 준다.
+                #    실제로 재매칭 뒤에도 추정시세가 1억9,500만(오매칭 호가 2억9,000만)으로 남아 있었다.
+                try:
+                    _apt_cache.pop(ik, None)
+                except Exception:
+                    pass
                 chg += 1
             else:
                 auction_db.query_pg(
@@ -13439,7 +13446,12 @@ def _apt_cache_usable(d, ver=None) -> bool:
         return False
 
 
-APT_VER = 9   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v8: 3개월 실거래 없으면 호가(유사층수 최저)-1000만원=추정시세, 호가도 없으면 산출불가=주인님 지정)
+APT_VER = 10  # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v8: 3개월 실거래 없으면 호가(유사층수 최저)-1000만원=추정시세, 호가도 없으면 산출불가=주인님 지정)
+#  v10(2026-10-08): KB 단지 지번 재매칭 + 지번 미확인 매칭은 호가 제외(_kb_match_sure).
+#   🔴옛 캐시는 **오매칭 단지의 호가**로 계산된 값이다(군산 나운동 489 금호: 실거래 1억인데
+#     2022년 신축 단지 호가 2억9,000만과 평균내 추정시세 1억9,500만, 차익 +1억700만으로 표시).
+#     _apt_cache 는 DiskDict(cache_apt_info.json)라 서버를 재시작해도 파일에서 되살아나므로
+#     **버전을 올려야만** 전량이 다시 계산된다.
 #   v9(2026-09-18): match_apt 오매칭 수정(다른 동·시도/시군구 이름 단지 혼입, 읍면 지번매칭 불능) — v8 캐시는 옛 매칭이라 전부 재계산 대상.
 #   est_col·col_sync·/admin/apt_recompute가 모두 'v >= APT_VER'만 인정하므로 올리기만 하면 옛 결과가 자동으로 밀려난다.
 
