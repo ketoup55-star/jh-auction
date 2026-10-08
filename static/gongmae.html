@@ -109,6 +109,15 @@
   .ecsi .lbl,.eprofit .lbl,.eloss .lbl{flex:0 0 auto;}.ecsi .amt,.eprofit .amt,.eloss .amt{flex:1 1 auto;text-align:right;}
   .nosise{color:#9aa0a6;font-weight:600;}
   .villaest:empty,.aptest:empty{display:none;}
+  /* 전용면적·대지권 한 줄(2026-10-06) */
+  .arline{font-size:12px;color:#4a5668;margin-top:2px;letter-spacing:-.2px;}
+  /* 페이지 번호 버튼(2026-10-06) */
+  .pagenums{display:inline-flex;gap:4px;flex-wrap:wrap;justify-content:center;margin:0 6px;}
+  .pagenums .pnum{min-width:32px;height:32px;padding:0 7px;border:1px solid var(--line);background:#fff;
+    border-radius:7px;cursor:pointer;font-size:13px;color:#33415c;}
+  .pagenums .pnum:hover{background:#f2f5fa;}
+  .pagenums .pnum.on{background:#1a73e8;border-color:#1a73e8;color:#fff;font-weight:700;}
+  .arline .arpy{color:var(--muted);margin-left:2px;}
   /* 유사거래 N건 칩(빌라류 — 경매 '유사거래' 대응) */
   .nbchip{display:inline-block;margin-left:5px;vertical-align:middle;font-size:11px;font-weight:600;color:#2c5db0;background:#eef3fb;border:1px solid #cfe0f5;border-radius:4px;padding:0 6px;line-height:16px;white-space:nowrap;}
   .nbchip:empty{display:none;}
@@ -253,12 +262,7 @@
           <option value="50">50개씩 보기</option>
           <option value="100" selected>100개씩 보기</option>
         </select>
-        <select id="gradeSel" onchange="pickGrade(this.value)" title="매수판정으로 거르기(전체 결과 기준)">
-          <option value="">매수판정 전체</option>
-          <option value="매수양호">매수양호</option>
-          <option value="매수검토">매수검토</option>
-          <option value="매수금지">매수금지</option>
-        </select>
+        <!-- 🔴공매 매수판정 필터 제거(2026-10-05 주인님 지시) -->
         <select id="regSel" onchange="pickReg(this.value)" title="규제 구분으로 거르기">
           <option value="">규제 전체</option>
           <option value="regulated">규제지역·토허</option>
@@ -269,7 +273,7 @@
       <div style="display:flex;gap:8px;align-items:center;">
         <span class="premwrap" style="position:relative;display:inline-flex;align-items:center">
         <span class="prem-badge" style="position:absolute;top:-9px;right:-8px;box-shadow:0 1px 4px rgba(120,90,10,.45);z-index:2">PREMIUM</span>
-        <select id="gmSort1" onmousedown="return gatePremium(event)" onchange="onGmSort()" title="1차 정렬(매수판정·차익·시세)">
+        <select id="gmSort1" onmousedown="return gatePremium(event)" onchange="onGmSort()" title="1차 정렬(차익·유사거래·실거래)">
           <option value="">정렬순서1</option>
           <option value="profit_desc">차익 높은순</option>
           <option value="nb_desc">유사거래 많은순</option>
@@ -291,6 +295,7 @@
     <div id="list"></div>
     <div class="pager">
       <button id="prev" onclick="gmPage(-1)">← 이전</button>
+      <span id="pagenums" class="pagenums"></span>
       <span id="pageno" class="kv"></span>
       <button id="next" onclick="gmPage(1)">다음 →</button>
     </div>
@@ -568,6 +573,19 @@ function updatePager(){
   const pn=document.getElementById("pageno"); if(pn) pn.textContent=GM_PAGE+" / "+pages;
   const pv=document.getElementById("prev"), nx=document.getElementById("next");
   if(pv) pv.disabled=GM_PAGE<=1; if(nx) nx.disabled=GM_PAGE>=pages;
+  // ── 페이지 번호 1~10 직접 클릭(2026-10-06 주인님 지시) ──
+  //    열 묶음(block) 단위로 10개씩 깔고, 그 이상은 '이전/다음'으로 다음 묶음(11~20)으로 넘어간다.
+  const box=document.getElementById("pagenums"); if(!box) return;
+  const SIZE=10, blk=Math.floor((GM_PAGE-1)/SIZE), from=blk*SIZE+1, to=Math.min(pages, from+SIZE-1);
+  let h="";
+  for(let p=from;p<=to;p++){
+    h+=`<button class="pnum${p===GM_PAGE?' on':''}" onclick="gmGoto(${p})">${p}</button>`;
+  }
+  box.innerHTML=h;
+}
+function gmGoto(p){
+  const pages=Math.max(1,Math.ceil(GM_TOTAL/gmRows()));
+  GM_PAGE=Math.min(pages,Math.max(1,p)); loadPage(); window.scrollTo(0,0);
 }
 function gmPage(dir){ const pages=Math.max(1,Math.ceil(GM_TOTAL/gmRows())); GM_PAGE=Math.min(pages,Math.max(1,GM_PAGE+dir)); loadPage(); window.scrollTo(0,0); }
 function changePageSize(){ GM_PAGE=1; try{localStorage.setItem('gm_pageSize',gmRows());}catch(e){} loadPage(); }
@@ -601,8 +619,9 @@ function row(L,i){
       +(L.apt_hoga!=null&&+L.apt_hoga>0?`<span class="hgchip" title="KB부동산에 호가로 올라온 같은 단지·평형(전용±3㎡) 매매 매물 수">호가 ${(+L.apt_hoga).toLocaleString()}건</span>`:""))
     : "";
   if(warmed){
-    const cls=GM_GCLS[L.buy_grade]||"g-mid";
-    gradechip=`<span class="gradechip" data-key="${escAttr(key)}" data-done="1"><span class="gbadge ${cls}" title="${escAttr(L.grade_reason||"")}">${L.buy_grade}</span></span>`;
+    // 🔴2026-10-05 주인님 지시: 공매는 권리분석이 안 되므로 매수판정 배지를 넣지 않는다.
+    //   단 nb_count(유사거래 N건)가 사전계산에 없는 물건은 fillGmGrades 가 채워야 하므로 숨은 훅만 남긴다.
+    gradechip=(L.nb_count==null)?`<span class="gradechip" data-key="${escAttr(key)}" style="display:none"></span>`:"";
     trGrade=` data-grade="${escAttr(L.buy_grade)}"`;
     const base=+(L.min_price||0);
     let ehtml="";
@@ -627,7 +646,7 @@ function row(L,i){
     const cellcls=GM_APT_RE.test(usg)?'aptest':'villaest';
     estcell=`<div class="${cellcls}" data-key="${escAttr(key)}" data-base="${base||''}" data-done="1">${ehtml}</div>`;
   } else if(graded){
-    gradechip=`<span class="gradechip" data-key="${escAttr(key)}"></span>`;
+    gradechip=`<span class="gradechip" data-key="${escAttr(key)}" style="display:none"></span>`;   // 🔴배지는 안 넣는다(공매 매수판정 미사용 2026-10-05). 단 이 훅이 없으면 fillGmGrades가 돌지 않아 "유사거래 N건" 칩이 안 채워진다 → 숨겨서 유지
     estcell=`<div class="${GM_APT_RE.test(usg)?'aptest':'villaest'}" data-key="${escAttr(key)}" data-base="${L.min_price||''}"></div>`;
   }
   return `<tr data-idx="${i}"${trGrade}${trProfit}${trSise}${trNb} data-mng="${escAttr(mng)}" data-cdtn="${escAttr(cdtn)}" onclick="gmOpen(${i})">
@@ -635,7 +654,7 @@ function row(L,i){
     <td class="cc"><button class="gmfav${GMFAV.has(L.manage_no)?' on':''}" onclick="event.stopPropagation();gmFav(${i},this)" title="관심등록/해제">${GMFAV.has(L.manage_no)?'♥':'♡'}</button><br>${L.manage_no||"-"}</td>
     <td><div style="display:flex;gap:9px;align-items:center;">
       ${L.thumb?`<img src="${L.thumb}" referrerpolicy="no-referrer" loading="lazy" style="width:66px;height:50px;object-fit:cover;border-radius:5px;flex:0 0 auto;background:#eef1f5;border:1px solid var(--line)" onerror="this.style.display='none'">`:""}
-      <div style="min-width:0"><b>${L.name||"-"}</b><div style="color:var(--muted);margin-top:2px">${L.org||""}</div><div style="margin-top:3px">${regchip}${gradechip}${nbchip}${aptChips}</div></div>
+      <div style="min-width:0"><b>${L.name||"-"}</b>${gmAreaLine(L)}<div style="color:var(--muted);margin-top:2px">${L.org||""}</div><div style="margin-top:3px">${regchip}${gradechip}${nbchip}${aptChips}</div></div>
     </div></td>
     <td class="cc">${(L.usage||"").split(" ").pop()||"-"}</td>
     <td class="num"><div class="price">${won(L.appraisal_price)}</div><span class="low">${won(L.min_price)}${L.bid_ratio!=null?` (${L.bid_ratio}%)`:""}</span>${estcell}</td>
@@ -645,6 +664,17 @@ function row(L,i){
   </tr>`;
 }
 function escAttr(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+// ── 전용면적·대지권 한 줄(2026-10-06 주인님 지시: "전용면적도 나오게, 대지권도 있으면 나오게") ──
+//    원천 = gm_enrich(bld_area·land_area) → gongmae_items 파생 컬럼(20분 스윕 유지). 경매 목록과 같은 표기.
+function gmPyeong(m){ const p=(+m)/3.305785; return (p>=10?p.toFixed(1):p.toFixed(2)); }
+function gmAreaLine(L){
+  const b=+L.bld_area||0, l=+L.land_area||0;
+  if(!b && !l) return "";
+  const parts=[];
+  if(l>0) parts.push(`대지권 ${l.toFixed(2)}㎡<span class="arpy">(${gmPyeong(l)}평)</span>`);
+  if(b>0) parts.push(`전용 ${b.toFixed(2)}㎡<span class="arpy">(${gmPyeong(b)}평)</span>`);
+  return `<div class="arline">${parts.join(" / ")}</div>`;
+}
 // ── 전체선택 / 관심물건 일괄 저장(경매 saveFavs 대응) ──
 function toggleAll(el){ document.querySelectorAll(".rowchk").forEach(c=>c.checked=el.checked); }
 async function saveFavsBulk(){
@@ -671,8 +701,8 @@ function premiumMsg(){ showGateModal("이 기능은 프리미엄 등급 이상 �
 function gatePremium(e){ if(!canPremium()){ if(e&&e.preventDefault)e.preventDefault(); premiumMsg(); if(e&&e.target&&e.target.blur)e.target.blur(); return false; } return true; }
 (async function(){ try{ const u=await (await fetch("/auth/me",{cache:"no-store"})).json(); ME_RANK=u.grade_rank||0; IS_ADMIN=(u.role==="admin"); }catch(e){} })();
 // ── 매수판정 필터(현재 목록 기준 클라이언트 필터, 경매 pickGrade 대응) ──
-let gradeFilter="";
-function pickGrade(v){ gradeFilter=v||""; try{localStorage.setItem('gm_grade',gradeFilter);}catch(e){} GM_PAGE=1; loadPage(); }
+let gradeFilter="";   // 🔴공매 매수판정 필터 미사용(2026-10-05) — 항상 빈 값 유지
+function pickGrade(v){ gradeFilter=""; try{localStorage.removeItem('gm_grade');}catch(e){} GM_PAGE=1; loadPage(); }
 let regFilter="";
 function pickReg(v){ regFilter=v||""; try{localStorage.setItem('gm_reg',regFilter);}catch(e){} GM_PAGE=1; loadPage(); }
 function applyGradeFilter(){
@@ -713,9 +743,9 @@ async function fillGmGrades(){
     const key=el.dataset.key, p=key.split("|"), mng=p[0], cdtn=p[1]||"";
     let g; try{ g=await (await fetch("/gongmae/buy_grade?mng="+encodeURIComponent(mng)+(cdtn?"&cdtn="+encodeURIComponent(cdtn):""))).json(); }catch(e){ return; }
     el.dataset.done="1";
-    if(!g||!g.applicable||!g.grade) return;
-    const cls=GM_GCLS[g.grade]||"g-mid";
-    el.innerHTML='<span class="gbadge '+cls+'" title="'+escAttr(g.reason||"")+'">'+g.grade+'</span>';
+    if(!g||!g.applicable) return;
+    // 🔴2026-10-05 주인님 지시: 공매는 매수판정 배지를 넣지 않는다(el.innerHTML 미설정).
+    //   이 함수는 '유사거래 N건' 칩·시세·차익 데이터를 채우는 통로이므로 호출 자체는 유지한다.
     const tr=el.closest('tr'); if(tr){ tr.dataset.grade=g.grade; if(g.profit!=null)tr.dataset.profit=g.profit; if(g.sise!=null)tr.dataset.sise=g.sise; }
     // 유사거래 N건 칩도 buy_grade 응답의 nb_count로 채움(같은 물건, 별도 호출 없음)
     if(g.nb_count!=null){ const _tr=el.closest('tr');
@@ -753,7 +783,8 @@ async function fillGmEstimates(){
 }
 function restoreGmToolbar(){
   try{ const ps=+localStorage.getItem('gm_pageSize')||0; if([20,30,50,100].includes(ps)){ const s=document.getElementById('pageSize'); if(s)s.value=ps; } }catch(e){}
-  try{ gradeFilter=localStorage.getItem('gm_grade')||""; const s=document.getElementById('gradeSel'); if(s)s.value=gradeFilter; }catch(e){}
+  try{ localStorage.removeItem('gm_grade'); }catch(e){}   // 🔴예전에 저장된 매수판정 필터가 남아 행을 숨기던 것을 끊는다(2026-10-05)
+  gradeFilter="";
   try{ regFilter=localStorage.getItem('gm_reg')||""; const rs=document.getElementById('regSel'); if(rs)rs.value=regFilter; }catch(e){}
 }
 fillPriceSelects();

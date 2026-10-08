@@ -246,6 +246,47 @@ def _ex_result_for(e: dict, ex_rows: list, sole: bool) -> str:
     return fallback if sole else ""
 
 
+def parse_court_schedule_json(data) -> dict[str, list[dict]]:
+    """대법원 §4 기일내역 JSON → {물건번호: [{date, time, kind, place, min_price, result}]}.
+
+    parse_court_schedule_all(HTML) 과 **같은 형식**을 돌려준다 — 정규화 로직을 공유하기 위해서다.
+    HTML 표를 긁는 것보다 정확하다(칸 병합·줄바꿈·공백 때문에 생기던 오독이 없다).
+    실측 키: dspslGdsSeq(물건번호) · dxdyTime("2026.07.22(10:00)") · auctnDxdyKndNm(기일종류)
+            · dxdyPlcNm(장소) · tsLwsDspslPrc("44,800,000원") · dxdyRslt(결과)
+    """
+    rows = None
+    if isinstance(data, dict):
+        rows = data.get("dlt_dxdyDtsLst")
+        if rows is None:                       # 키가 바뀌어도 리스트 하나면 그것을 쓴다
+            for v in data.values():
+                if isinstance(v, list) and v and isinstance(v[0], dict) and "dxdyTime" in v[0]:
+                    rows = v
+                    break
+    elif isinstance(data, list):
+        rows = data
+    if not rows:
+        return {}
+    out: dict[str, list[dict]] = {}
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        obj = str(r.get("dspslGdsSeq") or "1").strip() or "1"
+        raw = str(r.get("dxdyTime") or "").strip()      # "2026.07.22(10:00)"
+        m = re.match(r"(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})", raw)
+        date = f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}" if m else ""
+        tm = re.search(r"\((\d{1,2}:\d{2})\)", raw)
+        price = re.sub(r"[^0-9]", "", str(r.get("tsLwsDspslPrc") or ""))
+        out.setdefault(obj, []).append({
+            "date": date,
+            "time": (tm.group(1) if tm else ""),
+            "kind": str(r.get("auctnDxdyKndNm") or "").strip(),
+            "place": str(r.get("dxdyPlcNm") or "").strip(),
+            "min_price": (int(price) if price else None),
+            "result": str(r.get("dxdyRslt") or "").strip(),
+        })
+    return out
+
+
 def parse_court_schedule_all(html: str) -> dict[str, list[dict]]:
     """법원 기일내역 HTML → {물건번호: [{date, time, kind, place, min_price(int|None), result}]} (표의 모든 물건번호).
     표 구조(실측): 헤더 7칸(물건번호·감정평가액·기일·기일종류·기일장소·최저매각가격·기일결과),

@@ -67,7 +67,14 @@ _stat = {"done": 0, "ok": 0, "err": 0, "skip": 0,
 
 def _fetch_targets(conn, force: bool, limit):
     # resumable: 미워밍(buy_grade NULL) + 기존 워밍분 중 nb_count 미보유(유사거래 건수 추가분)도 채운다.
-    extra = "" if force else "AND (buy_grade IS NULL OR nb_count IS NULL)"
+    #
+    # 🔴2026-10-05: **nb_count=0 도 재처리 대상에 넣는다.**
+    #   종전 조건(nb_count IS NULL)은 0으로 한 번 박히면 영구 고착이었다. 실측: 공매 빌라류
+    #   5,529건 중 nb_count=0 이 4,428건(80.1%)이었고, 그 0은 서버의 gm_nearby 캐시가
+    #   빈 rhpool 시절의 '거래 0건'을 TTL 없이 영구 저장한 결과였다(캐시 무시 재계산 10건 중
+    #   8건에서 실제 거래 산출). 서버는 이제 0건 결과를 7일만 보관하므로(_gm_nb_usable),
+    #   여기서 0도 다시 물어보면 7일 주기로 자동 복구된다. 진짜 0건은 캐시 히트라 비용이 작다.
+    extra = "" if force else "AND (buy_grade IS NULL OR nb_count IS NULL OR nb_count = 0)"
     q = _SELECT.format(extra=extra)
     rows = conn.execute(q, (_USAGE_RE,)).fetchall()
     if limit:

@@ -229,6 +229,67 @@ def waiver_comment(comment):
     return re.sub(r"매수인\s*인수", "매수인 인수 대상이나, 말소동의·대항력 포기 확약서 제출로 낙찰자 미인수", comment, count=1)
 
 
+#  말소기준 후보(엔진 BASELINE_CANDIDATES 와 같은 집합) — 한글 라벨 기준
+_BASE_CAND = ("근저당", "저당", "압류", "가압류", "담보가등기", "임의경매", "강제경매", "경매개시")
+#  말소기준보다 선순위면 낙찰자가 인수하는 권리(엔진 SURVIVOR_IF_SENIOR)
+_SURVIVE_IF_SENIOR = ("전세권", "지상권", "지역권", "임차권", "가처분", "가등기", "환매등기")
+
+
+def _judge_rights_from_registry(rights: list, jeonse_baseline_names: set,
+                                tenant_names: set | None = None) -> tuple:
+    """등기 권리행에 말소기준 표식이 없을 때 **등기부만으로** 말소기준·소멸/인수를 계산한다.
+
+    🔴2026-10-06 주인님 지시로 추가. 종전엔 표식이 없으면 매각물건명세서의 '최선순위 설정' 한 줄로
+      대체했고, 그 결과 선순위 전세권(예: 2022-121216 이운락 2012-04-16)이 화면에서 통째로 빠졌다.
+    jeonse_baseline_names = 배당요구/경매신청을 한 **제3자** 전세권자 이름 집합(이 경우 전세권도 말소기준 후보).
+    tenant_names = 이 물건의 임차인 이름 집합.
+
+    🔴2026-10-06 주인님 지적으로 추가된 핵심 규칙:
+      임차인이 **자기 보증금을 담보하려고 자기 명의로 설정한 전세권**은 말소기준 후보가 아니다.
+      그 전세권을 기준 삼으면 같은 사람의 임차권 대항력이 깎여, 실제로는 보증금을 인수해야 하는
+      물건이 '대항력 없음·안전'으로 나간다(실측 288건, 그중 매수양호 72건).
+    반환: (baseline dict or None, 판정이 적용된 rights)
+    """
+    tenant_names = {(x or "").strip() for x in (tenant_names or set()) if (x or "").strip()}
+    def _is(t, words):
+        t = t or ""
+        return any(w in t for w in words)
+
+    cand = []
+    for r in rights:
+        ty = r.get("type") or ""
+        if "소유권" in ty:
+            continue
+        if _is(ty, _BASE_CAND):
+            cand.append(r)
+        elif "전세권" in ty:
+            _h = (r.get("holder") or "").strip()
+            if _h and _h in tenant_names:
+                continue            # 🔴임차인 본인 명의 전세권 → 말소기준 후보 아님(자기 대항력을 깎으면 안 된다)
+            if _h in jeonse_baseline_names:
+                cand.append(r)      # 제3자 전세권은 배당요구·경매신청했을 때만 말소기준
+    cand = [c for c in cand if c.get("date")]
+    base = min(cand, key=lambda r: r["date"]) if cand else None
+    for r in rights:
+        ty = r.get("type") or ""
+        if "소유권" in ty:
+            r["status"] = "소유권"
+            continue
+        if base is None:
+            r["status"] = "인수"     # 말소기준이 없으면 전부 인수 가능성 → 검토 대상
+            continue
+        if r is base:
+            r["is_baseline"] = True
+            r["status"] = "말소기준권리"
+            continue
+        d = r.get("date") or "9999-99-99"
+        if d < base["date"] and _is(ty, _SURVIVE_IF_SENIOR):
+            r["status"] = "인수"     # 선순위 전세권·지상권·임차권 등 → 낙찰자 인수
+        else:
+            r["status"] = "소멸"
+    return base, rights
+
+
 def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
     """analyzed_at 있으면 크롤러DB로 권리분석 구조 생성, 없으면 None(호출측이 PDF 폴백)."""
     cols = ("rights_baseline_date,total_debt,analyzed_at,detail_text,dividend_deadline,"
@@ -288,8 +349,36 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
                        "amount": x.get("amount") or 0, "holder": x.get("holder") or "",
                        "reason": "", "status": status, "gubun": x.get("gubun"),
                        "is_baseline": bool(x.get("is_baseline"))})
+        #  2026-10-06: DB에 박힌 is_baseline 이라도 **임차인 본인 명의 전세권**이면 말소기준으로 인정하지 않는다.
+        #   (크롤러가 넣어 둔 표식을 그대로 믿으면, 자기 보증금 담보용 전세권으로 자기 대항력이 깎인다.
+        #    실측: 전세권자=임차인 본인 396건 중 288건이 '대항력 없음'으로 나갔고 72건이 매수양호였다.)
         if x.get("is_baseline") and baseline is None:
-            baseline = {"date": x.get("reg_date"), "type": rtype, "holder": x.get("holder") or ""}
+            _h = (x.get("holder") or "").strip()
+            _self = ("전세권" in rtype) and _h and any(
+                _h == (tt.get("name") or "").strip() for tt in (tenants_raw or []))
+            if _self:
+                rights[-1]["is_baseline"] = False      # 표식 무효화 → 아래에서 등기부로 재판정
+            else:
+                baseline = {"date": x.get("reg_date"), "type": rtype, "holder": x.get("holder") or ""}
+    #  🔴2026-10-06 주인님 지시: 등기 권리행은 있는데 말소기준 표식(is_baseline)이 없으면,
+    #    명세서로 넘어가기 **전에** 등기부만으로 말소기준·소멸/인수를 계산한다.
+    #    (종전엔 바로 명세서 '최선순위 설정' 한 줄로 갔고, 선순위 전세권이 화면에서 빠졌다.)
+    if baseline is None and rights:
+        _jnames = set()
+        for _t in (tenants_raw or []):
+            _nm = (_t.get("name") or "").strip()
+            if not _nm:
+                continue
+            #  배당요구를 했거나(dividend_date) 경매신청채권자이면 그 전세권은 말소기준 후보가 된다.
+            if _t.get("dividend_date") or (_nm and _nm in str(it.get("creditor") or "")):
+                _jnames.add(_nm)
+        _cr = str(it.get("creditor") or "").strip()
+        if _cr:
+            _jnames.add(_cr)
+        _tnames = {(x.get("name") or "").strip() for x in (tenants_raw or [])}
+        _b, rights = _judge_rights_from_registry(rights, _jnames, _tnames)
+        if _b:
+            baseline = {"date": _b.get("date"), "type": _b.get("type"), "holder": _b.get("holder") or ""}
     # 등기 권리행이 없거나 말소기준 표식이 없는 물건(법원 수집분): items.rights_baseline_date(매각물건명세서 '최선순위 설정'로
     #  statement_fill이 채움)을 말소기준으로 쓴다 — 아래 대항력 보정·화면 '소멸기준일' 표시가 이 값에 의존. (2026-09-18)
     if baseline is None and it.get("rights_baseline_date"):
@@ -359,8 +448,16 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
         except Exception:
             return None
     _bd = _pd(baseline["date"]) if baseline else None
+    #  2026-10-06: 말소기준이 매각물건명세서의 '최선순위 설정' 한 줄일 때, 그 날짜가 사실은
+    #   **임차인 본인 명의 전세권** 설정일인 경우가 많다(실측 288건). 그 기준으로 같은 사람의
+    #   대항력을 부정하면 안 되므로(자기 보증금 담보용 전세권), 전세권자인 임차인은 보정 대상에서
+    #   빼고 '대항력 미상'으로 남겨 등기부 적재 뒤 다시 판정되게 한다.
+    _base_from_stmt = bool(baseline and "명세서" in str(baseline.get("type") or ""))
     for t in tenants:
         mv = _pd(t.get("move_in"))
+        _self_jeonse = "전세권" in str(t.get("right") or t.get("tenant_right") or "")
+        if _base_from_stmt and _self_jeonse and not t.get("has_opposing_power"):
+            t["opposing_unknown"] = True       # 등기부로 다시 봐야 함(자기 전세권이 기준이 된 의심)
         if mv and _bd and mv < _bd and not t.get("has_opposing_power"):
             t["has_opposing_power"] = True     # 전입 < 말소기준 → 대항력(보정)
     # 대항력 임차인 인수보증금: 대항력이 있으면 낙찰가로 배당이 부족할 때 미배당분을 매수인이 인수한다.
@@ -442,9 +539,12 @@ def analyze_from_crawler(db, item_key: str) -> Optional[dict]:
         risk = "주의"
     # 매각물건명세서상 전입일 미상 임차인(statement_fill 라벨 '대항력 미상') → 대항력을 판단할 수 없으므로 '안전'으로 단정하지 않는다.
     #  (2026-09-18 실측: 이런 임차인이 있는 진행중 162건 중 123건이 '안전', 46건이 목록 '매수양호')
-    _unk_power = [t for t in tenants if (t.get("status_label") or "").startswith("대항력 미상")]
+    _unk_power = [t for t in tenants if (t.get("status_label") or "").startswith("대항력 미상")
+                  or t.get("opposing_unknown")]
     if _unk_power and risk == "안전":
         risk = "주의"
+    #  2026-10-06: 임차인 본인 명의 전세권이 말소기준으로 쓰였을 가능성이 있는 물건은
+    #   대항력을 단정할 수 없다 → '안전'으로 내보내지 않는다(위 opposing_unknown 플래그).
     # 등기부 권리 목록 없이 명세서만으로 판정한 물건 → 명세서에 안 적힌 인수 권리(가처분·가등기 등)를 알 수 없어 '안전' 단정 금지.
     if stmt_only and risk == "안전":
         risk = "주의"

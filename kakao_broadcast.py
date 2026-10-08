@@ -168,6 +168,8 @@ def _pick_type(kind, date, tparam, est_kind, n=2):
     THRESH = 30000000   # 순수익(대출·이자·취득세·종소세 반영) 3천만원 이상만 발송 — 차익만 크고 실익 없는 물건 제외(주인님 지시)
     for x in good:
         k = x["item_key"]
+        if not (x.get("thumb_url") or "").strip():   # 🆕사진(썸네일) 없는 물건은 발송 제외(주인님 지정 2026-08-21)
+            continue
         _e = ests.get(k); price = _e.get("price") if isinstance(_e, dict) else None
         if not price:
             continue                                 # 시세 없으면 제외(주인님 지시)

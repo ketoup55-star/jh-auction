@@ -16,6 +16,10 @@
   .content{flex:1;min-height:0;background:#525659;}
   .content iframe{width:100%;height:100%;border:none;background:#fff;display:block;}
   .gallery{height:100%;overflow:auto;padding:16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;background:#fff;align-content:start;}
+  .orig{padding:10px 0;text-align:center;}
+  .orig button{padding:8px 16px;border:1px solid var(--line,#dfe3ea);background:#fff;border-radius:8px;
+    cursor:pointer;font-size:13px;color:#33415c;}
+  .orig button:hover{background:#f2f5fa;}
   .gallery img{width:100%;border:1px solid #dfe3ea;border-radius:8px;cursor:zoom-in;transition:transform .12s,box-shadow .12s;}
   .gallery img:hover{transform:scale(1.01);box-shadow:0 4px 14px rgba(0,0,0,.15);}
   .empty{padding:50px;text-align:center;color:#9aa0a6;background:#fff;height:100%;}
@@ -46,9 +50,9 @@
 <script>
 const itemKey=new URLSearchParams(location.search).get("item_key");
 const initKind=new URLSearchParams(location.search).get("kind")||"";
-const ICON={"photo":"📷","등기(집합)":"📄","등기(건물)":"📄","등기(토지)":"📄","등기":"📄","감정평가서":"📋","매각물건명세서":"📑","건축물대장":"🏢","토지임야대장":"🌳","차량기계원부":"🚗","사건내역":"📁","기일내역문서":"📅","문건접수송달":"✉️","현황조사서":"🔍","부동산표시":"📌"};
-const LABEL={"photo":"사진/지적도","등기(집합)":"등기(집합)","등기(건물)":"건물등기","등기(토지)":"토지등기","등기":"등기","감정평가서":"감정평가서","매각물건명세서":"매각물건명세서","건축물대장":"건축물대장","토지임야대장":"토지임야대장","차량기계원부":"차량기계원부","사건내역":"사건내역","기일내역문서":"기일내역","문건접수송달":"문건접수/송달","현황조사서":"현황조사서","부동산표시":"부동산표시목록"};
-const ORD=["photo","등기(집합)","등기(건물)","등기(토지)","등기","건축물대장","토지임야대장","차량기계원부","감정평가서","현황조사서","매각물건명세서","사건내역","기일내역문서","문건접수송달","부동산표시"];
+const ICON={"photo":"📷","등기(집합)":"📄","등기(건물)":"📄","등기(토지)":"📄","등기":"📄","감정평가서":"📋","매각물건명세서":"📑","매각물건명세서_그림":"📑","건축물대장":"🏢","토지임야대장":"🌳","차량기계원부":"🚗","사건내역":"📁","기일내역문서":"📅","문건접수송달":"✉️","현황조사서":"🔍","부동산표시":"📌","사건내역_json":"📁","기일내역_json":"📅","문건접수송달_json":"✉️","부동산표시_json":"📌"};
+const LABEL={"photo":"사진/지적도","등기(집합)":"등기(집합)","등기(건물)":"건물등기","등기(토지)":"토지등기","등기":"등기","감정평가서":"감정평가서","매각물건명세서":"매각물건명세서","매각물건명세서_그림":"매각물건명세서","건축물대장":"건축물대장","토지임야대장":"토지임야대장","차량기계원부":"차량기계원부","사건내역":"사건내역","기일내역문서":"기일내역","문건접수송달":"문건접수/송달","현황조사서":"현황조사서","부동산표시":"부동산표시목록","사건내역_json":"사건내역","기일내역_json":"기일내역","문건접수송달_json":"문건접수/송달","부동산표시_json":"부동산표시목록"};
+const ORD=["photo","등기(집합)","등기(건물)","등기(토지)","등기","건축물대장","토지임야대장","차량기계원부","감정평가서","현황조사서","매각물건명세서","매각물건명세서_그림","사건내역","기일내역문서","문건접수송달","부동산표시","사건내역_json","기일내역_json","문건접수송달_json","부동산표시_json"];
 let MEDIA=[], PHOTOS=[], LBI=0;
 function esc(s){return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 async function load(){
@@ -64,7 +68,12 @@ async function load(){
   document.title=(d.case_no||"서류")+" 서류";
   MEDIA=(d.media||[]).filter(m=>m.url);
   const hasSpec=MEDIA.some(m=>["등기(집합)","등기(건물)","등기(토지)"].includes(m.kind));
-  const kinds=ORD.filter(k=>{ if(k==="등기"&&hasSpec) return false; return MEDIA.some(m=>m.kind===k); });
+  //  🔴2026-09-30: 법원이 명세서를 PDF 아닌 **이미지**로 주는 사건 → kind='매각물건명세서_그림'(png N장).
+  //   목록에 없어 탭이 안 생겼다(진행물건 1,112건 실측). PDF 가 있으면 그림 탭은 숨긴다(중복).
+  const hasSpecPdf=MEDIA.some(m=>m.kind==="매각물건명세서");
+  const kinds=ORD.filter(k=>{ if(k==="등기"&&hasSpec) return false;
+    if(k==="매각물건명세서_그림"&&hasSpecPdf) return false;
+    return MEDIA.some(m=>m.kind===k); });
   const tabs=document.getElementById("tabs"); tabs.innerHTML="";
   kinds.forEach(k=>{ const b=document.createElement("button"); b.className="tab"; b.dataset.kind=k;
     b.innerHTML=(ICON[k]||"📄")+" "+esc(LABEL[k]||k); b.onclick=()=>show(k); tabs.appendChild(b); });
@@ -75,13 +84,22 @@ function show(kind){
   document.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.kind===kind));
   const items=MEDIA.filter(m=>m.kind===kind), c=document.getElementById("content");
   if(!items.length){ c.innerHTML='<div class="empty">문서 없음</div>'; return; }
-  if(kind==="photo"){
+  if(kind==="photo"||kind==="매각물건명세서_그림"){   // 명세서 그림=여러 장 → 갤러리(라이트박스로 확대)
     PHOTOS=items.map(m=>m.url);
     c.innerHTML='<div class="gallery">'+items.map((m,i)=>`<img src="${esc(m.url)}" loading="lazy" onclick="lbOpen(${i})">`).join("")+'</div>'; return;
   }
   const m=items[0], ct=(m.content_type||"");
   const src=ct.includes("html")?("/docview?item_key="+encodeURIComponent(itemKey)+"&kind="+encodeURIComponent(kind)):m.url;
   c.innerHTML=`<iframe src="${esc(src)}" title="${esc(LABEL[kind]||kind)}"></iframe>`;
+}
+//  원본(법원이 준 저해상도 이미지) 갤러리로 전환 — 텍스트 화면과 비교해 보실 수 있게.
+function showOrig(){
+  const items=MEDIA.filter(m=>m.kind==="매각물건명세서_그림");
+  if(!items.length) return;
+  PHOTOS=items.map(m=>m.url);
+  document.getElementById("content").innerHTML=
+    '<div class="gallery">'+items.map((m,i)=>`<img src="${esc(m.url)}" loading="lazy" onclick="lbOpen(${i})">`).join("")+'</div>'
+    +'<div class="orig"><button onclick="show(&quot;매각물건명세서&quot;)">📄 선명한 글자 화면으로 돌아가기</button></div>';
 }
 // ── 사진 라이트박스(좌우 넘김 + 키보드 + 배경클릭 닫기) ──
 const _lb=()=>document.getElementById('lbox');

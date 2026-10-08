@@ -95,6 +95,27 @@ def _safe(fn):
         pass
 
 
+def _warm_analysis(k):
+    """권리분석 예열 — risk_level이 실제로 analysis: 캐시에 '저장'되게 한다.
+
+    ⚠️M.auction_analysis(k)를 쓰면 안 된다: 그 함수는 analyze_from_crawler 성공 시 결과를
+    캐시에 저장하지 않고 그대로 return 하고(main.py:2630), _cached_doc은 PDF폴백 else에만 있다.
+    → 2026-07-21 실측: 12,769건을 예열해 risk_level을 100% 계산하고도 캐시 보유가
+      2,823 → 2,823으로 1건도 안 늘었다. 목록 매수판정(㉯)은 이 캐시를 읽으므로 효과 0이었다.
+    _cached_doc으로 감싸는 것도 불가 — TTL 없는 영구캐시라 risk_level 없는 기존 PDF폴백 결과가
+    먼저 히트해 analyze_from_crawler가 호출조차 안 된다.
+    """
+    from auction_analysis.crawler_analysis import analyze_from_crawler
+    try:
+        d = analyze_from_crawler(M.auction_db, k)      # 크롤러 구조화DB(0.2초) — risk_level 포함
+    except Exception:
+        d = None
+    if isinstance(d, dict) and d.get("risk_level"):
+        M.auction_db.cache_save("analysis:" + k, d)    # 로컬 즉시(synced=0)+Supabase 업서트
+    else:
+        M.auction_analysis(k)                          # 미분석 물건 → PDF폴백(_cached_doc이 저장)
+
+
 _EXP_DONE = set()   # 이미 예상낙찰가 캐시된 item_key(재실행 스킵용 — compute_bg는 자체 캐시체크가 없음)
 
 
@@ -139,7 +160,10 @@ def warm_one(k, u, g):
         if is_car:
             _safe(lambda: M._cached_doc("vehicle", k, lambda: analyze_vehicle(M.auction_db, k)))
         else:
-            _safe(lambda: M._cached_doc("analysis", k, lambda: analyze_registry(M.auction_db, k)))
+            # ★목록 매수판정(㉯)이 읽는 analysis: 캐시에 risk_level을 '저장'까지 시킨다.
+            #  M.auction_analysis(k) 직접 호출은 크롤러 경로 결과를 저장하지 않아 예열 효과가 0이다
+            #  (2026-07-21 실측: 12,769건 예열 → 캐시 2,823 무변화). 상세 주석은 _warm_analysis 참조.
+            _safe(lambda: _warm_analysis(k))
             _safe(lambda: M._cached_doc("appraisal", k, lambda: analyze_appraisal(M.auction_db, k)))
             _safe(lambda: M._cached_doc("docsummary", k, lambda: analyze_doc_summary(M.auction_db, k)))
 

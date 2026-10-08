@@ -315,7 +315,8 @@
   .kbdetail td{background:#fafbfe;padding:9px 12px !important;text-align:left;}
   .kbfeat{font-size:12px;color:var(--hotblue,#2f6bff);font-weight:600;margin-bottom:6px;line-height:1.5;}
   .kbphotos{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;}
-  .kbphotos img{height:84px;border-radius:6px;border:1px solid var(--line);flex:0 0 auto;background:#eef1f5;}
+  .kbphotos img{height:84px;border-radius:6px;border:1px solid var(--line);flex:0 0 auto;background:#eef1f5;cursor:zoom-in;}
+  .kbphotos img:hover{outline:2px solid #1a73e8;outline-offset:1px;}
   .kbinfo{font-size:11.5px;color:var(--muted);margin-top:5px;}
   .kb-dprice{font-size:12px;font-weight:600;color:var(--muted);margin-left:2px;}
   .apthd{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--label);
@@ -553,7 +554,7 @@
 const itemKey=new URLSearchParams(location.search).get("item_key");
 const FOLDCUE='<span class="foldcue"><span class="lbl"></span><svg class="cv" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>';   // 공통 세련된 펼치기 cue(pill+chevron)
 let DETAIL=null;          // load()에서 받은 상세(배당종기일 등 공유용)
-let PHOTOS=[], lbIdx=0;   // 전체 사진 슬라이드용
+let PHOTOS=[], lbIdx=0, PHOTOS_MAIN=[];   // 전체 사진 슬라이드용(PHOTOS_MAIN=물건 사진 원본, KB 사진 본 뒤 복구)
 let APT_COMPLEX="";       // apt_info에서 받은 정확한 단지명(네이버/KB 링크 정밀화용)
 // ── 네이버/KB 부동산 단지 검색 링크 ──
 let KB_XY="";   // /geocode 로 받은 "lat,lng" (KB 지도 중심이동용)
@@ -666,12 +667,22 @@ function kbLinkGo(e){
   return true;   // KB 매물 없음 → 외부 KB(좌표 지도) 폴백(새 탭)
 }
 function openLb(i){ if(!PHOTOS.length) return; lbIdx=i; renderLb(); document.getElementById("lb").classList.add("on"); }
+// ── 임의 사진 묶음(KB 경쟁매물 등)으로 라이트박스 열기(2026-10-06 주인님 지시) ──
+//    PHOTOS 는 물건 사진 슬라이드용이라 덮으면 물건 사진이 깨진다 → 닫을 때 PHOTOS_MAIN 으로 되돌린다.
+var KBPH=[];                     // KB 매물별 사진 URL 묶음 레지스트리(행 렌더 시 적재)
+function openLbList(urls,i){
+  if(!urls||!urls.length) return;
+  PHOTOS=urls; lbIdx=i||0; renderLb();
+  document.getElementById("lb").classList.add("on");
+}
 function renderLb(){ document.getElementById("lbimg").src=PHOTOS[lbIdx];
   document.getElementById("lbcount").textContent=(lbIdx+1)+" / "+PHOTOS.length; }
 function lbStep(d,e){ if(e) e.stopPropagation(); if(!PHOTOS.length) return;
   lbIdx=(lbIdx+d+PHOTOS.length)%PHOTOS.length; renderLb(); }
 function lbBg(e){ if(e.target.id==="lb") closeLb(); }   // 배경 클릭만 닫기
-function closeLb(){ document.getElementById("lb").classList.remove("on"); }
+function closeLb(){ document.getElementById("lb").classList.remove("on");
+  if(PHOTOS_MAIN.length) PHOTOS=PHOTOS_MAIN;   // 물건 사진 슬라이드 원복(KB 사진을 보고 닫은 경우)
+}
 document.addEventListener("keydown",e=>{
   if(!document.getElementById("lb").classList.contains("on")) return;
   if(e.key==="Escape") closeLb();
@@ -741,6 +752,7 @@ async function load(){
   try{ window.ME = await _meP; }catch(e){ window.ME = {}; }   // 맞춤분석용 회원정보
   const photos=(d.media||[]).filter(m=>m.kind==="photo"&&m.url);
   PHOTOS=photos.map(p=>p.url);   // 슬라이드는 전체 사진 대상
+  PHOTOS_MAIN=PHOTOS;            // KB 매물 사진을 본 뒤 되돌릴 원본
   const docs=(d.media||[]).filter(m=>m.kind!=="photo"&&m.url);
   const ratio=d.appraisal_price?Math.round(100*d.min_price/d.appraisal_price):null;
 
@@ -775,7 +787,7 @@ async function load(){
             <tr><th>용도</th><td>${d.usage_disp||d.usage||"-"}</td><th>채권자</th><td>${d.creditor||"-"}</td><th>감정가</th><td class="amt">${d.appraisal_raw?d.appraisal_raw+"원":won(d.appraisal_price)}</td></tr>
             <tr><td colspan="2"></td><th>채무자</th><td>${d.debtor||"-"}</td><th>최저가</th><td class="amt low">${ratio!=null?`(${ratio}%) `:""}${d.min_price_raw?d.min_price_raw+"원":won(d.min_price)}</td></tr>
             <tr><th>토지면적</th><td>${(d.group==="차량외")?"-":(d.land_area||"-")}</td><th>소유자</th><td>${d.owner||"-"}</td><th>보증금</th><td class="amt">${d.deposit||"-"}</td></tr>
-            <tr><th>건물면적</th><td>${(d.group==="차량외")?"-":(d.area_share?`${d.area_share}㎡ <span style="color:#f01414;font-weight:700">(지분)</span>`:(d.building_area||"-"))}</td><th>매각대상</th><td>${d.sale_target||"-"}</td><th>청구금액</th><td class="amt">${d.claim_amount||"-"}</td></tr>
+            <tr><th>건물면적</th><td>${(d.group==="차량외")?"-":(d.area_share?`${d.area_share}㎡ <span style="color:#f01414;font-weight:700">(지분)</span>`:(d.building_area||"-"))}${d.area_note?`<div style="color:#c2410c;font-weight:700;font-size:12.5px;margin-top:3px">⚠ ${String(d.area_note).replace(/</g,"&lt;")}</div>`:""}</td><th>매각대상</th><td>${d.sale_target||"-"}</td><th>청구금액</th><td class="amt">${d.claim_amount||"-"}</td></tr>
             <tr><th>사건접수</th><td>${d.case_received||"-"}</td><th>배당종기일</th><td>${d.dividend_deadline||"-"}</td><th>개시결정</th><td>${d.decision_date||"-"}</td></tr>
           </table>
           <div class="kglist">
@@ -792,7 +804,7 @@ async function load(){
             <div class="kg-r"><span class="kg-k">청구금액</span><span class="kg-v">${d.claim_amount||"-"}</span></div>
             <div class="kg-sec">면적</div>
             <div class="kg-r"><span class="kg-k">토지</span><span class="kg-v">${d.land_area||"-"}</span></div>
-            <div class="kg-r"><span class="kg-k">건물</span><span class="kg-v">${d.building_area||"-"}</span></div>
+            <div class="kg-r"><span class="kg-k">건물</span><span class="kg-v">${d.building_area||"-"}${d.area_note?`<br><span style="color:#c2410c;font-weight:700;font-size:12px">⚠ ${String(d.area_note).replace(/</g,"&lt;")}</span>`:""}</span></div>
             <div class="kg-sec">기타</div>
             <div class="kg-r"><span class="kg-k">매각대상</span><span class="kg-v">${d.sale_target||"-"}</span></div>
             <div class="kg-r"><span class="kg-k">사건접수</span><span class="kg-v">${d.case_received||"-"}</span></div>
@@ -845,13 +857,30 @@ async function load(){
             const ORD=[["등기(집합)","등기(집합)"],["등기(건물)","등기(건물)"],["등기(토지)","등기(토지)"],["등기","등기"],
               ["건축물대장","건축물대장"],["토지임야대장","토지임야대장"],["차량기계원부","차량기계원부"],
               ["감정평가서","감정평가서"],["현황조사서","현황조사서"],
-              ["매각물건명세서","물건명세서"],["사건내역","사건내역"],["기일내역문서","기일내역"],
-              ["문건접수송달","문건접수/송달"],["부동산표시","부동산표시"]];
+              ["매각물건명세서","물건명세서"],["매각물건명세서_그림","물건명세서"],
+              ["사건내역","사건내역"],["기일내역문서","기일내역"],
+              ["문건접수송달","문건접수/송달"],["부동산표시","부동산표시"],
+              //  🔴2026-10-07: 09-08 대법원 수집 전환 뒤 새 물건은 옛 HTML 4종이 없다.
+              //   크롤러가 원본 JSON 으로 적재하므로 같은 이름으로 함께 노출한다(아래에서 중복 제거).
+              ["사건내역_json","사건내역"],["기일내역_json","기일내역"],
+              ["문건접수송달_json","문건접수/송달"],["부동산표시_json","부동산표시"]];
             // 등기(집합/건물/토지)가 있으면 일반 '등기'는 숨김(중복 제거)
             const hasSpecificDeungi=docs.some(m=>["등기(집합)","등기(건물)","등기(토지)"].includes(m.kind));
+            //  🔴2026-09-30 주인님 지적("매각물건명세서 왜 없냐"): 법원이 PDF 대신 **이미지**로 주는 사건이 있다.
+            //   그 경우 kind='매각물건명세서_그림'(image/png 여러 장)으로 저장되는데 위 목록에 없어
+            //   수집은 됐는데 화면엔 자료 링크가 아예 안 떴다(진행물건 1,112건·매각기일 14일내 428건 실측).
+            //   PDF 가 있으면 그림은 숨기고(중복), 없을 때만 그림을 '물건명세서'로 내보낸다. 여러 장이라 1링크로 묶는다.
+            const hasSpecPdf=docs.some(m=>m.kind==="매각물건명세서");
             let html="";
+            //  🔴2026-10-07: 옛 HTML 과 새 JSON 이 같은 자료다 — HTML 이 있으면 JSON 은 숨긴다(중복 제거).
+            const _HTML_OF={"사건내역_json":"사건내역","기일내역_json":"기일내역문서",
+                            "문건접수송달_json":"문건접수송달","부동산표시_json":"부동산표시"};
             ORD.forEach(([k,label])=>{ if(k==="등기"&&hasSpecificDeungi) return;
-              docs.filter(m=>m.kind===k).forEach(m=>{
+              if(k==="매각물건명세서_그림"&&hasSpecPdf) return;
+              if(_HTML_OF[k] && docs.some(m=>m.kind===_HTML_OF[k])) return;
+              let _ms=docs.filter(m=>m.kind===k);
+              if(k==="매각물건명세서_그림") _ms=_ms.slice(0,1);   // 페이지 이미지 N장 → 링크 1개(뷰어에서 전부 표시)
+              _ms.forEach(m=>{
               const href="/static/docs.html?item_key="+encodeURIComponent(itemKey)+"&kind="+encodeURIComponent(k);  // 탭형 서류 뷰어(docs.html) 통합 — PDF=iframe·HTML=docview정리본·사진=갤러리로 임베드(깨진 이미지 없음)
               html+=`<a class="sidelink doc" href="${href}" target="_blank">${label}${m.seq?(" #"+m.seq):""}<span class="ar">↗</span></a>`; }); });
             return html||'<div class="sub">등록된 서류가 없습니다.</div>';
@@ -1518,7 +1547,7 @@ function renderShortSale(){
   const auto=(EXP_BID&&EXP_BID.available)?'예상낙찰가':'최저가';
   const landArea=parseFloat((String(d.land_area||'').match(/[\d.]+/)||[''])[0])||'';   // 토지면적(지분) 자동
   const esc=s=>String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-  const exclArea=parseFloat((String(d.building_area||'').match(/[\d.]+/)||[''])[0])||0;   // 건물(전용)면적
+  const exclArea=parseFloat((String(d.building_area||'').replace(/,/g,'').match(/[\d.]+/)||[''])[0])||0;   /* 2026-09-30: 콤마 제거 — '5,991.00㎡' 에서 '5' 만 잡혀 85㎡ 판정·수익률이 틀렸다 */   // 건물(전용)면적
   const over85=exclArea>85, areaUnknown=exclArea===0;   // 85㎡ 초과 자동감지
   return `<style>
     .dg-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px 10px;margin-bottom:10px}
@@ -1708,7 +1737,7 @@ function loadShortSale(){
 async function ssAutoVat(){   // 85㎡ 초과 건물분 부가세: 공시가 자동조회 → 건물기준시가·개별공시지가 자동주입(빈 칸만)
   if(!document.getElementById('ssc_vatbox')) return;
   const d=DETAIL||{}; if(!d.address) return;
-  const area=parseFloat((String(d.building_area||'').match(/[\d.]+/)||[''])[0])||0;
+  const area=parseFloat((String(d.building_area||'').replace(/,/g,'').match(/[\d.]+/)||[''])[0])||0;   /* 2026-09-30 콤마 제거 */
   const la=parseFloat((String(d.land_area||'').match(/[\d.]+/)||[''])[0])||0;
   try{
     const r=await fetch(`/auction/building_vat?addr=${encodeURIComponent(d.address)}&area=${area}&land_area=${la}`);
@@ -1831,7 +1860,14 @@ function kbRowHtml(x){
   const hasD=x.feature||(x.photos&&x.photos.length)||x.direction||x.room_cnt;
   const main=`<tr class="kbrow${hasD?' kbexp':''}"${hasD?` onclick="this.classList.toggle('open');this.nextElementSibling.classList.toggle('open')"`:''}><td>${x.area_excl}㎡${hasD?' <span class="kbmore"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>':''}</td><td class="amt">${won((x.price||0)*10000)}</td><td>${x.floor||'-'}</td><td>${x.dong||''}</td></tr>`;
   if(!hasD) return main;
-  const ph=(x.photos&&x.photos.length)?`<div class="kbphotos">${x.photos.map(p=>`<img src="${p.url}" loading="lazy" alt="">`).join('')}</div>`:'';
+  //  🔴2026-10-06 주인님 지시: 썸네일을 누르면 크게 보이게(물건 사진과 같은 라이트박스 재사용)
+  let ph='';
+  if(x.photos&&x.photos.length){
+    const _ki=KBPH.push(x.photos.map(p=>p.url))-1;
+    ph=`<div class="kbphotos">${x.photos.map((p,pi)=>
+      `<img src="${p.url}" loading="lazy" alt="" title="클릭하면 크게 보기" onclick="event.stopPropagation();openLbList(KBPH[${_ki}],${pi})">`
+    ).join('')}</div>`;
+  }
   const info=[x.direction&&('방향 '+x.direction),x.room_cnt&&('방 '+x.room_cnt+'개'),x.bath_cnt&&('욕실 '+x.bath_cnt+'개'),x.agent_name].filter(Boolean).join(' · ');
   return main+`<tr class="kbdetail"><td colspan="4">${x.feature?`<div class="kbfeat">💬 ${x.feature}</div>`:''}${ph}${info?`<div class="kbinfo">${info}</div>`:''}</td></tr>`;
 }

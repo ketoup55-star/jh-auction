@@ -13,7 +13,12 @@
 from __future__ import annotations
 
 import os
+import os.path as _os_path
 import re
+import json as _json
+import sqlite3 as _sqlite3
+import threading as _th
+import time as _time
 import xml.etree.ElementTree as ET
 from datetime import date
 import concurrent.futures as _cf
@@ -31,7 +36,93 @@ _UA = {"User-Agent": "Mozilla/5.0"}
 _CLIENT = httpx.Client(headers=_UA, timeout=30,
                        transport=httpx.HTTPTransport(retries=2,
                            limits=httpx.Limits(max_keepalive_connections=20, max_connections=40)))
-_QUOTA_HIT = False   # 일일 할당량(QUOTA) 초과 감지 시 True → 이후 _recent는 즉시 중단(불필요 호출 방지)
+#  M5: 일일 할당량(QUOTA) 감지. 종전엔 bool 전역이라 한 번 켜지면 **프로세스 생애 내내** 모든
+#     호출이 차단돼, 그 뒤 모든 조회가 '거래 0건'이 되고 그 0건이 캐시에 박혔다(2026-10-05 실측).
+#     쿼터는 자정에 리셋되므로 '감지한 날'을 기록해 날짜가 바뀌면 자동 해제한다.
+_QUOTA_DAY: str | None = None
+
+
+def _quota_hit() -> bool:
+    global _QUOTA_DAY
+    if _QUOTA_DAY is None:
+        return False
+    if _QUOTA_DAY != date.today().isoformat():
+        _QUOTA_DAY = None          # 날이 바뀌었다 → 쿼터 리셋
+        return False
+    return True
+
+
+def _quota_mark() -> None:
+    global _QUOTA_DAY
+    _QUOTA_DAY = date.today().isoformat()
+
+
+#  M2: 국토부 동시 호출 상한. 월별 12개 병렬 × 시군구 병렬(예열·백필 6워커)이면 순간 70여 요청이
+#      몰려 국토부가 조용히 빈 응답을 준다(실측: 같은 lawd 가 893 vs 2,430). 전역으로 묶는다.
+_MOLIT_GATE = _th.Semaphore(4)
+
+#  M1: 월 단위 캐시(SQLite). 지난 달 실거래는 확정값이라 다시 부를 이유가 없다.
+#      당월·전월만 1일 TTL(신고 지연 반영). 이것만으로 호출량이 1/12로 줄어 M2 의 병목도 사라진다.
+_MCACHE_PATH = _os_path.join(_os_path.dirname(_os_path.dirname(_os_path.abspath(__file__))), "molit_month.db")
+_mc_lock = _th.Lock()
+_mc_con = None
+
+
+def _mc() -> "_sqlite3.Connection | None":
+    global _mc_con
+    if _mc_con is None:
+        try:
+            _mc_con = _sqlite3.connect(_MCACHE_PATH, check_same_thread=False, timeout=20)
+            _mc_con.execute("""CREATE TABLE IF NOT EXISTS months(
+                op TEXT, lawd TEXT, ymd TEXT, rows TEXT, n INTEGER, fetched REAL,
+                PRIMARY KEY(op, lawd, ymd))""")
+            _mc_con.commit()
+        except Exception:
+            _mc_con = False
+    return _mc_con or None
+
+
+def _mc_fresh_ymds() -> set:
+    """당월·전월 = 1일 TTL 대상(신고 지연으로 값이 계속 늘어난다)."""
+    t = date.today()
+    y, m = t.year, t.month
+    pm_y, pm_m = (y - 1, 12) if m == 1 else (y, m - 1)
+    return {f"{y}{m:02d}", f"{pm_y}{pm_m:02d}"}
+
+
+def _mc_get(op: str, lawd: str, ymd: str):
+    c = _mc()
+    if not c:
+        return None
+    try:
+        with _mc_lock:
+            r = c.execute("SELECT rows, fetched FROM months WHERE op=? AND lawd=? AND ymd=?",
+                          (op, lawd, ymd)).fetchone()
+    except Exception:
+        return None
+    if not r:
+        return None
+    rows, fetched = r
+    if ymd in _mc_fresh_ymds() and (_time.time() - (fetched or 0)) > 86400:
+        return None               # 당월·전월은 1일만 유효
+    try:
+        return _json.loads(rows)
+    except Exception:
+        return None
+
+
+def _mc_put(op: str, lawd: str, ymd: str, rows: list) -> None:
+    """★성공한 월만 저장한다. 실패·부실(조용한 빈 응답)은 호출측이 저장하지 않는다."""
+    c = _mc()
+    if not c:
+        return
+    try:
+        with _mc_lock:
+            c.execute("INSERT OR REPLACE INTO months(op,lawd,ymd,rows,n,fetched) VALUES(?,?,?,?,?,?)",
+                      (op, lawd, ymd, _json.dumps(rows, ensure_ascii=False), len(rows), _time.time()))
+            c.commit()
+    except Exception:
+        pass
 
 
 def _t(el, tag: str) -> str:
@@ -44,19 +135,26 @@ class MolitSource:
         self.key = key or os.environ.get("ONBID_SERVICE_KEY", "")  # data.go.kr 공통 키
 
     def _month(self, lawd_cd: str, ymd: str) -> tuple[list[dict], str | None]:
-        try:
-            r = _CLIENT.get(_OP, params={"serviceKey": self.key, "LAWD_CD": lawd_cd,
-                                         "DEAL_YMD": ymd, "numOfRows": "1000", "pageNo": "1"})
-            if r.status_code == 429 or "quota exceeded" in r.text[:120].lower():
-                return [], "QUOTA"                    # 일일 할당량 초과 → 즉시 중단(재시도 무의미)
-            root = ET.fromstring(r.text)
-        except Exception as e:
-            return [], f"국토부 실거래 호출 실패: {type(e).__name__}"
+        with _MOLIT_GATE:                             # M2: 국토부 동시 호출 상한
+            try:
+                r = _CLIENT.get(_OP, params={"serviceKey": self.key, "LAWD_CD": lawd_cd,
+                                             "DEAL_YMD": ymd, "numOfRows": "1000", "pageNo": "1"})
+                if r.status_code == 429 or "quota exceeded" in r.text[:120].lower():
+                    return [], "QUOTA"                # 일일 할당량 초과 → 즉시 중단(재시도 무의미)
+                root = ET.fromstring(r.text)
+            except Exception as e:
+                return [], f"국토부 실거래 호출 실패: {type(e).__name__}"
         code = root.findtext(".//resultCode")
         if code not in ("000", "00"):
             return [], f"국토부 실거래 오류(코드 {code}): {root.findtext('.//resultMsg')}"
+        #  M4: 조용한 빈 응답 차단 — totalCount 가 있는데 item 이 0개면 '거래 없음'이 아니라 실패다.
+        #     종전엔 이 검증이 아파트 경로에만 있어, RH(빌라)는 빈 응답을 '거래 0건'으로 믿었다.
+        _tc = root.findtext(".//totalCount")
+        _items = root.findall(".//item")
+        if not _items and _tc and _tc.strip().isdigit() and int(_tc) > 0:
+            return [], f"국토부 응답 불일치(totalCount={_tc} 인데 item 0개)"
         out = []
-        for it in root.findall(".//item"):
+        for it in _items:
             amt = re.sub(r"[^0-9]", "", _t(it, "dealAmount"))
             out.append({
                 "amount": int(amt) * 10000 if amt else 0,     # 만원 → 원
@@ -83,19 +181,23 @@ class MolitSource:
         """한 달치 아파트 실거래. 거래 많은 시군구(>1000건)는 페이지네이션(최대 4페이지)."""
         out: list[dict] = []
         for page in range(1, 5):
-            try:
-                r = _CLIENT.get(_OP_APT, params={"serviceKey": self.key, "LAWD_CD": lawd_cd,
-                                                 "DEAL_YMD": ymd, "numOfRows": "1000",
-                                                 "pageNo": str(page)})
-                if r.status_code == 429 or "quota exceeded" in r.text[:120].lower():
-                    return out, "QUOTA"
-                root = ET.fromstring(r.text)
-            except Exception as e:
-                return out, f"국토부 아파트 실거래 호출 실패: {type(e).__name__}"
+            with _MOLIT_GATE:                         # M2: 동시 호출 상한
+                try:
+                    r = _CLIENT.get(_OP_APT, params={"serviceKey": self.key, "LAWD_CD": lawd_cd,
+                                                     "DEAL_YMD": ymd, "numOfRows": "1000",
+                                                     "pageNo": str(page)})
+                    if r.status_code == 429 or "quota exceeded" in r.text[:120].lower():
+                        return out, "QUOTA"
+                    root = ET.fromstring(r.text)
+                except Exception as e:
+                    return out, f"국토부 아파트 실거래 호출 실패: {type(e).__name__}"
             code = root.findtext(".//resultCode")
             if code not in ("000", "00"):
                 return out, f"국토부 아파트 실거래 오류(코드 {code}): {root.findtext('.//resultMsg')}"
             items = root.findall(".//item")
+            _tc = root.findtext(".//totalCount")      # M4: 조용한 빈 응답 차단(1페이지에서만 판정)
+            if page == 1 and not items and _tc and _tc.strip().isdigit() and int(_tc) > 0:
+                return out, f"국토부 아파트 응답 불일치(totalCount={_tc} 인데 item 0개)"
             for it in items:
                 amt = re.sub(r"[^0-9]", "", _t(it, "dealAmount"))
                 out.append({
@@ -122,19 +224,24 @@ class MolitSource:
 
     # ---------- 단독·다가구 전월세 실거래(다가구·근린주택 주변 임대시세) ----------
     def _sh_rent_month(self, lawd_cd: str, ymd: str) -> tuple[list[dict], str | None]:
-        try:
-            r = _CLIENT.get(_OP_SHRENT, params={"serviceKey": self.key, "LAWD_CD": lawd_cd,
-                                                "DEAL_YMD": ymd, "numOfRows": "1000", "pageNo": "1"})
-            if r.status_code == 429 or "quota exceeded" in r.text[:120].lower():
-                return [], "QUOTA"
-            root = ET.fromstring(r.text)
-        except Exception as e:
-            return [], f"국토부 단독다가구 전월세 호출 실패: {type(e).__name__}"
+        with _MOLIT_GATE:                             # M2: 동시 호출 상한
+            try:
+                r = _CLIENT.get(_OP_SHRENT, params={"serviceKey": self.key, "LAWD_CD": lawd_cd,
+                                                    "DEAL_YMD": ymd, "numOfRows": "1000", "pageNo": "1"})
+                if r.status_code == 429 or "quota exceeded" in r.text[:120].lower():
+                    return [], "QUOTA"
+                root = ET.fromstring(r.text)
+            except Exception as e:
+                return [], f"국토부 단독다가구 전월세 호출 실패: {type(e).__name__}"
         code = root.findtext(".//resultCode")
         if code not in ("000", "00"):
             return [], f"국토부 전월세 오류(코드 {code}): {root.findtext('.//resultMsg')}"
+        _tc = root.findtext(".//totalCount")          # M4: 조용한 빈 응답 차단
+        _items = root.findall(".//item")
+        if not _items and _tc and _tc.strip().isdigit() and int(_tc) > 0:
+            return [], f"국토부 전월세 응답 불일치(totalCount={_tc} 인데 item 0개)"
         out = []
-        for it in root.findall(".//item"):
+        for it in _items:
             dep = re.sub(r"[^0-9]", "", _t(it, "deposit"))
             rent = re.sub(r"[^0-9]", "", _t(it, "monthlyRent"))
             out.append({
@@ -154,10 +261,19 @@ class MolitSource:
         return self._recent(self._sh_rent_month, lawd_cd, months, base)
 
     def _recent(self, fn, lawd_cd: str, months: int, base) -> dict:
-        global _QUOTA_HIT
+        """시군구 최근 months개월 실거래.
+
+        🔴2026-10-05 전면 수정(주인님 승인). 종전 구조의 문제:
+          · 월별 12개 병렬 호출이 부하를 만들고, 국토부가 조용히 빈 응답을 주면 '거래 0건'이 됐다
+            (실측: 같은 lawd 가 893 vs 2,430 — incomplete 은 False)
+          · 과거 월을 매번 다시 불러 호출량이 12배였다
+          · _QUOTA_HIT 이 한 번 켜지면 프로세스 생애 내내 모든 조회가 0건이 됐다
+        지금 구조: 월 단위 캐시(지난 달 영구·당월/전월 1일) → 미캐시 월만 호출(워커 4, 전역 세마포어 4)
+          → 실패 월은 2회 재시도 → **성공한 월만** 캐시 저장. 끝까지 실패한 월은 errors/incomplete 로 알린다.
+        """
         if not self.key:
             return {"error": "국토부 서비스키 미설정", "trades": []}
-        if _QUOTA_HIT:                                  # 이미 할당량 초과 감지됨 → 즉시 중단(불필요 호출 방지)
+        if _quota_hit():                                # M5: 날짜가 바뀌면 자동 해제
             return {"error": "QUOTA", "trades": []}
         base = base or date.today()
         ymds, y, m = [], base.year, base.month         # 조회할 월(YYYYMM) 목록
@@ -166,22 +282,46 @@ class MolitSource:
             m -= 1
             if m == 0:
                 m, y = 12, y - 1
-        # 월별 병렬 조회 — 시군구당 12개월 직렬(API 12번 줄세우기)이 예열의 핵심 병목이었음.
-        # 공유 keep-alive 클라이언트로 동시 호출 → 시군구당 fetch 지연 ~월수배 단축. QUOTA는 호출별 감지 유지.
-        trades, errs = [], []
-        with _cf.ThreadPoolExecutor(max_workers=min(months, 12)) as ex:
-            for rows, err in ex.map(lambda ymd: fn(lawd_cd, ymd), ymds):
-                if err:
-                    errs.append(err)
-                    if err == "QUOTA":
-                        _QUOTA_HIT = True
-                else:
-                    trades.extend(rows)
+        op = getattr(fn, "__name__", "m")               # 캐시 구분(_month / _apt_month / _sh_rent_month)
+
+        # ① M1: 월 캐시에서 먼저 꺼낸다
+        trades, errs, need = [], [], []
+        for ymd in ymds:
+            hit = _mc_get(op, lawd_cd, ymd)
+            if hit is None:
+                need.append(ymd)
+            else:
+                trades.extend(hit)
+
+        # ② 미캐시 월만 호출 — M2(워커 4; 전역 세마포어가 시군구 병렬까지 묶는다) + M3(재시도 2회)
+        def _one(ymd):
+            for attempt in range(3):                    # 최초 1 + 재시도 2
+                rows, err = fn(lawd_cd, ymd)
+                if not err:
+                    return ymd, rows, None
+                if err == "QUOTA":                      # 쿼터는 재시도 무의미
+                    return ymd, rows, err
+                if attempt < 2:
+                    _time.sleep(0.8 * (attempt + 1))    # 지수적 백오프(0.8s, 1.6s)
+            return ymd, rows, err
+
+        if need:
+            with _cf.ThreadPoolExecutor(max_workers=min(len(need), 4)) as ex:
+                for ymd, rows, err in ex.map(_one, need):
+                    if err:
+                        errs.append(err)
+                        if err == "QUOTA":
+                            _quota_mark()
+                    else:
+                        trades.extend(rows)
+                        _mc_put(op, lawd_cd, ymd, rows)   # ★성공한 월만 저장
         if not trades and errs:
             return {"error": errs[0], "trades": []}
-        # ⚠️일부 월이 쿼터(QUOTA)/오류로 실패하면 trades가 부분수집이다 → incomplete 표시(호출측이 캐시 저장을 막아 부분결과 고착 방지)
+        # ⚠️일부 월이 쿼터/오류로 끝까지 실패하면 trades 는 부분수집이다 → incomplete 표시
+        #   (호출측이 이걸 보고 캐시 저장을 막아야 부분결과가 고착되지 않는다)
         return {"trades": trades, "count": len(trades), "months": months,
-                "errors": errs, "incomplete": bool(errs)}
+                "errors": errs, "incomplete": bool(errs),
+                "cached_months": len(ymds) - len(need), "fetched_months": len(need)}
 
 
 def _norm(s: str) -> str:

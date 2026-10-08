@@ -86,7 +86,7 @@
     position:absolute;top:3px;right:-15px;box-shadow:0 1px 5px rgba(20,60,120,.45);z-index:3;}
   .natllink:hover>.natl-badge{animation:natlWobble .55s ease-in-out;}
   @media(prefers-reduced-motion:reduce){.natl-badge{animation:none!important;}}
-  /* 매수판정 배지(경매 auctions.html .gbadge 1:1) */
+  /* (미사용) 매수판정 배지 — 공매는 2026-10-05부터 표시하지 않음 */
   .gbadge{display:inline-block;font-size:12px;font-weight:800;border-radius:6px;padding:2px 10px;vertical-align:middle;}
   .gbadge.g-ok{background:#e7f7ee;color:#138a4e;border:1px solid #b6e6cb;}
   .gbadge.g-mid{background:#fdf3e2;color:#b9770f;border:1px solid #f3dcb0;}
@@ -389,8 +389,8 @@ function loadGmFiles(e){
 function esc(s){return String(s==null?'':s).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c];});}
 function gmHcell(k,v,cls){return v?'<div class="hcell"><span class="hl">'+k+'</span><span class="hv'+(cls?' '+cls:'')+'">'+v+'</span></div>':'';}
 // ─────────────────────────── 입찰정보(공고정보·입찰일정·공고문·첨부파일) ───────────────────────────
-// 레이아웃(주인님 지정): [시세·예상낙찰가·매수판정](#gm-grade-top, 물건사진 위) → 사진 → 세부정보 → 공고정보 → 입찰일정 및 장소 → [유사거래·실거래상세] → 건물정보 → 공고문 → 계산기.
-//   유사거래(#gm-nearby)는 입찰일정 아래, 시세·매수판정 카드(#gm-grade-top)는 사진 위, 건물정보(#gm-features)는 유사거래 아래로 컨테이너 분리 렌더.
+// 레이아웃(주인님 지정): [시세·예상낙찰가](#gm-grade-top, 물건사진 위) → 사진 → 세부정보 → 공고정보 → 입찰일정 및 장소 → [유사거래·실거래상세] → 건물정보 → 공고문 → 계산기.
+//   유사거래(#gm-nearby)는 입찰일정 아래, 시세 카드(#gm-grade-top)는 사진 위, 건물정보(#gm-features)는 유사거래 아래로 컨테이너 분리 렌더.
 async function loadGmBidInfo(d, e){
   var q="?mng="+encodeURIComponent(d.manage_no);
   var bs=null; try{ bs=await (await fetch("/gongmae/bid_schedule"+q)).json(); }catch(err){}
@@ -435,15 +435,34 @@ async function loadGmBidInfo(d, e){
   // ④ 첨부파일 → loadGmFiles가 우측 세로 패널(#gm-files-panel)에 렌더
 }
 var GM_D=null, GM_APT=null, GM_EST=null, GM_XB=null, GM_NB=null;   // 계산기·지도 프리필용
+// 건물정보 카드(준공년도·세대수·승강기·층수) — 빌라류·그 밖의 건물 용도 공용(2026-10-05)
+function gmBriefCard(bi){
+  if(!bi || !bi.available) return "";
+  return '<div class="card"><div class="cardhd">🏗️ 건물정보 <span class="gtag">건축물대장</span></div><div class="hgrid">'
+    +gmHcell("준공년도",bi.build_year?bi.build_year+"년":"")
+    +gmHcell("세대수",bi.units?bi.units+(bi.unit_label||"세대"):"")
+    +gmHcell("승강기",(bi.elevator?bi.elevator+"대":"없음"))
+    +gmHcell("층수",bi.floors?bi.floors+"층":"")+'</div></div>';
+}
 async function loadGmFeatures(d, e){
   var box=document.getElementById("gm-features"); if(!box) return;
   GM_D=d;
   var usg=(e.usage_scls||d.usage||"");
   var isVilla=/다세대|연립|빌라|도시형/.test(usg), isApt=/아파트|오피스텔/.test(usg);
-  if(!isVilla && !isApt){ box.innerHTML=""; maybeShortSale(usg); return; }
+  // 🔴2026-10-05 주인님 지시("세대수·승강기·준공연도 다 나오게"): 건물 용도는 모두 건물정보를 보여준다.
+  //   종전엔 빌라류·아파트류만 렌더하고 단독·다가구·상가주택·근린 등은 통째로 스킵했다.
+  //   실측(소량검증 28건): /gongmae/building_brief 는 단독 4/4·다가구 4/4·상가주택 4/4·근린 4/4 산출(건당 2~3초).
+  //   토지·산업용은 건물대장이 없으므로 제외한다.
+  var isBldg=/아파트|오피스텔|다세대|연립|빌라|도시형|단독|다가구|상가|주택|근린|점포|사무|숙박|공장|창고|건물/.test(usg)
+             && !/^토지|토지\s|임야|전답|과수원|잡종지|대지$/.test(usg);
   var q="?mng="+encodeURIComponent(d.manage_no)+(d.pbct_cdtn_no?"&cdtn="+encodeURIComponent(d.pbct_cdtn_no):"");
   var gf=function(p){return fetch("/gongmae"+p+q).then(function(r){return r.json();}).catch(function(){return null;});};
-  if(isApt){ await loadGmApt(box, d, gf); loadGmGrade(d); maybeShortSale(usg); return; }
+  if(!isVilla && !isApt){
+    box.innerHTML = isBldg ? '<div class="card"><div class="sub">🏗️ 건물정보 불러오는 중…</div></div>' : "";
+    if(isBldg) gf("/building_brief").then(function(bi){ box.innerHTML = gmBriefCard(bi||{}); });
+    maybeShortSale(usg); return;
+  }
+  if(isApt){ await loadGmApt(box, d, gf); maybeShortSale(usg); return; }
   box.innerHTML='<div class="card"><div class="sub">🏗️ 건물정보·시세 불러오는 중…</div></div>';
   // ⚡예상낙찰가(villa_expected_bid)는 인근 경매사례 지오코딩이 무거워 최대 수십초 → Promise.all에서 빼고 별도 비동기.
   //   나머지(건물정보·시세·유사거래)는 즉시 렌더 → 페이지가 안 멈춤.
@@ -453,28 +472,23 @@ async function loadGmFeatures(d, e){
   // ① 유사거래(지도+실거래상세)는 입찰일정 바로 아래 = 독립 컨테이너(#gm-nearby)에 렌더(레이아웃 순서: 주인님 지정)
   if(nb.available) loadGmNearby(nb);
   // ② 건물정보 = #gm-features(유사거래 아래)
-  var html="";
-  if(bi.available){ html+='<div class="card"><div class="cardhd">🏗️ 건물정보 <span class="gtag">건축물대장</span></div><div class="hgrid">'
-    +gmHcell("준공년도",bi.build_year?bi.build_year+"년":"")+gmHcell("세대수",bi.units?bi.units+(bi.unit_label||"세대"):"")
-    +gmHcell("승강기",(bi.elevator?bi.elevator+"대":"없음"))+gmHcell("층수",bi.floors?bi.floors+"층":"")+'</div></div>'; }
-  box.innerHTML=html;
-  // ③ 시세·예상낙찰가·매수판정 카드 = #gm-grade-top(물건사진 위 — 주인님 지정)
+  box.innerHTML=gmBriefCard(bi);
+  // ③ 시세·예상낙찰가 카드 = #gm-grade-top(물건사진 위 — 주인님 지정)
   var sise=est.available?est.price:null;
   var gradeHtml="";
-  if(sise){ gradeHtml='<div class="card"><div class="gradehd"><div class="cardhd">💰 시세·예상낙찰가·매수판정</div><span id="gm-gradebadge"></span></div><div class="hgrid">'
+  if(sise){ gradeHtml='<div class="card"><div class="gradehd"><div class="cardhd">💰 시세·예상낙찰가</div><span id="gm-gradebadge"></span></div><div class="hgrid">'
     +gmHcell("추정 시세",won(sise))
     +'<div class="hcell"><span class="hl">예상 낙찰가</span><span class="hv" id="gm-bidcell">계산 중…</span></div>'
     +'<div class="hcell"><span class="hl">예상 차익</span><span class="hv" id="gm-profitcell">계산 중…</span></div>'
-    +'</div><div id="gm-gradecmt" class="gradecmt"></div><div class="sub" style="margin-top:8px">※ 시세=주변 유사 실거래 · 예상낙찰가=인근 경매 낙찰사례 기준(±면적·층·감정가·낙찰율) · 매수판정=마지막회차 최저가 vs 추정시세</div></div>';
+    +'</div><div id="gm-gradecmt" class="gradecmt"></div><div class="sub" style="margin-top:8px">※ 시세=주변 유사 실거래 · 예상낙찰가=인근 경매 낙찰사례 기준(±면적·층·감정가·낙찰율)</div></div>';
   } else {
-    // 시세 산출불가 → 매수판정은 '금지'(수요 없음)로 표기(배지 카드 단독)
-    gradeHtml='<div class="card"><div class="gradehd"><div class="cardhd">💰 시세·매수판정</div><span id="gm-gradebadge"></span></div>'
+    // 시세 산출불가 → 산출불가 사실만 표기(매수판정은 쓰지 않음)
+    gradeHtml='<div class="card"><div class="gradehd"><div class="cardhd">💰 시세</div><span id="gm-gradebadge"></span></div>'
       +'<div class="sub">이 물건은 주변 유사 실거래가 없어 추정시세를 산출할 수 없습니다.</div><div id="gm-gradecmt" class="gradecmt"></div></div>';
   }
   var topBox=document.getElementById("gm-grade-top");
   if(topBox) topBox.innerHTML=gradeHtml;
-  // 매수판정 배지·코멘트(공용 헬퍼) — 빌라/도생/아파트 동일
-  loadGmGrade(d);
+  // 🔴공매 매수판정 미표시(2026-10-05 주인님 지시) — 시세·예상낙찰가·차익만 보여준다
   // 예상낙찰가·차익은 준비되면 채움(페이지는 이미 렌더됨)
   gf("/villa_expected_bid").then(function(xb){
     GM_XB=xb||{};
@@ -489,6 +503,7 @@ async function loadGmFeatures(d, e){
 // ─── 매수판정 배지+코멘트(빌라/다세대/도시형 + 아파트 공용) — 마지막회차 최저가 vs 추정시세 ───
 var GM_GRADE=null;
 async function loadGmGrade(d){
+  return;   // 🔴2026-10-05 주인님 지시: 공매는 권리분석이 안 되므로 매수판정을 넣지 않는다(화면 미표시)
   if(!d||!d.manage_no) return;
   var q="?mng="+encodeURIComponent(d.manage_no)+(d.pbct_cdtn_no?"&cdtn="+encodeURIComponent(d.pbct_cdtn_no):"");
   var g=null; try{ g=await (await fetch("/gongmae/buy_grade"+q)).json(); }catch(e){ return; }
@@ -532,21 +547,29 @@ async function loadGmApt(box, d, gf){
   box.innerHTML='<div class="card"><div class="sub">🏢 아파트 정보·실거래·경쟁매물 불러오는 중…</div></div>';
   // ⚡예상낙찰가(expected_bid)는 인근 경매사례 백데이터 조회가 무거워 3~4초 → Promise.all에서 빼고 별도 비동기
   //   (빌라와 동일 패턴). 아파트정보·경쟁매물 먼저 렌더 → 예상낙찰가/차익은 placeholder로 두고 완료 시 채움.
-  var R=await Promise.all([gf("/apt_info"),gf("/competing_listings")]);
-  var ai=R[0]||{}, xb={}, cl=R[1]||{};
+  var R=await Promise.all([gf("/apt_info"),gf("/competing_listings"),gf("/building_brief")]);
+  var ai=R[0]||{}, xb={}, cl=R[1]||{}, bi=R[2]||{};
   GM_APT=ai; GM_XB=xb;
   var cd=ai.complex_detail, s=ai.summary;
-  var yearVal=(cd&&cd.approved)?String(cd.approved).slice(0,4):(ai.build_year||"");
+  // 🔴2026-10-05: K-apt 단지정보(cd)에 없는 값은 건축물대장(building_brief)으로 채운다.
+  //   종전엔 cd 만 봐서, K-apt 에 없는 단지(오피스텔·소규모)는 세대수·승강기·층수가 통째로 공란이었다.
+  var _bl = (bi && bi.available) ? ' <span class="gtag" style="background:#eef7ee;color:#2d6a3a">대장</span>' : "";
+  var yearVal=(cd&&cd.approved)?String(cd.approved).slice(0,4):(ai.build_year||(bi.available?bi.build_year:"")||"");
+  var yearTail=(!(cd&&cd.approved) && !ai.build_year && bi.available && bi.build_year) ? _bl : "";
+  var hhVal=(cd&&cd.households)?(esc(cd.households)+"세대"):((bi.available&&bi.units)?(bi.units+(bi.unit_label||"세대")+_bl):"");
+  var elVal=(cd&&cd.elevator!==undefined&&cd.elevator!=="")?(+cd.elevator>0?esc(cd.elevator)+"대":"없음")
+            :((bi.available&&bi.elevator!==undefined&&bi.elevator!==null)?((+bi.elevator>0?bi.elevator+"대":"없음")+_bl):"");
+  var flVal=(cd&&cd.floors_high)?(esc(cd.floors_high)+"층"):((bi.available&&bi.floors)?(bi.floors+"층"+_bl):"");
   var html='<div class="card"><div class="gradehd"><div class="cardhd">🏢 아파트 정보 / 실거래가'+(ai.area_matched?' <span class="gtag">같은 평형</span>':(ai.trades&&ai.trades.length?' <span class="gtag">단지 전체</span>':''))+'</div><span id="gm-gradebadge"></span></div>';
   html+='<div class="hgrid">'
     +gmHcell("단지명",ai.complex?esc(ai.complex):"")
     +gmHcell("전용면적",ai.area?ai.area+"㎡":"")
-    +gmHcell("준공년도",yearVal?esc(yearVal)+"년":"")
-    +gmHcell("세대수",(cd&&cd.households)?esc(cd.households)+"세대":"")
+    +gmHcell("준공년도",yearVal?esc(yearVal)+"년"+yearTail:"")
+    +gmHcell("세대수",hhVal)
     +gmHcell("동수",(cd&&cd.dongs)?esc(cd.dongs)+"개동":"")
-    +gmHcell("최고층",(cd&&cd.floors_high)?esc(cd.floors_high)+"층":"")
+    +gmHcell("최고층",flVal)
     +gmHcell("주차",(cd&&cd.parking)?esc(cd.parking)+"대":"")
-    +gmHcell("승강기",(cd&&cd.elevator!==undefined&&cd.elevator!=="")?(+cd.elevator>0?esc(cd.elevator)+"대":"없음"):"")
+    +gmHcell("승강기",elVal)
     +gmHcell("시공사",(cd&&cd.builder)?esc(cd.builder):"")
     +'</div>';
   var sise=(ai.est&&ai.est.price)?ai.est.price:(s&&s.recent?s.recent:null);
@@ -561,7 +584,7 @@ async function loadGmApt(box, d, gf){
       +'<div class="qb"><div class="ql">매수세(6개월)</div><div class="qv">'+((ai.demand&&ai.demand.count6!=null)?ai.demand.count6+'건':"-")+'</div></div>'
       +'</div>';
   }
-  html+='<div id="gm-gradecmt" class="gradecmt"></div>';   // 매수판정 코멘트(loadGmGrade가 채움) — 마지막회차 최저가 vs 아파트 추정시세
+  html+='<div id="gm-gradecmt" class="gradecmt"></div>';   // (미사용) 매수판정 코멘트 — 공매는 2026-10-05부터 표시하지 않음
   if(s){
     html+='<div class="qbox4">'
       +'<div class="qb"><div class="ql">최근 실거래</div><div class="qv">'+won(s.recent)+'</div></div>'

@@ -28,6 +28,9 @@ import threading as _threading
 # psycopg 직접연결(서울 DB 27ms)용 스레드로컬 — REST(PostgREST가 CloudType에서 매 쿼리 SSL 재핸드셰이크 ~882ms)
 #  우회. uvicorn 스레드풀이 스레드를 재사용하므로 '스레드당 연결 1개'를 재사용(psycopg_pool 불필요).
 _PG_TLS = _threading.local()
+#  query_pg 한 번의 최대 실행 시간(ms). 무거운 전수 스캔(waiver 배치 5천건)도 수십 초면 끝나므로
+#  넉넉히 180초. 이보다 오래 걸리면 정상이 아니라 끊긴 연결이거나 DB 이상이다 — 멈춰 있느니 실패가 낫다.
+_PG_STMT_MS = int(os.environ.get('PG_STATEMENT_TIMEOUT_MS', '180000'))
 
 # 경매결과 그룹옵션 → 포함 상태(여러 result 값 OR 매칭). 스피드옥션 드롭다운의 묶음 항목과 동일.
 _STATUS_GROUPS: dict[str, list[str]] = {
@@ -251,6 +254,18 @@ def _reconciled_result(row: dict) -> Optional[str]:
     return raw
 
 
+_COUNT_CACHE: dict = {}   # (조건) → (시각, 총건수). count=exact 가 느려 목록을 죽이던 것 방어(2026-10-06)
+
+
+def _with_ho(addr, detail):
+    """주소에 호수가 없고 보강된 동·호수가 있으면 덧붙여 돌려준다(표시 전용)."""
+    a = (addr or "").strip()
+    d = (detail or "").strip()
+    if a and d and "호" not in a:
+        return a + " " + d
+    return addr
+
+
 class SupabaseSource:
     def __init__(self, url: Optional[str] = None, key: Optional[str] = None,
                  r2_url: Optional[str] = None, mask_personal: Optional[bool] = None):
@@ -306,7 +321,17 @@ class SupabaseSource:
                 #  만드는 서버측 prepared statement('_pg3_N')가 다른 세션의 다른 쿼리와 이름이 겹쳐 **남의 결과를 조용히
                 #  돌려줬다**(재현: SELECT item_key 60회 중 25회가 SELECT * 결과, 10회 'already exists'). 그 결과 로컬 item:
                 #  캐시 74건이 주소·용도 없는 빈 껍데기가 돼 상세·지도(59건 '지도 불가')가 깨졌다.
-                c = psycopg.connect(dsn, autocommit=True, connect_timeout=10, prepare_threshold=None)
+                #  🔴2026-09-28 실측: connect_timeout 만 있고 **쿼리 타임아웃이 없어** 무한 hang 이 났다.
+                #   _PG_TLS 로 연결을 재사용하는데, Supabase 트랜잭션 풀러가 유휴 중에 조용히 끊은 연결은
+                #   c.closed 가 0(열림)으로 남는다 → 그 연결로 execute 하면 응답이 영원히 오지 않는다.
+                #   증상: _grade_buckets 재계산이 waiver 단계에서 3시간 멈춤(쿼리 3.6초·파싱 0.2초로 둘 다 정상인데
+                #   'waiver 재스캔' 로그도 _abort 로그도 안 나옴 = 호출 안에서 대기). 25분마다 재시도해도 같은 자리.
+                #   → ① statement_timeout 으로 서버가 끊게 하고 ② keepalive 로 죽은 연결을 빨리 감지한다.
+                #   타임아웃되면 예외 → except 에서 None 반환 → 호출측이 재시도(기존 설계 그대로).
+                c = psycopg.connect(
+                    dsn, autocommit=True, connect_timeout=10, prepare_threshold=None,
+                    options=f"-c statement_timeout={_PG_STMT_MS}",
+                    keepalives=1, keepalives_idle=30, keepalives_interval=10, keepalives_count=3)
                 _PG_TLS.conn = c
             with c.cursor() as cur:
                 cur.execute(sql, params)
@@ -718,18 +743,40 @@ class SupabaseSource:
         return f
 
     def _count_one(self, **kw) -> int:
+        """조건에 맞는 총건수. 🔴2026-10-06 전면 보강.
+
+        실측: 목록 쿼리는 0.01~0.03초인데 count 는 12.22초(sell_date_d 3개월, 33,006건)라
+        anon 3초 제한에 걸려 500이 났고, 그 때문에 **목록 전체가 '검색 실패'**로 떨어졌다.
+        ①같은 조건은 60초 캐시(페이지를 넘겨도 총건수는 변하지 않는다)
+        ②끝내 못 세면 예외 대신 -1(미상)을 돌려 목록은 뜨게 한다 — 총건수 하나 때문에 화면을 비우지 않는다.
+        """
         params = [("select", "item_key"), ("limit", "1")] + self._filters(**kw)
-        last = None
         import time as _t
-        for i in range(3):                       # count=exact 타임아웃·동시연결거부(WinError 10061) 재시도
+        _ck = repr(sorted((str(k), str(v)) for k, v in params))
+        _hit = _COUNT_CACHE.get(_ck)
+        if _hit and (_t.time() - _hit[0]) < 60:
+            return _hit[1]
+        last = None
+        for i in range(2):                       # count=exact 타임아웃·동시연결거부(WinError 10061) 재시도
             try:
                 r = self._get("items", params, count=True)
                 r.raise_for_status()
-                return int(r.headers.get("content-range", "*/0").split("/")[-1])
+                _v = int(r.headers.get("content-range", "*/0").split("/")[-1])
+                _COUNT_CACHE[_ck] = (_t.time(), _v)
+                if len(_COUNT_CACHE) > 500:      # 무한 증식 방지(오래된 것부터 버림)
+                    for _k in sorted(_COUNT_CACHE, key=lambda k: _COUNT_CACHE[k][0])[:200]:
+                        _COUNT_CACHE.pop(_k, None)
+                return _v
             except Exception as e:
                 last = e
                 _t.sleep(0.4 * (i + 1))          # 지연 후 재시도(연결거부 회복 여유)
-        raise last if last else RuntimeError("count failed")
+        #  🔴여기서 예외를 올리면 목록 전체가 실패한다 — 총건수만 미상으로 두고 화면은 살린다.
+        try:
+            print(f"[count] 총건수 계산 실패(미상 처리): {type(last).__name__}", flush=True)
+        except Exception:
+            pass
+        _COUNT_CACHE[_ck] = (_t.time(), -1)      # 60초 동안은 재시도하지 않는다(같은 쿼리가 또 죽는다)
+        return -1
 
     def count_filtered(self, **kw) -> int:
         # item_keys 집합이 크면(예: 매수판정 필터) IN 리스트가 URL 한계를 넘으므로 청크 분할 후 합산(키 디스조인트).
@@ -1011,7 +1058,10 @@ class SupabaseSource:
                 "sale_price,sale_rate,fail_count,sell_date,result,status_reason,"
                 "bid_count,sale_2nd_price,hit_count,thumb_url,buy_grade,data_class,"
                 "est_price,expected_bid,expbid_count,profit,kb_count,similar_count,apt_demand,usage_fix,"
-                "share_sale,area_full,area_share,agency_takeover")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익·호가·유사거래·수요배지 포함(fetch 왕복·온-패스 compute 제거)
+                "share_sale,area_full,area_share,agency_takeover,area_note,detail_address")   # 컬럼화 — 목록 쿼리에 시세·예상낙찰·차익·호가·유사거래·수요배지 포함(fetch 왕복·온-패스 compute 제거)
+        #  detail_address = 주소에 빠진 동·호수(등기 전유부분 표제부에서 보강). 아래에서 address 에 덧붙여 표시.
+        #  area_note = 일괄매각 합계면적 주석('100개 호실 일괄매각 · 호당 59.91㎡'). 2026-10-01 주인님 지적으로 컬럼화 —
+        #   목록은 수천 건이라 매번 원문(detail_text)을 파싱할 수 없어 20분 루프가 채운 값을 읽기만 한다.
         iks = kw.get("item_keys")
         if iks is not None and len(iks) > 600:
             # 큰 item_keys 집합 → 청크별 상위(offset+limit) 조회 후 병합·정렬·슬라이스(분산 top-k).
@@ -1246,7 +1296,10 @@ class SupabaseSource:
             "usage": row.get("usage_fix") or row.get("usage_name"),   # 앱 재분류(도생 등) 우선 — 크롤러 usage_name은 불변
             "usage_raw": row.get("usage_name"),
             "group": row.get("search_group"),
-            "address": row.get("address"),
+            #  🔴2026-10-06 주인님 지적(2회): 아파트인데 호수가 없는 주소(법원 공고 원문이 그렇다).
+            #   등기 전유부분 표제부에서 읽어 둔 detail_address 를 **표시용으로만** 덧붙인다.
+            #   items.address 를 직접 고치면 다음 수집 때 크롤러가 되돌려 놓는다.
+            "address": _with_ho(row.get("address"), row.get("detail_address")),
             "area_text": row.get("area_text"),
             "land_area": row.get("land_area"),
             "building_area": row.get("building_area"),

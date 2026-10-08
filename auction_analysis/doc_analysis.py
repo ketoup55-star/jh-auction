@@ -166,6 +166,17 @@ def analyze_doc_summary(source, item_key: str) -> dict:
                 court = parse_court_docs(html)
             except Exception:
                 pass
+        #  🔴2026-10-07: 옛 HTML 이 없는 물건(09-08 대법원 수집 전환 이후)은 원본 JSON 으로 채운다.
+        #    HTML 이 있으면 그것을 그대로 쓰고, 없거나 비었을 때만 JSON 을 본다.
+        if not court.get("available"):
+            jurl = source.media_url(item_key, "문건접수송달_json")
+            if jurl:
+                try:
+                    from .court_docs_parser import parse_court_docs_json
+                    court = parse_court_docs_json(
+                        httpx.get(jurl, timeout=40, follow_redirects=True).json())
+                except Exception:
+                    pass
         if ms.get("available") or court.get("available"):
             docs = court.get("docs", [])
             docs = sorted(docs, key=lambda d: d.get("date", ""), reverse=True)  # 최신순

@@ -18,6 +18,7 @@ from __future__ import annotations
 import os
 import re
 import threading
+import time as _time   # 모듈 전역 시간(지역 _t 와 충돌 안 나게 별도 이름)
 from datetime import date
 from typing import Optional
 
@@ -404,7 +405,11 @@ def _apt_deposit_unknown_compute():
         dc_of[x["item_key"]] = "현황" if x.get("is_active") else x.get("data_class")
         if base:
             base_of[x["item_key"]] = base
-    match: set = {k for k, dc in dc_of.items() if dc and dc != "현황"}      # 과거(매각완료)는 차익 미적용 — 주인님 지시
+    #  🔴2026-10-07 주인님 승인: 과거는 **매각완료만** 넣는다(기각·취하·각하·정지·중지·변경·연기 제외).
+    #    종전엔 과거를 전부 넣어 무산 물건이 필터에 섞였다(보증금미상 456건=25.2% 실측).
+    _res_of = {x["item_key"]: (x.get("result") or "") for x in rows}
+    match: set = {k for k, dc in dc_of.items()
+                  if dc and dc != "현황" and _past_sold_only(_res_of.get(k, ""))}
     cur = [k for k, dc in dc_of.items() if dc == "현황" and k in base_of]   # 현황·진행 중은 차익(시세−기준가) 적용
     for i in range(0, len(cur), 150):
         ch = cur[i:i + 150]
@@ -589,7 +594,7 @@ def _area_index(force: bool = False) -> dict:
         except Exception:
             break
         for x in rows:
-            mt = _re.search(r"전용\s*([0-9.]+)", x.get("area_text") or "")
+            mt = _re.search(r"전용\s*([0-9.]+)", (x.get("area_text") or "").replace(",", ""))
             if mt and x.get("item_key"):
                 try:
                     out[x["item_key"]] = float(mt.group(1))
@@ -630,7 +635,7 @@ def _area_col_backfill() -> None:
     try:
         import psycopg
         sql = (r"UPDATE items SET area_excl = "
-               r"substring(area_text from '전용[[:space:]]*([0-9]+\.?[0-9]*)')::double precision "
+               r"substring(replace(area_text,',','') from '전용[[:space:]]*([0-9]+\.?[0-9]*)')::double precision "
                r"WHERE area_excl IS NULL AND area_text ~ '전용[[:space:]]*[0-9]'")
         with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True) as c:
             _cur = c.execute(sql)
@@ -638,6 +643,314 @@ def _area_col_backfill() -> None:
                 print(f"[col_sync] area_excl 백필 {_cur.rowcount}행(신규)", flush=True)
     except Exception as e:
         print(f"[col_sync] area_excl 백필 실패: {str(e)[:80]}", flush=True)
+
+
+# -- 특수조건 표식(tags) 자동 생성 --------------------------------------------
+#  2026-09-30 주인님 지적(I01|2024|11191|1 · 칠곡 관호리 공사중단 아파트):
+#   매각물건명세서·감정평가서 원문에 "대지권이 없는 건물만의 매각임 / 사용승인 받지 못한 미완공 건물임 /
+#   법정지상권 성립 여지 있으나 불분명함" 이 명시돼 있는데 items.tags 가 NULL 이라
+#   화면은 '위험도 안전 · 매수양호' 였다. tags 에는 크롤러가 준 값만 들어오고
+#   원문(detail_text)은 아무도 안 읽어, 진행물건 308건 중 상당수가 NULL.
+#   -> detail_text 원문에서 표식을 뽑아 tags 에 **덧붙인다**(크롤러 값은 지우지 않는다).
+#   20분 루프에 물려 새 물건도 자동 유지(크롤러가 tags 를 덮어써도 다음 회차에 복구).
+#  [주의] 패턴은 반드시 '붙은 문구' 정규식으로. LIKE '%사용승인%받지 못%' 는 문서 앞뒤의
+#   떨어진 두 문구를 엮어 1,034건이 잡혔으나 실측 72건이었다('사용승인일 : 2001년...'이 대부분).
+_SPECIAL_TAG_PATS: list = [
+    # (표식, 붙이는 조건 정규식, 붙이지 않을 예외 정규식)
+    ("대지권미등기", r"(대지권[[:space:]]*(미등기|없)|대지권이[[:space:]]*없|건물만[[:space:]]*(의[[:space:]]*|)매각)",
+     r"대지권미등기이나[[:space:]]*감정에[[:space:]]*포함"),   # 감정가에 대지권 포함 = 인수부담 없음 -> 제외
+    ("건물만매각", r"건물만[[:space:]]*(의[[:space:]]*|)매각", ""),
+    ("미완공", r"(사용승인(을|)[[:space:]]*(받지[[:space:]]*못|미필)|미완공|공사[[:space:]]*(가[[:space:]]*|)중단)", ""),
+    ("법정지상권", r"법정지상권", ""),
+    ("별도등기", r"토지[[:space:]]*별도[[:space:]]*등기", ""),
+]
+
+
+def _special_tag_sync(dry: int = 0) -> int:
+    """detail_text 원문 -> items.tags 특수조건 표식 보강. 기존 표식은 두고 빠진 것만 추가.
+    dry=1 이면 UPDATE 없이 대상 건수만 센다(소량 검증용, CLAUDE.md 0-A)."""
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        return 0
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return 0
+    total = 0
+    try:
+        import psycopg
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True,
+                             options="-c statement_timeout=120000") as c:
+            for tag, rx, exc in _SPECIAL_TAG_PATS:
+                where = ("(is_active OR data_class='현황') AND detail_text ~ %s "
+                         "AND COALESCE(tags,'') NOT LIKE %s")
+                args = [rx, "%" + tag + "%"]
+                if exc:
+                    where += " AND detail_text !~ %s"
+                    args.append(exc)
+                if dry:
+                    _c = c.execute("SELECT count(*) FROM items WHERE " + where, args)
+                    n = _c.fetchone()[0]
+                    print("[special_tag] (\uac80\uc99d) %s: %d\ud589 \ub300\uc0c1" % (tag, n), flush=True)
+                    total += n
+                    continue
+                # tags 가 NULL/'' 이면 '[tag]', 있으면 ']' 앞에 ',tag' 를 끼워 넣어 [a,b,c] 형식 유지
+                sql = ("UPDATE items SET tags = CASE WHEN COALESCE(tags,'')='' THEN %s "
+                       "ELSE regexp_replace(tags, '\\]$', %s) END WHERE " + where)
+                _c = c.execute(sql, ["[" + tag + "]", "," + tag + "]"] + args)
+                if _c.rowcount:
+                    print("[special_tag] %s +%d" % (tag, _c.rowcount), flush=True)
+                    total += _c.rowcount
+    except Exception as e:
+        print("[special_tag] \uc2e4\ud328: " + str(e)[:120], flush=True)
+    return total
+
+
+_RIGHTS_GAP = {"소유권이전", "소유권보존", "가압류", "압류", "가처분", "가등기",
+                "임의경매", "강제경매", "경매개시결정", "환매등기", "예고등기"}
+_RIGHTS_LABEL = {
+    "OWNERSHIP_TRANSFER": "소유권이전", "OWNERSHIP_PRESERVE": "소유권보존",
+    "MORTGAGE": "근저당", "JEONSE": "전세권", "REGISTERED_LEASE": "임차권",
+    "SEIZURE": "압류", "PROVISIONAL_SEIZURE": "가압류", "PROVISIONAL_DISPOSITION": "가처분",
+    "PROVISIONAL_REGISTRATION": "가등기", "AUCTION_START": "임의경매",
+    "SUPERFICIES": "지상권", "SERVITUDE": "지역권", "REDEMPTION": "환매등기",
+}
+
+
+def _fail_count_sync() -> int:
+    """유찰수(items.fail_count)를 기일현황(auction_schedule)의 유찰 행 수로 맞춘다.
+
+    🔴2026-10-07 주인님 지적("유찰수 1회로 했는데 2회가 나온다"). 유찰수 필터는 fail_count 를 보는데,
+      그 값이 크롤러가 넣은 뒤 갱신되지 않아 화면 표시(result)와 어긋났다 — 17,939건 중 8,100건(45.2%).
+      기일현황과 대조하니 fail_count 불일치 37.2%, result 불일치 15.4% 로 **기일현황이 정본**이다.
+      1회성 백필로 두면 새 유찰이 생길 때마다 다시 어긋나므로 주기 스윕으로 둔다.
+    """
+    try:
+        rows = auction_db.query_pg("""
+WITH s AS (SELECT item_key, count(*) FILTER (WHERE result LIKE '%%유찰%%') n
+             FROM auction_schedule GROUP BY 1)
+UPDATE items i SET fail_count = s.n
+  FROM s
+ WHERE s.item_key = i.item_key
+   AND i.data_class = '현황'
+   AND coalesce(i.fail_count, -1) IS DISTINCT FROM s.n
+RETURNING i.item_key""")
+    except Exception as _e:
+        print(f"[fail_sync] 실패: {_e}", flush=True)
+        return 0
+    cnt = len(rows or [])
+    if cnt:
+        print(f"[fail_sync] 유찰수 동기화 {cnt}건 (기일현황 기준)", flush=True)
+    return cnt
+
+
+def _rights_fill_sweep(limit: int = 25) -> None:
+    """등기 PDF(R2) → item_rights 자동 적재(2026-10-06 주인님 지시).
+
+    🔴왜 필요한가: analyze_from_crawler 가 먼저 성공하면 등기 PDF 를 아예 읽지 않고,
+      법원(courtauction) 수집분은 등기 날짜·금액을 주지 않는다. 그래서 현황 23,928건 중
+      5,887건(24.6%)이 등기권리 0행이었고, 선순위 전세권이 화면에서 통째로 빠졌다
+      (예: 2022-121216 전세권 2012-04-16 이운락 4,500만 + 임차권등기 6,500만).
+      1회 백필로 끝내면 새로 수집되는 물건이 그대로 다시 비므로 **주기 스윕**으로 둔다.
+    갑구·을구를 한 줄로 섞어 **접수일자순**으로 저장한다(주인님 지시).
+    """
+    import urllib.parse as _up
+    try:
+        rows = auction_db.query_pg("""
+SELECT i.item_key, m.r2_key FROM items i
+  JOIN LATERAL (SELECT r2_key FROM media m2
+                 WHERE m2.item_key = i.item_key AND m2.kind ILIKE '%%등기%%' AND m2.r2_key IS NOT NULL
+                 ORDER BY CASE WHEN m2.kind LIKE '등기(집합)%%' THEN 0
+                               WHEN m2.kind LIKE '등기(건물)%%' THEN 1 ELSE 2 END, m2.id DESC
+                 LIMIT 1) m ON TRUE
+ WHERE i.data_class = '현황'
+   AND NOT EXISTS (SELECT 1 FROM item_rights r WHERE r.item_key = i.item_key)
+ ORDER BY i.sell_date_d NULLS LAST
+ LIMIT %s""", (limit,))
+    except Exception as _e:
+        print(f"[rights_sweep] 조회 실패: {_e}", flush=True)
+        return
+    if not rows:
+        return
+    from auction_analysis.doc_analysis import _pdf_text
+    from auction_analysis.registry_parser import parse_registry
+    done = rows_in = 0
+    for r in rows:
+        ik, key = r.get("item_key"), r.get("r2_key")
+        if not (ik and key):
+            continue
+        try:
+            text = _pdf_text(f"{auction_db.r2}/{_up.quote(key)}")
+            parsed = parse_registry(text)
+        except Exception:
+            continue
+        if not parsed:
+            continue
+        out = []
+        for x in parsed:
+            _ty = str(getattr(getattr(x, "type", ""), "value", getattr(x, "type", ""))).split(".")[-1]
+            lbl = _RIGHTS_LABEL.get(_ty, _ty)
+            _d = getattr(x, "reg_date", None)
+            out.append((lbl,
+                        (_d.isoformat() if hasattr(_d, "isoformat") else (str(_d) if _d else None)),
+                        (getattr(x, "holder", "") or "")[:120],
+                        int(getattr(x, "amount", 0) or 0) or None,
+                        "갑구" if lbl in _RIGHTS_GAP else "을구"))
+        out.sort(key=lambda z: (z[1] or "9999-99-99"))   # 갑구·을구 섞어 날짜순
+        try:
+            auction_db.query_pg("DELETE FROM item_rights WHERE item_key=%s", (ik,))
+            for i, x in enumerate(out):
+                auction_db.query_pg("INSERT INTO item_rights (item_key,seq,right_type,reg_date,holder,amount,"
+                            "status,is_baseline,gubun) VALUES (%s,%s,%s,%s,%s,%s,NULL,false,%s)",
+                            (ik, i, x[0], x[1], x[2], x[3], x[4]))
+            done += 1
+            rows_in += len(out)
+        except Exception:
+            continue
+    if done:
+        print(f"[rights_sweep] 등기 권리 적재 {done}건(행 {rows_in})", flush=True)
+
+
+def _gm_area_col_sync() -> None:
+    """공매 전용면적·대지권 파생 컬럼 유지(2026-10-06).
+
+    목록이 행별 라이브 호출 없이 면적을 렌더하려면 컬럼에 내려와 있어야 한다. 원천은 gm_enrich 캐시
+    (bld_area 98.3%·land_area 89.2%)이고, 이 스윕은 **DB 안에서만** 돈다(외부 API 호출 0).
+    새로 수집된 물건도 enrich 가 생기는 즉시 다음 주기에 채워진다 — 1회성 백필로 두면 시간이 지나 어긋난다."""
+    try:
+        auction_db.query_pg("""
+WITH e AS (
+  SELECT split_part(replace(cache_key,'gm_enrich:',''), ':', 1) AS mng,
+         max(NULLIF(data->>'bld_area','')::double precision)  AS b,
+         max(NULLIF(data->>'land_area','')::double precision) AS l
+    FROM api_cache WHERE cache_key LIKE 'gm_enrich:%%' GROUP BY 1
+)
+UPDATE gongmae_items g
+   SET bld_area = COALESCE(e.b, g.bld_area), land_area = COALESCE(e.l, g.land_area)
+  FROM e
+ WHERE g.manage_no = e.mng
+   AND (g.bld_area IS NULL OR g.land_area IS NULL)
+   AND (e.b IS NOT NULL OR e.l IS NOT NULL)""")
+    except Exception as _e:
+        print(f"[gm_area_sync] skip: {_e}", flush=True)
+
+
+def _thumb_col_sync() -> int:
+    """썸네일 없는 물건에 R2 사진 첫 장을 채운다.
+
+    🔴2026-10-01 주인님 지적(I01|2025|9739|5 · 칠곡 삼주강변타운): 목록에 사진이 안 뜨고 빈 아이콘이었다.
+      사진은 31장 수집돼 있는데 `items.thumb_url` 이 NULL 이었다. thumb_url 은 스피드옥션 목록의
+      외부 이미지 주소라, 법원 수집분처럼 그 경로로 안 들어온 물건은 비어 있다.
+      → R2 에 photo 가 있으면 그 첫 장(seq 최소)을 썸네일로 쓴다. 20분 루프에 걸어 새 물건도 자동 유지.
+    실측(2026-10-01): 진행물건 26,222건 중 썸네일 없음 226건, 그중 **사진이 있는데 없는 것은 2건**.
+      나머지 224건은 사진 자체가 없어 이 백필 대상이 아니다."""
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        return 0
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    base = (auction_db.r2 or "").rstrip("/")
+    if not dburl or not base:
+        return 0
+    try:
+        import psycopg
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True,
+                             options="-c statement_timeout=60000") as c:
+            #  🔴media 는 113만행이라 DISTINCT ON 전체 스캔이 60초를 넘겨 매번 timeout 이었다(2026-10-02).
+            #   썸네일 없는 물건(실측 226건)을 먼저 뽑고, 그 키로만 사진을 찾는다.
+            need = [r[0] for r in c.execute(
+                "SELECT item_key FROM items WHERE (is_active OR data_class='현황') "
+                "  AND (thumb_url IS NULL OR thumb_url='') LIMIT 2000").fetchall()]
+            if not need:
+                return 0
+            cur = c.execute(
+                "UPDATE items i SET thumb_url = %s || '/' || m.r2_key "
+                "FROM (SELECT DISTINCT ON (item_key) item_key, r2_key FROM media "
+                "      WHERE item_key = ANY(%s) AND kind='photo' AND r2_key IS NOT NULL "
+                "      ORDER BY item_key, seq) m "
+                "WHERE m.item_key = i.item_key "
+                "  AND (i.thumb_url IS NULL OR i.thumb_url='')", (base, need))
+            if cur.rowcount:
+                print("[col_sync] 썸네일 %d행" % cur.rowcount, flush=True)
+            return cur.rowcount
+    except Exception as e:
+        print("[col_sync] 썸네일 실패: " + str(e)[:90], flush=True)
+        return 0
+
+
+def _area_note_sync() -> int:
+    """일괄매각 합계면적 주석(items.area_note)을 채운다 — 목록이 읽기만 하도록.
+
+    🔴2026-09-30 주인님 지적(I01|2024|11191|1 · 칠곡 관호리): 주소는 '102동 101호' 한 호실인데
+      면적은 5,991.00㎡ 로 떴다. 원문 표제부를 보면 한 호실 59.91㎡ · 100개 호실 일괄매각이고
+      5,991.00 은 그 합계였다(감정가 18.45억 ÷ 100호 = 호당 1,845만원으로 검산).
+      합계를 한 호실 면적인 양 보여주면 평단가·수익률 판단이 통째로 틀어진다.
+    목록은 수천 건이라 매번 원문을 파싱할 수 없어 컬럼으로 고정한다(배지·필터 컬럼화와 같은 방식).
+    판정은 **표제부 면적들의 합이 building_area 와 1% 안에서 맞을 때만** — 진행물건 전수에서 9건."""
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        return 0
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return 0
+    try:
+        import psycopg
+        from collections import Counter as _C
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True,
+                             options="-c statement_timeout=120000") as c:
+            rows = c.execute(
+                "SELECT item_key, building_area, detail_text FROM items "
+                " WHERE (is_active OR data_class='현황') AND area_note IS NULL "
+                "   AND building_area ~ '[0-9],[0-9]{3}' AND detail_text IS NOT NULL").fetchall()
+            hits = []
+            for k, ba, dt in rows:
+                m = re.match(r"([\d,]+(?:\.\d+)?)", (ba or "").replace(" ", ""))
+                if not m:
+                    continue
+                total = float(m.group(1).replace(",", ""))
+                areas = [float(x) for x in _RX_BULK_AREA.findall(dt or "")]
+                if len(areas) < 2 or total <= 0 or abs(sum(areas) - total) / total > 0.01:
+                    continue
+                unit, cnt = _C(areas).most_common(1)[0]
+                n = len(areas)
+                hits.append(((f"{n}개 호실 일괄매각 · 호당 {unit:g}㎡ (합계 {total:,.2f}㎡)" if cnt == n
+                              else f"{n}개 호실 일괄매각 · 대표 {unit:g}㎡ ×{cnt}호 (합계 {total:,.2f}㎡)"), k))
+            if hits:
+                c.cursor().executemany("UPDATE items SET area_note=%s WHERE item_key=%s", hits)
+                print(f"[col_sync] 일괄매각 면적주석 {len(hits)}건", flush=True)
+            return len(hits)
+    except Exception as e:
+        print(f"[col_sync] 면적주석 실패: {str(e)[:90]}", flush=True)
+        return 0
+
+
+def _risk_grade_sweep() -> int:
+    """위험 특수물건 태그가 붙었는데 '매수양호'인 물건을 '매수검토'로 올린다.
+
+    🔴2026-10-01 주인님 지적: 대지권미등기·미완공·법정지상권 태그를 채웠는데도 8건이 매수양호였다.
+      매수판정 버킷(_grade_buckets)이 **주거용 + data_class='현황'** 만 보기 때문이다
+      (실측: 상가 2건 · 주거용이지만 '백데이터' 6건이 버킷 대상 밖이라 영원히 안 고쳐짐).
+      버킷 범위 자체를 넓히면 계산량이 크게 늘고 영향이 넓어 손대지 않는다.
+      → 대신 **태그 기준 보정만** 따로 돌린다. 단조 상향(매수양호 → 매수검토)이라 안전하고,
+        확약(인수조건변경·대항력 포기)이 있으면 제외한다 — 버킷의 _RISK_TAGS 규칙과 같은 기준."""
+    if os.environ.get("CLOUD_READER", "0") in ("1", "true", "True"):
+        return 0
+    dburl = os.environ.get("SUPABASE_DB_URL")
+    if not dburl:
+        return 0
+    try:
+        import psycopg
+        like = " OR ".join(["tags LIKE %s"] * len(_RISK_TAG_NAMES))
+        args = ["%" + t + "%" for t in _RISK_TAG_NAMES]
+        with psycopg.connect(dburl, prepare_threshold=None, connect_timeout=15, autocommit=True,
+                             options="-c statement_timeout=60000") as c:
+            cur = c.execute(
+                "UPDATE items SET buy_grade='매수검토' "
+                " WHERE (is_active OR data_class='현황') AND buy_grade='매수양호' "
+                f"   AND ({like}) "
+                "   AND COALESCE(agency_takeover,false)=false "
+                "   AND COALESCE(tags,'') NOT LIKE %s", args + ["%인수조건변경%"])
+            if cur.rowcount:
+                print(f"[col_sync] 위험태그 매수양호→매수검토 {cur.rowcount}건", flush=True)
+            return cur.rowcount
+    except Exception as e:
+        print(f"[col_sync] 위험태그 보정 실패: {str(e)[:90]}", flush=True)
+        return 0
 
 
 _items_backfill_lock = threading.RLock()   # items UPDATE 백필 계열 공용(20분 루프 ↔ brief 재계산 동기) — 교착 방지
@@ -869,7 +1182,7 @@ def _invest_index(force: bool = False) -> dict:
             k = x.get("item_key")
             if not k:
                 continue
-            mt = _re.search(r"(?:전용|건물)\s*([0-9.]+)", x.get("area_text") or "")
+            mt = _re.search(r"(?:전용|건물)\s*([0-9.]+)", (x.get("area_text") or "").replace(",", ""))
             try:
                 excl = float(mt.group(1)) if mt else 0.0
             except ValueError:
@@ -1408,16 +1721,32 @@ def _compete_warm() -> None:
         pass
 
 
+#  🔴2026-10-07 주인님 승인: 유형 필터의 '과거 물건'은 **매각사례**만 의미가 있다.
+#   기각·취하·각하·정지·중지는 경매가 무산된 것이고, 변경·연기는 아직 결과가 아니다(주인님 지시로 함께 제외).
+#   실측: over85 과거 9,532건 중 매각완료 7,200 · 무산 1,911 · 변경/연기 298.
+_PAST_DEAD_RE = r"(기각|취하|각하|정지|중지|변경|연기)"
+
+
+def _past_sold_only(result: str) -> bool:
+    """과거 물건을 유형 필터에 넣을지 — 매각이 성사된 것만 True."""
+    import re as _re
+    r = result or ""
+    return bool(_re.search(r"(매각|잔금납부|배당종결)", r)) and not _re.search(_PAST_DEAD_RE, r)
+
+
 _OVER85_SQL = """
 SELECT item_key FROM items
  WHERE usage_name ILIKE '%%아파트%%'
    AND COALESCE(
-         substring(building_area from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
-         substring(building_area from '([0-9]+(?:[.][0-9]+)?)'),
-         substring(area_text     from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
-         substring(area_text     from '([0-9]+(?:[.][0-9]+)?)'))::numeric > 85
-   AND (data_class <> '현황'                       -- 과거(매각완료)는 차익 조건 미적용(속성만)
-        OR (est_price IS NOT NULL AND est_price - CASE
+         substring(replace(building_area,',','') from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
+         substring(replace(building_area,',','') from '([0-9]+(?:[.][0-9]+)?)'),
+         substring(replace(area_text,',','') from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
+         substring(replace(area_text,',','') from '([0-9]+(?:[.][0-9]+)?)'))::numeric > 85
+   AND (                                          -- 🔴2026-10-07: 과거는 **매각완료만**(무산·변경·연기 제외)
+        (data_class <> '현황'
+         AND result ~ '(매각|잔금납부|배당종결)'
+         AND result !~ '(기각|취하|각하|정지|중지|변경|연기)')
+        OR (data_class = '현황' AND est_price IS NOT NULL AND est_price - CASE
               WHEN result ~ '(매각|잔금납부|배당종결)' AND result !~ '재매각' THEN COALESCE(sale_price, min_price)
               WHEN result ~ '(재매각|재진행)' AND sale_price IS NOT NULL THEN sale_price
               ELSE min_price END >= %s))"""
@@ -1620,18 +1949,19 @@ def _apt_senior_lease_keys() -> set:
     #  필터컬럼이 보호 장치로 옛 값에 멈춰 새 물건이 안 들어감). 조회 실패 시 None(호출측이 기존 값 유지).
     # 1)+2) 아파트(현황+과거) 임차인 중 대항력O + 전입O + 확정O + 배당요구일 없음 → item_key별 최대 보증금(인수 리스크 큰 값)
     rows = auction_db.query_pg(
-        "SELECT t.item_key, t.deposit, i.data_class FROM item_tenants t JOIN items i ON i.item_key=t.item_key "
+        "SELECT t.item_key, t.deposit, i.data_class, i.result FROM item_tenants t JOIN items i ON i.item_key=t.item_key "
         "WHERE i.usage_name ILIKE %s AND t.has_opposing_power AND t.move_in_date IS NOT NULL "
         "AND t.fixed_date IS NOT NULL AND t.dividend_date IS NULL", ("%아파트%",))
     if rows is None:
         print("[col_sync] ⚠ 선순위임차권 계산 조회 실패 — 기존 값 유지", flush=True)
         return None
-    cand: dict = {}; dc_of: dict = {}
+    cand: dict = {}; dc_of: dict = {}; res_of: dict = {}
     for x in rows:
         k = x.get("item_key")
         if not k:
             continue
         dc_of[k] = x.get("data_class")
+        res_of[k] = x.get("result") or ""
         dep = _to_int(x.get("deposit"))
         if dep:
             cand[k] = max(cand.get(k, 0), dep)
@@ -1660,7 +1990,10 @@ def _apt_senior_lease_keys() -> set:
     # 3) 시세(est) − 보증금 ≥ 3,000만원 (현황만; 과거 매각완료는 차익 미적용=속성만)
     keys = list(cand.keys())
     match: set = set()
-    match.update(k for k in keys if dc_of.get(k) and dc_of.get(k) != "현황")   # 과거(매각완료)는 차익 미적용
+    #  🔴2026-10-07 주인님 승인: 과거는 **매각완료만**(기각·취하·각하·정지·중지·변경·연기 제외).
+    #    종전엔 과거를 전부 넣어 무산 물건이 섞였다(선순위임차권 82건=26.5% 실측).
+    match.update(k for k in keys
+                 if dc_of.get(k) and dc_of.get(k) != "현황" and _past_sold_only(res_of.get(k, "")))
     cur = [k for k in keys if dc_of.get(k) == "현황"]
     for i in range(0, len(cur), 150):
         ch = cur[i:i + 150]
@@ -2009,6 +2342,17 @@ def _sync_buy_grade(buckets: dict) -> None:
     print(f"[buy_grade] 컬럼 동기화 {ok}/{len(rows)}건(변경분)", flush=True)
 
 
+_GRADE_RANK = {"매수금지": 3, "매수검토": 2, "매수양호": 1}
+
+
+def _worse_grade(a, b):
+    """두 판정 중 더 위험한 쪽. 한쪽만 있으면 그것. 안전한 쪽으로 틀리지 않게 한다."""
+    ra, rb = _GRADE_RANK.get(a or "", 0), _GRADE_RANK.get(b or "", 0)
+    if not ra and not rb:
+        return a or b
+    return a if ra >= rb else b
+
+
 def _grade_buckets(force: bool = False) -> dict:
     """전 물건 → 매수판정 집합 {매수양호/매수검토/매수금지}.
     요청 경로는 항상 캐시 즉시 반환(재계산 안 함, ~16초 stall 방지). 재계산은 워밍 스레드(force=True)만 수행."""
@@ -2056,7 +2400,7 @@ def _grade_buckets(force: bool = False) -> dict:
         # 🔴크롤러 미분석이라도 명세서를 판독한 법원 수집분(stmt: available)은 명세서 기준 분석이 있으므로 포함(2026-09-22).
         #  빠져 있으면 상세의 '단조 상향'만 타서, 확약서로 풀린 물건이 목록에서 매수금지로 굳었다(실측 위험 221 vs 목록 금지 343).
         #  (EXISTS 한 쿼리는 api_cache 전체 스캔으로 2분 초과 → 두 번 나눠 조회)
-        res_rows = db.query_pg("SELECT item_key, usage_name, address, tags FROM items "
+        res_rows = db.query_pg("SELECT item_key, usage_name, address, tags, est_price, share_sale FROM items "
                                "WHERE data_class='현황' AND search_group='주거용' AND analyzed_at IS NOT NULL")
         _sk = db.query_pg("SELECT substr(cache_key, 6) AS k FROM api_cache WHERE cache_key LIKE 'stmt:%%' "
                           "AND data->>'available' = 'true'") if res_rows is not None else None
@@ -2064,7 +2408,7 @@ def _grade_buckets(force: bool = False) -> dict:
             _have = {x["item_key"] for x in res_rows}
             _extra = [x["k"] for x in _sk if x["k"] not in _have]
             for _i in range(0, len(_extra), 2000):
-                _er = db.query_pg("SELECT item_key, usage_name, address, tags FROM items WHERE item_key = ANY(%s) "
+                _er = db.query_pg("SELECT item_key, usage_name, address, tags, share_sale FROM items WHERE item_key = ANY(%s) "
                                   "AND data_class='현황' AND search_group='주거용'", (_extra[_i:_i + 2000],))
                 if _er is None:
                     _sk = None
@@ -2078,7 +2422,9 @@ def _grade_buckets(force: bool = False) -> dict:
         return _abort("res(주거용 현황) 조회 실패")
     res = {x["item_key"] for x in res_rows}
     res_info = {x["item_key"]: (x.get("usage_name"), x.get("address")) for x in res_rows}
-    tags_of = {x["item_key"]: (x.get("tags") or "") for x in res_rows}   # 유치권 등 특수물건 태그(매수판정 반영용)
+    tags_of = {x["item_key"]: (x.get("tags") or "") for x in res_rows}
+    share_of = {x["item_key"] for x in res_rows if x.get("share_sale")}   # 지분매각(2026-10-06)
+    est_of = {x["item_key"]: x.get("est_price") for x in res_rows}   # 추정시세(원) — 임차인 인수 판정에 쓴다   # 유치권 등 특수물건 태그(매수판정 반영용)
     print(f"[buy_grade] res {len(res)}건 ({_t.time()-_rb0:.0f}s)", flush=True)
     # 승강기·위반(brief 캐시) — 보조데이터(미상 허용)라 실패해도 abort 안 함.
     elev_map: dict = {}
@@ -2099,7 +2445,7 @@ def _grade_buckets(force: bool = False) -> dict:
     _trows = None
     for _ in range(4):
         _trows = db.query_pg("SELECT item_key, has_opposing_power, assume_amount, status, "
-                             "move_in_date, fixed_date, dividend_date FROM item_tenants")
+                             "move_in_date, fixed_date, dividend_date, deposit FROM item_tenants")
         if _trows is not None:
             break
         _t.sleep(1.0)
@@ -2120,6 +2466,44 @@ def _grade_buckets(force: bool = False) -> dict:
     if _arows is None:
         return _abort("item_rights(인수) 조회 실패")
     assume_right = {x["item_key"] for x in _arows}
+    #  🔴2026-09-28 주인님 지적(C01|2025|513471|1). 위 assume_right 는 **등기 권리**(전세권·가등기)만 본다.
+    #   임차인 보증금 인수는 아래 tmap 루프에서 보지만, 그 루프는 analysis 캐시가 있으면 `continue` 로
+    #   건너뛴다(실측 5,622건). 그래서 '대항력 임차인이 보증금을 인수'하는 물건이 캐시가 '안전'이면
+    #   매수양호로 떴다 — 실측 A03|2026|50490|1 은 인수액 1억 8,150만원이 DB 에 있는데도 매수양호였다.
+    #   → 캐시 경로든 아니든 모든 물건이 지나가는 자리(아래 인수권리 보정)에서 함께 쓰도록 집합을 만든다.
+    #   금액 기준: 인수액이 없으면 보증금을 쓴다('인수'라고 적혀 있는데 금액을 모른다고 안전으로 치지 않는다).
+    #  🔴주인님 지시(2026-09-30): 인수를 성격으로 가른다.
+    #   ① 전액 인수 = 대항력 + 배당요구 없음 → 배당을 못 받으니 보증금 전액을 매수인이 부담. 시세와 무관하게 매수금지.
+    #   ② 미배당금 인수 = 배당요구 있음 → 배당받고 남은 잔액만 부담. 금액이 배당 결과로 정해지므로
+    #      시세에서 보증금을 뺀 여유로 판단한다:
+    #         차액(시세−보증금) ≥ 1,000만원 → 매수검토   "1천만원 이상 남아야 검토"
+    #         차액 < 1,000만원              → 매수금지   (0원·마이너스 = 보증금이 시세와 같거나 큼)
+    #         추정시세 없음                  → 매수검토   (차액을 못 재므로 '확인 필요')
+    #   예전엔 ①②를 구분하지 않고 보증금 전액을 인수액으로 쳐서 둘 다 매수금지였다 — 미배당금 쪽이 과대평가였다
+    #   (실측 2026-09-29: 매수양호로 남아 있던 29건 중 21건이 미배당금, 7건이 전액).
+    _ASSUME_MARGIN = 10_000_000        # 매수검토로 보려면 시세에서 보증금을 뺀 여유가 이만큼은 있어야 한다
+    tenant_assume = set()              # → 매수금지
+    tenant_assume_review = set()       # → 매수검토
+    for _k, _ts in tmap.items():       # ⛔_t 금지 — _t 는 상단 import time as _t(시간모듈)다. 덮으면 _t.time() 크래시.
+        _ins = [x for x in _ts if "인수" in (x.get("status") or "")]
+        if not _ins:
+            continue
+        if any(x.get("has_opposing_power") and not x.get("dividend_date") for x in _ins):
+            tenant_assume.add(_k)                  # ① 전액 인수(대항력+배당요구X) → 시세와 무관하게 매수금지
+            continue
+        # ② 미배당금 인수 — 보증금은 **그 사건에 나와 있는 금액**을 쓴다(주인님 지시 2026-09-30).
+        #    '인수' 표기된 임차인만 보면, 같은 사건에 보증금이 적힌 다른 임차인이 있는데도 '금액 미상'이 됐다
+        #    (실측 87건). 사건에 금액이 나와 있으면 그것으로 차액을 재는 게 맞다.
+        _dep_case = max([(x.get("assume_amount") or 0) or (x.get("deposit") or 0) for x in _ts] or [0])
+        _est = est_of.get(_k) or 0
+        if not _est or not _dep_case:
+            tenant_assume_review.add(_k)           #    시세나 보증금을 전혀 모르면 '확인 필요'
+        elif (_est - _dep_case) < _ASSUME_MARGIN:
+            tenant_assume.add(_k)                  #    여유가 1천만원 미만 → 매수금지
+        else:
+            tenant_assume_review.add(_k)           #    여유가 1천만원 이상 → 매수검토
+    tenant_assume_review -= tenant_assume          # 같은 물건에 둘 다면 위험한 쪽(금지)이 이긴다
+    print(f"[buy_grade] 임차인 인수 → 금지 {len(tenant_assume)}건 · 검토 {len(tenant_assume_review)}건", flush=True)
     # 인수 면제(waiver) — detail_text LIKE 전수스캔(55s)이 부하에서 2분 초과 실패하던 것을, res item_key를 5천씩 배치로
     #  나눠 각 배치만 LIKE(각 <<2분·재시도). 6h 캐시(위 _waiver_cache): 신선하면 스캔 생략. 재스캔 실패라도 옛 캐시 있으면
     #  재사용(비치명적). 캐시 아예 없을 때만 최종 실패=abort.
@@ -2164,8 +2548,13 @@ def _grade_buckets(force: bool = False) -> dict:
     #  Supabase 조회 실패 시에만 옛 방식(로컬 우선)으로 폴백.
     _an_cache: dict = {}
     _ak = list(res)
-    _sup = db.query_pg("SELECT cache_key, data->>'risk_level' AS risk FROM api_cache WHERE cache_key = ANY(%s)",
-                       (["analysis:" + k for k in _ak],))
+    #  🔴2026-10-06: **스키마 버전(_sv)이 맞는 캐시만** 믿는다.
+    #   종전엔 _sv 를 보지 않아, 권리분석 로직을 고쳐 캐시를 무효화해도 **옛 risk_level('안전')을 그대로 읽었다**.
+    #   그 탓에 임차인 본인 전세권 오판을 고친 뒤에도 목록 배지가 '매수양호'로 남아 있었다(실측 69건).
+    #   _sv 가 다르면 '캐시없음'으로 두어 기존 버킷을 유지하고, 예열이 다시 계산해 주면 다음 주기에 반영된다.
+    _sup = db.query_pg("SELECT cache_key, data->>'risk_level' AS risk FROM api_cache "
+                       "WHERE cache_key = ANY(%s) AND data->>'_sv' = %s",
+                       (["analysis:" + k for k in _ak], _ANALYSIS_SV))
     if _sup is not None:
         for _r in _sup:
             _an_cache[_r["cache_key"]] = {"risk_level": _r["risk"]}
@@ -2197,22 +2586,35 @@ def _grade_buckets(force: bool = False) -> dict:
         else:
             _an_norisk += 1      # 캐시는 있는데 risk_level이 없거나 매핑 밖
         assume, has_opp, danger = 0, False, False
+        unknown_assume = False                 # '인수'인데 금액을 모르는 임차인이 있는가
         waived = k in waiver
         for t in tmap.get(k, []):
             opp = t.get("has_opposing_power")
-            # ★전액 인수 위험: 대항력 + 전입O + 확정X + 배당X(말소기준 없어 전액 인수). 확약(인수조건변경)은
-            #  보증기관 승계분 미배당만 면제 → '별도 대항력 임차인의 전액 인수'(danger)는 확약으로도 안 풀림 → 항상 매수금지.
-            if opp and t.get("move_in_date") and not t.get("fixed_date") and not t.get("dividend_date"):
+            # ★전액 인수 위험: 대항력 + 전입O + 배당요구X → 보증금 전액을 매수인이 인수.
+            #  🔴2026-09-28 주인님 지적(C01|2025|513471|1 한유정)으로 '확정일 없음' 조건을 뺐다.
+            #   확정일은 배당순위를 정하는 것이고, **배당요구를 안 하면 배당 자체를 못 받는다** —
+            #   확정일이 있어도 대항력+배당요구X면 전액 인수다. 예전 조건(not fixed_date)은 법리와 어긋나
+            #   실측 888명(대항력+배당요구X 2,115명 중)을 놓쳤다. 그 물건 중 38건이 '매수양호'로 떠 있었다.
+            #  확약(인수조건변경)은 보증기관 승계분 미배당만 면제 → danger 는 확약으로도 안 풀린다.
+            if opp and t.get("move_in_date") and not t.get("dividend_date"):
                 danger = True
             if waived:
                 continue                       # 확약: 미배당 인수(assume)·대항력(has_opp)은 면제 — 단 danger는 위에서 이미 반영
-            if "인수" in (t.get("status") or "") and (t.get("assume_amount") or 0):
-                assume += t["assume_amount"]
+            # 🔴2026-09-28: 예전엔 assume_amount 가 없으면 '인수'라고 적혀 있어도 0으로 쳐서 매수양호가 됐다.
+            #   실측 — '인수' 표기 임차인 10,120명 중 인수액이 있는 건 2,101명(20.8%)뿐이고,
+            #   나머지 8,019명(79.2%)이 위험 없음으로 처리됐다(주인님 물건 포함: 보증금 1.3억이 DB에 있는데도).
+            #   → 인수액이 없으면 보증금을 쓴다. 둘 다 없으면 '금액 미상'이라 매수검토(안전한 쪽).
+            if "인수" in (t.get("status") or ""):
+                _amt = t.get("assume_amount") or t.get("deposit") or 0
+                if _amt:
+                    assume += _amt
+                else:
+                    unknown_assume = True
             if opp:
                 has_opp = True
         if assume > 0 or k in assume_right or danger:
             out["매수금지"].add(k)
-        elif has_opp:
+        elif has_opp or unknown_assume:        # 금액 미상 인수도 '확인 필요' → 매수양호로 두지 않는다
             out["매수검토"].add(k)
         else:
             out["매수양호"].add(k)
@@ -2258,7 +2660,10 @@ def _grade_buckets(force: bool = False) -> dict:
     # ── 위험 특수물건(유치권·분묘기지권·법정지상권·대항력있는임차인) → 매수양호만 매수검토로 상향(확인 필요, 주인님 지시). 금지·검토는 유지 ──
     #  이 권리들은 등기가 아니라 사실상 권리(점유·관습법)라 analysis risk_level(말소기준 기반)에 안 잡혀 '안전→매수양호'로 오분류되던 것 보정.
     #  ★단 대항력있는임차인이 인수조건변경(HF/HUG/SGI = 대항력 포기)이면 인수부담 해소 → 매수양호 유지(주인님 지시).
-    _RISK_TAGS = ("유치권", "분묘기지권", "법정지상권", "대항력있는임차인")
+    #  2026-09-30 주인님 지적: 대지권이 없거나 사용승인을 못 받은 미완공 건물은
+    #   등기부에 안 나타나 말소기준 분석에 잡히지 않았다(칠곡 관호리 100호 일괄매각 건 = 매수양호).
+    _RISK_TAGS = ("유치권", "분묘기지권", "법정지상권", "대항력있는임차인",
+                  "대지권미등기", "건물만매각", "미완공")
     _yc_moved = 0
     for k in list(out["매수양호"]):
         _tg = tags_of.get(k, "")   # 🔴_t 아님! _t는 상단 import time as _t(시간모듈). 여기서 덮으면 아래 _t.time() 크래시
@@ -2272,6 +2677,20 @@ def _grade_buckets(force: bool = False) -> dict:
     if _yc_moved:
         print(f"[buy_grade] 위험특수물건(유치권·분묘·법정지상권·대항력임차인) 매수검토 상향 {_yc_moved}건", flush=True)
 
+    # ── 🔴지분매각 → 매수양호만 매수검토로 상향(2026-10-06 주인님 지적) ──
+    #  지분은 등기 권리가 깨끗해 말소기준 분석(risk_level)에 '위험'으로 잡히지 않는다. 그래서
+    #  실측 404건(현황) 중 172건(42.6%)이 매수양호로 떴다(예: 2025-9271 영천 완산청구하이츠,
+    #  지분율 10.5%·지분면적 6.31㎡). 그러나 공유자 우선매수권·공유물분할 소송·담보대출 난항 때문에
+    #  일반 매수자가 그대로 들어갈 물건이 아니다 → 유치권·위반건축물과 같은 틀로 '확인 필요' 단계로 올린다.
+    _sh_moved = 0
+    for k in list(out["매수양호"]):
+        if k in share_of:
+            out["매수양호"].discard(k)
+            out["매수검토"].add(k)
+            _sh_moved += 1
+    if _sh_moved:
+        print(f"[buy_grade] 지분매각 매수양호→매수검토 상향 {_sh_moved}건", flush=True)
+
     # ── 🔴인수권리(선순위전세권·가등기 등 status='인수') 보유 → 매수양호를 매수금지로(상세 위험과 일치·stale 로컬캐시 방어) ──
     #  워머가 stale 로컬 analysis 캐시('안전')를 믿어 인수권리 물건을 매수양호로 오판하던 것 방어. 상세(analyze_from_crawler)는
     #  '인수' status 권리(전세권/가등기)가 있으면 risk=위험 — waiver(확약)는 임차인 보증금 면제일 뿐 '권리' 인수는 안 지우므로
@@ -2284,6 +2703,20 @@ def _grade_buckets(force: bool = False) -> dict:
             _ar_moved += 1
     if _ar_moved:
         print(f"[buy_grade] 인수권리 보유 매수양호→매수금지 {_ar_moved}건", flush=True)
+
+    # ── 🔴임차인 보증금 인수 보유 → 매수양호를 매수금지로(주인님 지적 2026-09-28) ──
+    #  확약(인수조건변경·말소동의)은 보증금 인수를 면제하므로 제외한다 — 위 waiver 와 같은 기준.
+    #  금액 미상('인수'인데 인수액·보증금 둘 다 없음)은 '확인 필요'라 매수검토로만 올린다(금지까지는 안 함).
+    _ta_moved = _tu_moved = 0
+    for k in list(out["매수양호"]):
+        if k in waiver:
+            continue
+        if k in tenant_assume:
+            out["매수양호"].discard(k); out["매수금지"].add(k); _ta_moved += 1
+        elif k in tenant_assume_review:
+            out["매수양호"].discard(k); out["매수검토"].add(k); _tu_moved += 1
+    if _ta_moved or _tu_moved:
+        print(f"[buy_grade] 임차인 인수 매수양호→매수금지 {_ta_moved}건 · →매수검토 {_tu_moved}건", flush=True)
 
     # ── 차량외 buy_grade — 🔴전용 새 연결(공유 스레드로컬은 앞 analysis(httpx) 단계 동안 idle→pooler가 끊어
     #  다음 psycopg 호출이 무한 hang나던 것 방지). 실패/타임아웃해도 주거용 결과·sync는 그대로 진행(best-effort). ──
@@ -2684,7 +3117,10 @@ def _enrich_list(items: list) -> None:
         elif it.get("est_price"):                 # 컬럼화 폴백 — 로컬캐시 미스(특히 클라우드 CLOUD_READER)면 items.est_price 컬럼으로 즉시 표시(apt_ests fetch 왕복 제거)
             it["est"] = it["est_price"]
             it["est_kind"] = "est"
-        g = grade_rev.get(k) or it.get("buy_grade")   # in-메모리 버킷(로컬) 우선 → 없으면 items.buy_grade 컬럼(클라우드)
+        #  🔴2026-09-28: 예전엔 버킷이 있으면 컬럼을 무시했다. 실측 C01|2025|513471|1 은
+        #   컬럼 buy_grade='매수금지' 인데 버킷이 '매수양호' 라 화면에 매수양호가 떴다. 두 경로가 같은
+        #   컬럼을 각자 쓰는 구조(버킷 sync / 분석 경로)라 어긋날 수 있다 → **위험한 쪽**을 보여준다.
+        g = _worse_grade(grade_rev.get(k), it.get("buy_grade"))
         if g:
             it["grade"] = g
         if it.get("violation") and it.get("grade") == "매수양호":
@@ -3008,6 +3444,49 @@ def auction_regions() -> dict:
     return _regions_cache
 
 
+_RX_BULK_AREA = re.compile(r"(\d+(?:\.\d+)?)\s*\u33A1\s*\(\s*\d+(?:\.\d+)?\s*평\s*\)")
+
+
+def _bulk_area_note(d: dict) -> Optional[str]:
+    """건물면적이 '여러 호실 합계'면 호당 면적으로 풀어 알려준다.
+
+    🔴2026-09-30 주인님 지적(I01|2024|11191|1 · 칠곡 관호리):
+      주소는 '102동 101호' 한 호실인데 건물면적은 5,991.00㎡(1,812.28평)로 떴다.
+      원문 표제부를 보면 한 호실은 59.91㎡ 이고 101호~1010호 **100개 호실 일괄매각**이라
+      5,991.00 은 그 합계였다(감정가 18.45억 ÷ 100호 = 호당 1,845만원으로 검산됨).
+      합계를 한 호실 면적인 양 보여주면 평단가·수익률 판단이 통째로 틀어진다.
+    판정: 표제부 목록 면적들의 합이 building_area 와 1% 안에서 맞을 때만 '합계'로 본다
+      (추정 금지 — 진행물건 전수 검사에서 9건. 나머지 319건은 진짜 단일 대형물건이었다)."""
+    try:
+        ba = (d.get("building_area") or "").replace(" ", "")
+        if "," not in ba:
+            return None                      # 천단위 콤마가 없으면 1,000㎡ 미만 = 합계일 리 없음
+        m = re.match(r"([\d,]+(?:\.\d+)?)", ba)
+        if not m:
+            return None
+        total = float(m.group(1).replace(",", ""))
+        #  detail_text 는 /auction 응답에 안 담겨 온다 → DB에서 직접 읽는다.
+        #   위 콤마 조건을 이미 통과한 물건만 오므로(진행물건 328건) 상세 조회 전체에 부담이 없다.
+        dt = d.get("detail_text")
+        if not dt:
+            _r = auction_db.query_pg("SELECT detail_text FROM items WHERE item_key=%s LIMIT 1",
+                                     (d.get("item_key"),))
+            dt = (_r[0].get("detail_text") if _r else None) or ""
+        areas = [float(x) for x in _RX_BULK_AREA.findall(dt)]
+        if len(areas) < 2 or total <= 0:
+            return None
+        if abs(sum(areas) - total) / total > 0.01:
+            return None
+        from collections import Counter
+        unit, cnt = Counter(areas).most_common(1)[0]
+        n = len(areas)
+        if cnt == n:                          # 전부 같은 면적
+            return f"{n}개 호실 일괄매각 · 호당 {unit:g}㎡ (합계 {total:,.2f}㎡)"
+        return f"{n}개 호실 일괄매각 · 대표 {unit:g}㎡ ×{cnt}호 (합계 {total:,.2f}㎡)"
+    except Exception:
+        return None
+
+
 @app.get("/auction")
 def auction_detail(item_key: str, user: dict = Depends(require_national_user)) -> dict:
     try:
@@ -3025,6 +3504,7 @@ def auction_detail(item_key: str, user: dict = Depends(require_national_user)) -
                 d["usage_disp"] = _b["usage_detail"]
     except Exception:
         pass
+    d["area_note"] = _bulk_area_note(d)   # 일괄매각 합계면적 → '호당 N㎡ × M개 호실'(2026-09-30)
     d["reg"] = _reg_by_addr(d.get("address"))             # 규제 구분(규제·토허/수도권 비규제/비규제)
     if d.get("thumb_url"):                                 # 상세 썸네일·사진 url http→https (앱 cleartext 차단 회피)
         d["thumb_url"] = d["thumb_url"].replace("http://", "https://")
@@ -3032,6 +3512,11 @@ def auction_detail(item_key: str, user: dict = Depends(require_national_user)) -
         if isinstance(_m, dict) and _m.get("url"):
             _m["url"] = _m["url"].replace("http://", "https://")
     return d
+
+
+#  권리분석 캐시 스키마 버전 — 올리면 전량 재계산된다. buy_grade 의 analysis 조회도 이 값만 믿는다.
+#   v5(2026-10-06): 등기부(갑구·을구) 기준 말소기준 + 임차인 본인 명의 전세권 제외.
+_ANALYSIS_SV = "self_jeonse_v5"
 
 
 def _cached_doc(prefix: str, item_key: str, compute, schema_ver: str = "") -> dict:
@@ -3079,13 +3564,59 @@ def case_objects(item_key: str) -> dict:
     return {"objects": objs}
 
 
+_RISK_TAG_NAMES = ("유치권", "분묘기지권", "법정지상권", "대항력있는임차인",
+                   "대지권미등기", "건물만매각", "미완공")
+_RISK_TAG_MSG = {
+    "대지권미등기": "대지권 없음/미등기 — 토지 소유자의 철거·지료 청구 위험, 대지권 취득비용 별도 발생 가능",
+    "건물만매각": "건물만 매각 — 최저매각가격에 토지값이 빠져 있음, 대출·재매각 제한",
+    "미완공": "사용승인 미필·미완공 건물 — 준공까지 추가공사비, 입주 불가, 대출이 사실상 안 됨",
+}
+
+
+def _apply_risk_tags(item_key: str, res: dict) -> dict:
+    """위험 특수물건(items.tags) → AI위험도 '안전'을 '주의'로 + 경고.
+
+    등기에 안 나타나는 사실상 권리라 말소기준 분석으로는 잡을 수 없다.
+    ★analysis 캐시 **밖**에서 돌린다 — 이 판정이 _compute_analysis 안에 있던 탓에,
+     캐시가 이미 있는 물건은 tags 를 새로 채워도 '위험도 안전' 그대로였다
+     (2026-09-30 주인님 지적, 칠곡 관호리 100호 일괄매각 건 실측).
+     tags 는 그때그때 DB에서 읽으므로 캐시 무효화 없이 즉시 반영된다.
+    단 대항력있는임차인 + 인수조건변경(대항력 포기)은 예외(주인님 지시)."""
+    if not isinstance(res, dict):
+        return res
+    try:
+        _itj = auction_db.query_pg("SELECT tags FROM items WHERE item_key=%s LIMIT 1", (item_key,))
+        if _itj is None:   # psycopg 불가 → REST 폴백
+            _it = auction_db._get("items", {"select": "tags", "item_key": "eq." + item_key, "limit": "1"})
+            _itj = _it.json() if _it.status_code in (200, 206) else []
+        _tg = (_itj[0].get("tags") if _itj else "") or ""
+        hit = [rt for rt in _RISK_TAG_NAMES if rt in _tg]
+        if not hit or ("대항력있는임차인" in _tg and "인수조건변경" in _tg):
+            return res
+        res = dict(res)
+        if res.get("risk_level") == "안전":
+            res["risk_level"] = "주의"
+        res["needs_expert_review"] = True
+        msgs = [_RISK_TAG_MSG[h] for h in hit if h in _RISK_TAG_MSG]
+        rest = [h for h in hit if h not in _RISK_TAG_MSG]
+        if rest:
+            msgs.append("·".join(rest) + " — 등기 외 사실상 권리로 인수·명도 부담 가능, 확인 후 판단 필요(매수 검토)")
+        old_w = list(res.get("warnings") or [])
+        res["warnings"] = old_w + [m for m in msgs if m not in old_w]
+    except Exception:
+        pass
+    return res
+
+
 @app.get("/auction/analysis")
 def auction_analysis(item_key: str) -> dict:
     """권리분석 — 전체 계산결과를 api_cache(analysis:)에 캐시. 크롤러 갱신 시 _freshness_loop이 무효화.
     캐시 없을 때만 _compute_analysis(analyze_from_crawler·명세서·items 후처리 5~6쿼리=2~3초) 실행 →
     상세 재진입은 즉시. (전엔 크롤러 분석물건이 캐시를 안 타 상세 클릭마다 2~3초였음)"""
-    return _cached_doc("analysis", item_key, lambda: _compute_analysis(item_key),
-                       schema_ver="rights_date_sorted_v2")   # v2: 접수일자순 정렬 + 소유권 중복 제거 → 캐시 무효화
+    _res = _cached_doc("analysis", item_key, lambda: _compute_analysis(item_key),
+                       schema_ver=_ANALYSIS_SV)   # 🔴v3(2026-10-06): 등기부(갑구·을구) 기준 말소기준·소멸/인수 판정 도입 → 전량 캐시 무효화
+    #  ★캐시 밖 후처리 — tags 변경이 캐시 무효화 없이 즉시 반영된다(2026-09-30).
+    return _apply_risk_tags(item_key, _res)
 
 
 def _compute_analysis(item_key: str) -> dict:
@@ -3160,25 +3691,7 @@ def _compute_analysis(item_key: str) -> dict:
                     "보증금 미상: 대항력 임차인이 있으나 보증금액이 미상 — 실제 보증금 확인 후 인수부담 판단 필요(매수 검토)"]
         except Exception:
             pass
-        # 위험 특수물건(유치권·분묘기지권·법정지상권·대항력있는임차인) → AI위험도 '안전'을 '주의'로 + 경고.
-        #  등기 아닌 사실상 권리라 말소기준 분석에 안 잡힘. 단 대항력있는임차인+인수조건변경(대항력 포기)은 예외(주인님 지시).
-        try:
-            _itj = auction_db.query_pg("SELECT tags FROM items WHERE item_key=%s LIMIT 1", (item_key,))
-            if _itj is None:   # psycopg 불가 → REST 폴백
-                _it = auction_db._get("items", {"select": "tags", "item_key": "eq." + item_key, "limit": "1"})
-                _itj = _it.json() if _it.status_code in (200, 206) else []
-            _tg = (_itj[0].get("tags") if _itj else "") or ""
-            _RISK = ("유치권", "분묘기지권", "법정지상권", "대항력있는임차인")
-            _hit = [rt for rt in _RISK if rt in _tg]
-            if _hit and not ("대항력있는임차인" in _tg and "인수조건변경" in _tg):
-                res = dict(res)
-                if res.get("risk_level") == "안전":
-                    res["risk_level"] = "주의"
-                res["needs_expert_review"] = True
-                res["warnings"] = list(res.get("warnings") or []) + [
-                    "·".join(_hit) + " — 등기 외 사실상 권리로 인수·명도 부담 가능, 확인 후 판단 필요(매수 검토)"]
-        except Exception:
-            pass
+        #  ※ 위험 특수물건(tags) 가산은 _apply_risk_tags() 로 분리 — 캐시 밖에서 매번 적용(2026-09-30).
     # [재발방지] 목록 buy_grade 컬럼을 상세 risk_level과 즉시 정합화 — analysis를 새로 계산한 순간
     #  (상세 진입·워밍) 최종 risk_level 기준으로 buy_grade를 '단조 상향'(현재보다 엄격할 때만) 갱신한다.
     #  기존엔 25분 버킷 재계산까지 컬럼이 stale → 선순위전세권 인수 물건이 상세=위험인데 목록=매수양호로
@@ -3222,11 +3735,198 @@ _DOCVIEW_CSS = """
 """
 
 
+def _spec_text_html(pages, head: str = "") -> str:
+    """매각물건명세서 글자 JSON(좌표 포함) → 원본 배치 그대로의 선명한 텍스트 페이지.
+
+    🔴2026-10-07 주인님 지적("희미해서 안 보인다"). 원본 이미지가 397×561px 라 확대해도 뭉개진다.
+      글자마다 rect(left·bottom·right·top)가 있어 좌표 그대로 다시 그리면 확대해도 선명하다.
+      좌표는 PDF 식(원점 좌하단)이라 CSS top 으로 뒤집는다.
+    """
+    import html as _h
+    import json as _j
+    out = []
+    for page in (pages or []):
+        if isinstance(page, str):          # 페이지마다 JSON 문자열로 감싸여 있다(이중 인코딩)
+            try:
+                page = _j.loads(page)
+            except Exception:
+                continue
+        frags = []
+        maxx = maxy = 0.0
+        for f in (page or []):
+            if not isinstance(f, dict):
+                continue
+            rects = f.get("rect") or []
+            txt = f.get("text") or ""
+            if not rects or not txt.strip():
+                continue
+            try:
+                x0 = min(r["left"] for r in rects); x1 = max(r["right"] for r in rects)
+                y0 = min(r["bottom"] for r in rects); y1 = max(r["top"] for r in rects)
+            except Exception:
+                continue
+            maxx = max(maxx, x1); maxy = max(maxy, y1)
+            frags.append((x0, y0, x1, y1, txt, bool(f.get("isVertical"))))
+        if not frags:
+            continue
+        PW, PH = maxx + 24, maxy + 24
+        body = []
+        for x0, y0, x1, y1, txt, vert in frags:
+            h = max(6.0, y1 - y0)
+            w = max(1.0, x1 - x0)
+            st = (f"left:{x0:.1f}px;top:{PH - y1:.1f}px;width:{w:.1f}px;height:{h:.1f}px;"
+                  f"font-size:{h * 0.86:.1f}px;line-height:{h:.1f}px")
+            if vert:
+                st += ";writing-mode:vertical-rl"
+            body.append(f'<span style="{st}">{_h.escape(txt)}</span>')
+        out.append(f'<div class="pg" style="width:{PW:.0f}px;height:{PH:.0f}px">' + "".join(body) + "</div>")
+    if not out:
+        return ""
+    return f"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>매각물건명세서</title><style>
+ body{{font-family:'Malgun Gothic','맑은 고딕',sans-serif;margin:0;padding:16px;background:#eef0f4;color:#111}}
+ .hd{{max-width:1000px;margin:0 auto 12px;font-size:13px;color:#33415c}}
+ .pg{{position:relative;background:#fff;margin:0 auto 18px;box-shadow:0 2px 10px rgba(0,0,0,.12);
+      border:1px solid #d6dae2;overflow:hidden}}
+ .pg span{{position:absolute;white-space:pre;letter-spacing:-.2px}}
+ .note{{max-width:1000px;margin:10px auto;color:#6b7280;font-size:12px}}
+</style></head><body>{head}{''.join(out)}
+<div class="note">※ 법원 원본의 글자 데이터를 좌표 그대로 다시 그린 화면입니다. 확대해도 선명하고 글자를 복사할 수 있습니다.</div>
+</body></html>"""
+
+
+def _json_doc_html(kind: str, data) -> str:
+    """대법원 원본 JSON(4종)을 사람이 읽을 표로. 옛 HTML 서류와 같은 자리에 보이게 한다(2026-10-07).
+
+    원본 키 이름을 그대로 두면 읽기 어려워, 실측해 확인한 것만 한글 머리말로 바꾼다.
+    모르는 키는 숨기지 않고 원래 이름으로 보여준다 — 자료가 통째로 사라지는 것보다 낫다.
+    """
+    import html as _h
+    SECT = {        # 섹션(표) 제목 — 원본 키를 그대로 보여주지 않는다
+        "dlt_dxdyDtsLst": "기일내역", "gdsDspslDxdyLst": "기일내역",
+        "dlt_rletCsGdsDtsDxdyInf": "관련 기일내역",
+        "dma_csBasInf": "사건 기본내역", "csBaseInfo": "사건 기본내역",
+        "dlt_dstrtDemnLstprdDts": "배당요구종기 내역", "dstrtDemnInfo": "배당요구종기",
+        "dlt_rletReltCsLst": "관련사건", "dlt_dpcnMrgTrnscsCsRlet": "병합·이송사건",
+        "dlt_mrgDpcnSbxLst": "병합사건", "dlt_csApalRaplDts": "항고·재항고",
+        "dlt_dspslGdsDspslObjctLst": "매각 목적물", "gdsDspslObjctLst": "매각 목적물",
+        "dlt_rletCsDspslObjctLst": "관련사건 목적물",
+        "dlt_rletCsIntrpsLst": "당사자", "dspslGdsDxdyInfo": "매각물건 기일정보",
+        "dlt_dlvrDtsLst": "송달내역", "dlt_ofdocDtsLst": "문건접수내역",
+        "aeeWevlMnpntLst": "감정평가 요항", "dma_result": "상세",
+        "dlt_rletCsSugtExclBldLst": "제시외 건물",
+    }
+    LBL = {         # 표의 칸 이름 — 자주 보는 것만
+        "dxdyTime": "기일", "dxdyYmd": "기일", "dxdyHm": "시각",
+        "auctnDxdyKndNm": "기일종류", "dxdyPlcNm": "장소", "dxdyRslt": "기일결과",
+        "tsLwsDspslPrc": "최저매각가격", "aeeEvlAmt": "감정평가액", "dspslAmt": "매각가",
+        "clmAmt": "청구금액", "dspslGdsSeq": "물건번호", "dspslObjctSeq": "목적물번호",
+        "ofdocRcptYmd": "접수일", "rcptDts": "접수내역", "rcptRslt": "결과",
+        "dlvrbkRegYmd": "송달일", "dlvrDts": "송달내역", "lastDlvrblRchYmd": "최종송달일",
+        "cortOfcNm": "법원", "cortSptNm": "지원", "cortAuctnJdbnNm": "담당계",
+        "csNm": "사건명", "csRcptYmd": "사건접수일", "csCmdcYmd": "개시결정일",
+        "csProgSuspRsn": "정지사유", "dstrtDemnLstprdYmd": "배당요구종기",
+        "dstrtDemnLstprdPbancYmd": "배당요구종기 공고일",
+        "intrpsNm": "당사자", "auctnIntrpsDvsNm": "구분",
+        "reltCsNo": "관련사건번호", "reltCsDvsNm": "관계", "ntdcNoCtt": "내용",
+        "bidBgngYmd": "입찰시작", "bidEndYmd": "입찰종료",
+        "bldNm": "건물명", "bldDtlDts": "건물내역", "rdEubMyun": "소재지",
+        "aeeWevlMnpntCtt": "내용", "auctnLstNm": "목록",
+        "carMdlNm": "차량모델", "carDelvYr": "연식",
+        "rprsLtnoAddr": "지번", "rdnmSdNm": "시도", "rdnmSggNm": "시군구",
+        "rdnmEmdNm": "읍면동", "rdnm": "도로명", "rdnmBldNo": "건물번호",
+        "rdnmRefcAddr": "참고주소", "ultmtNm": "종국구분",
+        "jdbnTelno": "담당계 전화", "execrCsTelno": "집행관실 전화",
+        "userCsNo": "사건번호", "orddcsYmd": "명령일",
+        "fstDspslHm": "매각시각", "prchDposRate": "보증금률(%)",
+        "fstPbancLwsDspslPrc": "최초공고 최저가",
+        "pstgBgngYmd": "게시 시작", "pstgEndYmd": "게시 종료",
+        "objctRletCarUnqNo": "부동산고유번호",
+    }
+    #  내부 코드·플래그는 숨긴다(사람이 보는 값이 아니다). 모르는 키는 남긴다.
+    SKIP = {"ipcheck", "csPicLst", "cortOfcCd", "csNo", "userReltCsNo", "addrTypCd",
+            "_picCount", "slctnrTypCd", "intrpsSeq", "aeeWevlMnpntDtlSeq",
+            "adongSdNm", "adongSggNm", "adongEmdNm", "adongRiNm"}
+
+    def _hide(k: str) -> bool:
+        """사람이 보는 값이 아닌 칸은 뺀다 — 코드값(…Cd)·플래그(…Yn)·일련번호(…Seq)와
+        내부 토큰(…Id·…Param·…Dnum). 실측에서 orvParam 같은 긴 암호화 문자열이 표를 망가뜨렸다."""
+        return ((k in SKIP) or k.endswith("Cd") or k.endswith("Yn") or k.endswith("Seq")
+                or k.endswith("Id") or k.startswith("orvParam") or k.endswith("Dnum")
+                or k in ("userSt", "printCsNo", "realGdsProgStat"))
+
+    def esc(v):
+        return _h.escape(str(v if v is not None else ""))
+
+    def fmt(k: str, v) -> str:
+        """표시값 다듬기. 대법원 원본은 날짜가 전부 'YYYYMMDD'(구분자 없음)라 읽기 어렵다.
+        🔴금액처럼 보이지만 금액이 아닌 것(csNo·…Cd·차량고유번호)은 건드리지 않는다 — 앞의 0 이 의미를 갖는다."""
+        t = str(v if v is not None else "").strip()
+        if k.endswith("Ymd") and len(t) == 8 and t.isdigit():
+            return _h.escape(f"{t[:4]}-{t[4:6]}-{t[6:]}")
+        #  금액 칸만 천단위 구분 — 사건번호·코드는 앞의 0 이 의미를 가지므로 절대 건드리지 않는다.
+        if (k.endswith("Amt") or k.endswith("Prc")) and t.isdigit() and len(t) <= 15:
+            return _h.escape(f"{int(t):,}")
+        return _h.escape(t)
+
+    def table(rows: list) -> str:
+        rows = [r for r in rows if isinstance(r, dict)]
+        if not rows:
+            return '<p class="none">내용 없음</p>'
+        cols = []
+        for r in rows:
+            for k in r:
+                if not _hide(k) and k not in cols:
+                    cols.append(k)
+        #  모든 행이 비어 있는 칸은 뺀다 — 빈 칸만 늘어놓으면 정작 볼 값이 안 보인다.
+        cols = [c for c in cols
+                if any(str(r.get(c) or "").strip() for r in rows)]
+        th = "".join(f"<th>{esc(LBL.get(c, c))}</th>" for c in cols)
+        tr = "".join("<tr>" + "".join(f"<td>{fmt(c, r.get(c))}</td>" for c in cols) + "</tr>" for r in rows)
+        return f'<table><thead><tr>{th}</tr></thead><tbody>{tr}</tbody></table>'
+
+    def block(key, val) -> str:
+        if _hide(key):
+            return ""
+        title = SECT.get(key) or LBL.get(key) or key
+        if isinstance(val, list):
+            if not val:
+                return ""                      # 빈 섹션은 아예 안 보여준다(화면만 어지럽다)
+            return f'<h3>{esc(title)} <span class="cnt">{len(val)}건</span></h3>' + table(val)
+        if isinstance(val, dict):
+            inner = "".join(f'<tr><th>{esc(LBL.get(k, k))}</th><td>{fmt(k, v)}</td></tr>'
+                            for k, v in val.items()
+                            if not _hide(k) and not isinstance(v, (list, dict))
+                            and str(v or "").strip())        # 빈 값 칸은 숨긴다
+            sub = "".join(block(k, v) for k, v in val.items() if isinstance(v, (list, dict)))
+            return (f'<h3>{esc(title)}</h3><table class="kv">{inner}</table>' if inner else "") + sub
+        return ""
+
+    body = "".join(block(k, v) for k, v in (data.items() if isinstance(data, dict) else []))
+    if not body.strip():
+        body = '<p class="none">내용 없음</p>'
+    return f"""<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{_h.escape(kind)}</title><style>
+ body{{font-family:'Malgun Gothic',sans-serif;margin:0;padding:18px;background:#f7f8fa;color:#1c1c1a;font-size:13px}}
+ h2{{margin:0 0 14px;font-size:17px}} h3{{margin:18px 0 7px;font-size:14px;color:#2c5db0}}
+ .cnt{{font-size:12px;color:#6b7280;font-weight:400}}
+ table{{width:100%;border-collapse:collapse;background:#fff;margin-bottom:6px}}
+ th,td{{border:1px solid #e5e7eb;padding:6px 8px;text-align:left;vertical-align:top;word-break:break-all}}
+ thead th{{background:#eef2f7;white-space:nowrap}} table.kv th{{background:#f7f8fa;width:140px;white-space:nowrap}}
+ .none{{color:#6b7280}} .src{{margin-top:16px;color:#9aa0a6;font-size:11px}}
+</style></head><body><h2>{_h.escape(kind)}</h2>{body}
+<div class="src">※ 법원경매 원본 자료입니다.</div></body></html>"""
+
+
 @app.get("/docview")
 def docview(item_key: str, kind: str = "현황조사서") -> HTMLResponse:
     """HTML 서류(부동산표시·사건내역·기일내역·문건접수송달·현황조사서)를 우리 스타일로 입혀 렌더. 원본 /pub/ 깨진 이미지·외부 CSS/JS 제거.
     가공결과(정규식 클린 완료본)를 api_cache(docview:)에 영구 캐시 → 반복 조회는 R2 재fetch+정규식 없이 즉시(캐시문제 해소)."""
-    _dvck = "docview:" + item_key + "|" + kind
+    #  🔴2026-10-07: 렌더 방식을 바꾸면(라벨·숨김·날짜 형식) 옛 캐시가 그대로 나와 수정이 안 보인다.
+    #    버전을 키에 넣어 전량 무효화한다. (v2 = 4종 JSON 표 렌더 + 한글 섹션·코드컬럼 숨김·YYYYMMDD 정규화)
+    _dvck = "docview:v5:" + item_key + "|" + kind
     try:
         _c = auction_db.cache_get_many([_dvck]).get(_dvck)
         if isinstance(_c, dict) and _c.get("html"):
@@ -3234,6 +3934,22 @@ def docview(item_key: str, kind: str = "현황조사서") -> HTMLResponse:
     except Exception:
         pass
     url = auction_db.media_url(item_key, kind)
+    #  🔴2026-10-07: 옛 HTML 이 없는 물건은 같은 이름의 JSON(원본)을 대신 보여준다.
+    #    (09-08 대법원 수집 전환 뒤 새 물건은 HTML 4종이 아예 없다.)
+    if not url and kind in ("사건내역", "기일내역문서", "문건접수송달", "부동산표시"):
+        _jk = {"사건내역": "사건내역_json", "기일내역문서": "기일내역_json",
+               "문건접수송달": "문건접수송달_json", "부동산표시": "부동산표시_json"}[kind]
+        _ju = auction_db.media_url(item_key, _jk)
+        if _ju:
+            try:
+                _html = _json_doc_html(kind, httpx.get(_ju, timeout=40, follow_redirects=True).json())
+                try:
+                    auction_db.cache_save(_dvck, {"html": _html})
+                except Exception:
+                    pass
+                return HTMLResponse(_html)
+            except Exception as _e:
+                return HTMLResponse(f'<div style="padding:30px;font-family:sans-serif">{kind} 표시 실패: {type(_e).__name__}</div>')
     if not url:
         return HTMLResponse(f'<div style="padding:30px;font-family:sans-serif">{kind} 문서가 없습니다.</div>')
     try:
@@ -3355,20 +4071,48 @@ def _save_brief_cache() -> None:
 _rh_cache: dict[str, list] = {}   # 시군구 연립다세대 실거래(12개월) 풀 캐시
 
 
-def _pool_from_db(prefix: str, lawd: str) -> Optional[list]:
-    """시군구 실거래 풀을 DB(api_cache)에서 로딩(7일 이내만 — 실거래 신선도)."""
-    import time as _t
+_POOL_EMPTY_OK = False     # 빈 풀(거래 0건)을 '유효한 캐시'로 볼 것인가 — 아니다(2026-10-05)
+
+
+def _pool_stale_from_db(prefix: str, lawd: str) -> Optional[list]:
+    """🔴만료본이라도 꺼낸다(2026-10-05). 원천(국토부)이 실패했을 때 쓰는 마지막 보루.
+
+    107일 된 실거래 2,307건을 버리고 '거래 0건'을 택하는 것은 어떤 기준으로도 손해다.
+    실측: rhpool 244개의 나이가 0~107일(평균 100.6일)이라 7일 TTL 로는 전부 버려졌고,
+    그 결과 빌라 유사거래가 시군구 단위로 통째 0건이 됐다(홍성군 42/42·용인수지 30/30·마포 14/14)."""
     try:
         d = auction_db.cache_get_many([prefix + lawd]).get(prefix + lawd)
-        if isinstance(d, dict) and d.get("trades") is not None and (_t.time() - d.get("ts", 0) < 7 * 86400):
+        if isinstance(d, dict) and d.get("trades"):
             return d["trades"]
     except Exception:
         pass
     return None
 
 
-def _pool_to_db(prefix: str, lawd: str, trades: list) -> None:
+def _pool_from_db(prefix: str, lawd: str) -> Optional[list]:
+    """시군구 실거래 풀을 DB(api_cache)에서 로딩(7일 이내만 — 실거래 신선도).
+
+    🔴2026-10-05: **거래 0건인 풀은 캐시로 인정하지 않는다.** 조회가 실패한 날 빈 결과가 저장되면
+      그 시군구는 7일 내내 '실거래 없음'이 되고, 그 사이 gm_apt 가 '없음'으로 굳어 영구 고정됐다
+      (실측: aptpool 226개·rhpool 242개가 전부 거래 0건 상태로 만료돼 있었다).
+      0건이면 None 을 돌려 호출측이 **원천을 다시 조회**하게 한다."""
     import time as _t
+    try:
+        d = auction_db.cache_get_many([prefix + lawd]).get(prefix + lawd)
+        if isinstance(d, dict) and d.get("trades") is not None and (_t.time() - d.get("ts", 0) < 7 * 86400):
+            tr = d["trades"]
+            if tr or _POOL_EMPTY_OK:
+                return tr
+    except Exception:
+        pass
+    return None
+
+
+def _pool_to_db(prefix: str, lawd: str, trades: list) -> None:
+    """🔴빈 풀(0건)은 저장하지 않는다 — 조회 실패가 '없음'으로 굳는 것을 막는다(2026-10-05)."""
+    import time as _t
+    if not trades and not _POOL_EMPTY_OK:
+        return
     try:
         auction_db.cache_save(prefix + lawd, {"ts": _t.time(), "trades": trades})
     except Exception:
@@ -3384,14 +4128,23 @@ def _rh_trades(lawd: str) -> list:
     if db is not None:
         _rh_cache[lawd] = db
         return db
+    #  🔴2026-10-05: 원천 실패/부분수집이면 빈 리스트를 돌려주지 않는다.
+    #    종전엔 error 가 있으면 빈 tr 을 그대로 반환했고(캐시는 안 했지만) 호출측이 그걸
+    #    '거래 0건'으로 믿어 gm_nearby·gm_grade 에 0건을 영구 저장했다.
+    #    이제: ①만료본(stale)이라도 쓴다 ②빈 리스트는 메모리 캐시에 담지 않는다.
     try:
         from auction_analysis.molit_source import MolitSource
         res = MolitSource().recent_trades(lawd, months=12) or {}
         tr = res.get("trades") or []
-        if res.get("error"):                  # 할당량/오류 → 캐시 안 함(리셋 후 자동 재조회)
-            return tr
+        bad = bool(res.get("error")) or bool(res.get("incomplete"))
     except Exception:
-        return []
+        tr, bad = [], True
+    if bad or not tr:
+        st = _pool_stale_from_db("rhpool:", lawd)
+        if st:
+            _rh_cache[lawd] = st              # 만료본은 메모리에 올려도 안전(0건이 아니다)
+            return st
+        return tr                             # 만료본도 없다 → 빈 결과를 캐시 없이 반환(다음에 재시도)
     _rh_cache[lawd] = tr
     _pool_to_db("rhpool:", lawd, tr)          # DB 영구 저장(7일 후 자동 갱신)
     return tr
@@ -3401,7 +4154,8 @@ _shrent_cache: dict[str, list] = {}   # 시군구 단독·다가구 전월세(12
 
 
 def _shrent_trades(lawd: str) -> list:
-    """시군구 12개월 단독·다가구 전월세 풀. ①메모리 ②DB(shrentpool:, 7일) ③molit 계산+DB저장."""
+    """시군구 12개월 단독·다가구 전월세 풀. ①메모리 ②DB(shrentpool:, 7일) ③molit 계산+DB저장.
+    🔴2026-10-05: _rh_trades 와 같은 보강 — 원천 실패/부분수집이면 만료본을 쓰고, 빈값은 캐시하지 않는다."""
     if lawd in _shrent_cache:
         return _shrent_cache[lawd]
     db = _pool_from_db("shrentpool:", lawd)
@@ -3412,10 +4166,15 @@ def _shrent_trades(lawd: str) -> list:
         from auction_analysis.molit_source import MolitSource
         res = MolitSource().sh_rent_recent(lawd, months=12) or {}
         tr = res.get("trades") or []
-        if res.get("error"):                  # 할당량/오류 → 캐시 안 함
-            return tr
+        bad = bool(res.get("error")) or bool(res.get("incomplete"))
     except Exception:
-        return []
+        tr, bad = [], True
+    if bad or not tr:
+        st = _pool_stale_from_db("shrentpool:", lawd)
+        if st:
+            _shrent_cache[lawd] = st
+            return st
+        return tr
     _shrent_cache[lawd] = tr
     _pool_to_db("shrentpool:", lawd, tr)
     return tr
@@ -3484,10 +4243,19 @@ def _apt_trades(lawd: str, months: int = 12) -> list:
         tr = _rr.get("trades") or []
         _incomplete = bool(_rr.get("incomplete"))   # 일부 월이 쿼터로 실패한 부분수집 → 저장 금지
     except Exception:
-        tr = []; _incomplete = False
-    if tr and not _incomplete:                 # 완전 수집만 캐시(쿼터로 일부 월 누락된 부분결과는 저장 안 함 → 쿼터 회복 후 재수집). 빈결과·부분결과는 이번 요청엔 반환만.
+        #  🔴조회 실패는 '거래 0건'이 아니다(2026-10-05). 부분수집으로 표시해 저장을 막고,
+        #   호출측이 '실거래 없음'으로 굳히지 않게 한다.
+        tr = []; _incomplete = True
+    if tr and not _incomplete:                 # 완전 수집만 캐시(쿼터로 일부 월 누락된 부분결과는 저장 안 함 → 쿼터 회복 후 재수집).
         _apt_trades_cache[lawd] = tr
         _pool_to_db("aptpool:", lawd, tr)
+        return tr
+    #  🔴2026-10-05: 실패·부분수집이면 만료본(stale)이라도 쓴다. 빈 리스트를 '거래 0건'으로
+    #    돌려주면 gm_apt 가 "해당 시군구 아파트 실거래 없음"으로 굳는다(실측 1,920/2,953건).
+    st = _pool_stale_from_db("aptpool:", lawd)
+    if st:
+        _apt_trades_cache[lawd] = st
+        return st
     return tr
 
 
@@ -4483,16 +5251,40 @@ def _prewarm_pools_loop() -> None:
                 break
     except Exception:
         return
-    for lw, is_apt, is_villa in lawds:
+    #  🔴2026-10-05: 종전엔 `lw not in _rh_cache` 만 보고 **DB 나이를 보지 않아** 풀이 107일
+    #    방치됐다(rhpool 244개 평균 100.6일). 기동 때 한 번만 돌아 갱신 장치가 아예 없었다.
+    #    이제 ①DB 나이가 7일을 넘으면 메모리에 있어도 갱신 ②하루 한 번 재점검.
+    #    월 단위 캐시(molit_month.db)가 과거 월을 영구 보관하므로 갱신 비용은 1~2개월분뿐이다.
+    def _stale(prefix: str, lw: str) -> bool:
         try:
-            if is_villa and lw not in _rh_cache:
-                _rh_trades(lw)
-                _t.sleep(0.6)
-            if is_apt and lw not in _apt_trades_cache:
-                _apt_trades(lw)
-                _t.sleep(0.6)
+            d = auction_db.cache_get_many([prefix + lw]).get(prefix + lw)
+            if not isinstance(d, dict) or not d.get("trades"):
+                return True                      # 캐시 없음·빈 풀 → 갱신 대상
+            return (_t.time() - float(d.get("ts") or 0)) > 7 * 86400
+        except Exception:
+            return False                         # DB 조회 실패 시엔 건드리지 않는다(쿼터 보호)
+
+    while True:
+        done = 0
+        for lw, is_apt, is_villa in lawds:
+            try:
+                if is_villa and (lw not in _rh_cache or _stale("rhpool:", lw)):
+                    _rh_cache.pop(lw, None)      # 메모리 선반환을 비켜 실제로 갱신되게
+                    _rh_trades(lw)
+                    done += 1
+                    _t.sleep(0.6)
+                if is_apt and (lw not in _apt_trades_cache or _stale("aptpool:", lw)):
+                    _apt_trades_cache.pop(lw, None)
+                    _apt_trades(lw)
+                    done += 1
+                    _t.sleep(0.6)
+            except Exception:
+                pass
+        try:
+            print(f"[pools] 실거래 풀 갱신 {done}건 — 24시간 후 재점검", flush=True)
         except Exception:
             pass
+        _t.sleep(24 * 3600)                      # 하루 한 번 재점검(만료분만 실제 호출)
 
 
 def _prewarm_nearby() -> None:
@@ -4879,10 +5671,10 @@ def _col_enrich_sync() -> None:
         """UPDATE items i SET kb_count = sub.cnt FROM (
              SELECT it.item_key, count(l.*)::int cnt FROM (
                 SELECT item_key, kb_complex_no::text cno,
-                       COALESCE(substring(building_area from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
-                                substring(building_area from '([0-9]+(?:[.][0-9]+)?)'),
-                                substring(area_text from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
-                                substring(area_text from '([0-9]+(?:[.][0-9]+)?)'))::numeric area
+                       COALESCE(substring(replace(building_area,',','') from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
+                                substring(replace(building_area,',','') from '([0-9]+(?:[.][0-9]+)?)'),
+                                substring(replace(area_text,',','') from '전용[[:space:]]*([0-9]+(?:[.][0-9]+)?)'),
+                                substring(replace(area_text,',','') from '([0-9]+(?:[.][0-9]+)?)'))::numeric area
                 FROM items WHERE kb_complex_no IS NOT NULL AND (is_active OR data_class='현황')
              ) it
              LEFT JOIN kb_listing l ON l.complex_no::text=it.cno AND l.trade_type='매매'
@@ -4937,6 +5729,74 @@ def _col_enrich_sync() -> None:
         print(f"[col_sync] skip: {str(_e)[:80]}", flush=True)
 
 
+_KB_SWEEP_EVERY = 3          # 20분 스윕 3회(=1시간)마다 한 번만. KB 검색 API 호출이 들어가므로 아낀다.
+_kb_sweep_tick = 0
+
+
+def _kb_match_sweep(limit: int = 20) -> int:
+    """KB 단지 매칭이 **지번까지 확인되지 않은** 물건을 조금씩 다시 매칭한다.
+
+    🔴2026-10-08 주인님 지적(군산 나운동 489 금호 → 2022년 신축 '나운금호어울림센트럴' 오매칭)의 재발 방지.
+      kb_crawler._score 에 지번(ARNO) 대조를 넣어 전량 재매칭했지만, 1회성으로 두면
+      **크롤러가 넣는 새 물건이 옛 기준(이름 부분일치)으로 매칭된 채 남는다.**
+      conf 가 _KB_SURE_CONF(1.4) 미만이거나 비어 있는 것만 골라 조금씩 다시 맞춘다.
+    🔴새 결과가 없으면 기존 값을 건드리지 않는다 — 도로명 주소는 괄호 속 단지명을 못 뽑아
+      매칭에 실패하는데, None 으로 덮으면 과거에 채워 둔 멀쩡한 값까지 잃는다(회귀 200건 중 7건 실측).
+    """
+    try:
+        rows = auction_db.query_pg(
+            "SELECT item_key, address, area_excl, kb_complex_no FROM items "
+            "WHERE data_class = '현황' AND usage_name LIKE %s "
+            "  AND coalesce(kb_match_conf, 0) < %s "
+            "ORDER BY coalesce(kb_synced_at, '1970-01-01'::timestamptz) LIMIT %s",
+            ("%아파트%", _KB_SURE_CONF, limit))
+    except Exception as _e:
+        print(f"[kb_match] 조회 실패: {str(_e)[:90]}", flush=True)
+        return 0
+    if not rows:
+        return 0
+    try:
+        from kb_crawler import match_address
+    except Exception as _e:
+        print(f"[kb_match] kb_crawler 로드 실패: {str(_e)[:90]}", flush=True)
+        return 0
+    fixed = chg = 0
+    for r in rows:
+        ik, addr, old = r.get("item_key"), r.get("address") or "", r.get("kb_complex_no")
+        try:
+            m = match_address(addr, hints={"area_excl": r.get("area_excl")})
+        except Exception:
+            continue
+        new, conf = m.get("complex_no"), float(m.get("confidence") or 0)
+        if new is None:
+            #  매칭 못 함 — 기존 값을 지우지 않는다. 다만 kb_synced_at 을 찍어 같은 것만 계속 집지 않게.
+            try:
+                auction_db.query_pg("UPDATE items SET kb_synced_at = now() WHERE item_key = %s", (ik,))
+            except Exception:
+                pass
+            continue
+        try:
+            if str(new) != str(old):
+                auction_db.query_pg(
+                    "UPDATE items SET kb_complex_no=%s, kb_match_conf=%s, kb_synced_at=now(), "
+                    "       est_price=NULL, expected_bid=NULL, profit=NULL, kb_count=NULL "
+                    " WHERE item_key=%s", (str(new), conf or None, ik))
+                auction_db.query_pg("DELETE FROM api_cache WHERE cache_key = ANY(%s)",
+                                    ([f"apt:{ik}", f"analysis:{ik}", f"expbid:{ik}",
+                                      f"vexpbid:{ik}", f"kbmatch:{ik}"],))
+                chg += 1
+            else:
+                auction_db.query_pg(
+                    "UPDATE items SET kb_match_conf=%s, kb_synced_at=now() WHERE item_key=%s",
+                    (conf or None, ik))
+            fixed += 1
+        except Exception:
+            continue
+    if fixed:
+        print(f"[kb_match] 재매칭 {fixed}건 (단지 변경 {chg}건)", flush=True)
+    return fixed
+
+
 def _col_sync_loop() -> None:
     import time as _t
     _t.sleep(90)                # 기동 직후 부하 회피
@@ -4965,6 +5825,23 @@ def _col_sync_loop() -> None:
             _status_sa_sweep()             # ★목록 상태 글자 스피드옥션 양식 유지('진행'·% 없는 글자 → '유찰 N회 (P%)' 등) — 2026-09-18
         except Exception as _e:
             print(f"[sched_sweep] skip: {str(_e)[:80]}", flush=True)
+        try:
+            # 2026-09-30: 원문(detail_text)의 특수조건을 tags 로 유지 — 크롤러가 tags 를
+            #  덮어써도 다음 회차에 복구되고, 새로 들어오는 물건도 20분 안에 반영된다.
+            _special_tag_sync()
+            _thumb_col_sync()      # 사진은 있는데 썸네일이 비어 목록에 빈 아이콘이 뜨던 것(2026-10-01)
+            _gm_area_col_sync()
+            _rights_fill_sweep()
+            _fail_count_sync()
+            #  KB 단지 매칭 유지(1시간에 한 번) — 신규 물건이 옛 기준으로 남지 않게. 2026-10-08
+            global _kb_sweep_tick
+            _kb_sweep_tick += 1
+            if _kb_sweep_tick % _KB_SWEEP_EVERY == 0:
+                _kb_match_sweep()
+            _area_note_sync()     # 일괄매각 합계면적 주석(목록이 읽기만 하도록 컬럼화)
+            _risk_grade_sweep()   # 위험태그인데 매수양호로 남은 물건 보정(버킷 범위 밖까지)
+        except Exception as _e:
+            print(f"[special_tag] skip: {str(_e)[:80]}", flush=True)
         try:
             _statement_sweep()             # ★명세서→임차인 채우기 유지(새 법원 수집분도 20분 안에 권리분석 반영) — 2026-09-18
         except Exception as _e:
@@ -7004,8 +7881,8 @@ def _share_fill(limit: int = 40) -> int:
             #  (building_area=스피드옥션 상세 '건물면적' 칸, area_text=목록 '면적' 칸, area_excl=상세 전용면적).
             try:
                 _row = c.execute(
-                    "SELECT coalesce(sale_target,''), substring(building_area from '([0-9]+(?:[.][0-9]+)?)')::numeric,"
-                    " area_excl, substring(area_text from '(?:건물|전용)\\s*([0-9.]+)')::numeric, detail_text"
+                    "SELECT coalesce(sale_target,''), substring(replace(building_area,',','') from '([0-9]+(?:[.][0-9]+)?)')::numeric,"
+                    " area_excl, substring(replace(area_text,',','') from '(?:건물|전용)\\s*([0-9.]+)')::numeric, detail_text"
                     " FROM items WHERE item_key=%s", (k,)).fetchone() or ("", None, None, None, None)
             except Exception as e:
                 print(f"[share] {k} 컬럼 조회 실패: {str(e)[:60]}", flush=True)
@@ -7317,11 +8194,18 @@ _SCHED_ROWS_SQL = ("SELECT s.item_key, s.id, s.round, s.sell_date, s.min_price, 
 
 def _sched_doc_rows(c, item_key: str):
     """법원 기일내역문서(HTML, R2) → (이 물건번호의 기일 행 목록, 다물건 여부). 문서 없음 → None. 문서는 있는데 행 0 → ([], multi)."""
-    r = c.execute("SELECT r2_key FROM media WHERE item_key=%s AND kind='기일내역문서' AND r2_key IS NOT NULL "
-                  "ORDER BY seq LIMIT 1", (item_key,)).fetchone()
+    #  🔴2026-10-07 주인님 승인: 대법원 원본 JSON(기일내역_json)을 **먼저** 쓴다.
+    #    09-08 대법원 수집 전환 뒤 옛 수집원의 HTML 4종이 끊겨, 새로 들어온 물건은 HTML 이 아예 없다.
+    #    JSON 은 칸 병합·공백 때문에 생기던 HTML 오독이 없어 회차·최저가가 더 정확하다.
+    #    옛 HTML 41,235건은 그대로 두고 폴백으로 쓴다(지우지 않았다).
+    r = c.execute("SELECT kind, r2_key FROM media WHERE item_key=%s AND r2_key IS NOT NULL "
+                  "AND kind IN ('기일내역_json','기일내역문서') "
+                  "ORDER BY CASE WHEN kind='기일내역_json' THEN 0 ELSE 1 END, seq LIMIT 1",
+                  (item_key,)).fetchone()
     if not r or not auction_db.r2:
         return None
-    url = f"{auction_db.r2}/{r[0]}"
+    kind, key = r[0], r[1]
+    url = f"{auction_db.r2}/{key}"
     last = None
     for _ in range(3):
         try:
@@ -7329,12 +8213,15 @@ def _sched_doc_rows(c, item_key: str):
             if resp.status_code == 404:
                 return None
             if resp.status_code == 200 and resp.text:
-                allobj = _schn.parse_court_schedule_all(resp.text)
+                if kind == "기일내역_json":
+                    allobj = _schn.parse_court_schedule_json(resp.json())
+                else:
+                    allobj = _schn.parse_court_schedule_all(resp.text)
                 return allobj.get(item_key.split("|")[-1].strip(), []), len(allobj) > 1
             last = f"http {resp.status_code}"
         except Exception as e:
             last = str(e)[:60]
-    raise RuntimeError(f"기일내역문서 조회 실패: {last}")
+    raise RuntimeError(f"기일내역 조회 실패({kind}): {last}")
 
 
 def _schedule_normalize_item(c, item_key: str, use_doc: bool = True) -> str:
@@ -7732,8 +8619,22 @@ def _statement_fill_item(c, item_key: str, force: bool = False) -> str:
     upd: list = []
     with c.transaction():
         c.execute("SET LOCAL lock_timeout = '5s'")
+        #  🔴2026-09-28 주인님 지적으로 바꾼 부분.
+        #   예전엔 임차인 행이 하나라도 있으면 통째로 건너뛰었다("크롤러가 채운 행이 우선").
+        #   그 전제는 스피드옥션 크롤링을 중단하면서 이미 무너졌다 — 크롤러 행은 갱신이 멈춘 옛 데이터다.
+        #   실측: 명세서로 채운 행 5,464명은 전입일 92.2%가 있는데 크롤러 행 26,037명은 28.3%뿐이고,
+        #   그 때문에 11,069건이 전입일 없이 남아 **대항력 판정 자체가 불가능**했다
+        #   (C01|2025|513471|1 한유정: 이름·보증금·'인수' 세 개만 있고 전입일이 없어 '대항 없음'으로 표시).
+        #   force 로 지우는 대상도 [명세서] 표식이 붙은 행뿐이라 크롤러 행은 남아 또 스킵됐다(아침 재파싱 skip 74/85).
+        #   → **명세서에서 전입일을 실제로 읽어냈을 때만** 기존 행을 교체한다. 못 읽으면 예전처럼 손대지 않는다.
+        #     (교체 전 원본은 item_tenants_bak_20260928 에 백업 — 되돌릴 수 있다)
+        _can_replace = any(t.get("move_in_date") for t in built["tenants"])
         if force:
-            c.execute("DELETE FROM item_tenants WHERE item_key=%s AND status LIKE %s", (item_key, "%" + _stf.SRC_TAG))
+            if _can_replace:
+                c.execute("DELETE FROM item_tenants WHERE item_key=%s", (item_key,))
+            else:
+                c.execute("DELETE FROM item_tenants WHERE item_key=%s AND status LIKE %s",
+                          (item_key, "%" + _stf.SRC_TAG))
         n = c.execute("SELECT count(*) FROM item_tenants WHERE item_key=%s", (item_key,)).fetchone()[0]
         if n:
             return "has_tenants"                     # 크롤러(스피드옥션)가 채운 행이 있으면 그 행이 우선 — 손대지 않음
@@ -8262,7 +9163,7 @@ def auction_apt_ests(keys: str, compute: bool = True, remote: bool = True) -> di
             rows = {}
         for k in need_remote:
             d = rows.get("apt:" + k)
-            if isinstance(d, dict) and d.get("v", 0) >= APT_VER:
+            if _apt_cache_usable(d):      # '없음'은 7일 지나면 다시 잰다(2026-10-05)
                 out[k] = _apt_est_value(d)
                 _apt_cache.remember(k, d)                         # 메모리에도 올려 다음엔 즉시
             elif ("aptneg:" + k) in rows:                         # 실거래無 마커 → '시세없음' 즉시(compute=true molit 생략 = 목록 콜드 근본해결. 빌라 m.none과 동형)
@@ -8539,6 +9440,67 @@ def _gm_region_usage_filters(*, regions=None, sido=None, sgg=None, usages=None,
     return f
 
 
+_GM_COUNT_CACHE: dict = {}   # 공매 목록 총건수 캐시(조건 → (시각, 건수)). count 전체 스캔이 느려 2026-10-07 추가
+
+
+def _gm_sql_where(scalar_and: list) -> tuple | None:
+    """공매 스칼라 조건 [(col, op, val)] → (WHERE 문자열, 파라미터). 변환 불가면 None(REST 폴백).
+
+    🔴2026-10-07: PostgREST 왕복이 첫 호출에 3.4초(500 실패)까지 걸려 목록이 멈췄다.
+      DB 직접은 0.016초라 같은 결과를 100배 빠르게 낸다. 지원하지 않는 연산자가 하나라도 있으면
+      변환을 포기하고 기존 경로로 돌아간다 — 조용히 다른 결과를 내는 것보다 느린 편이 낫다.
+    """
+    conds, params = [], []
+    for col, op, val in scalar_and:
+        if col.startswith("data->>"):                 # JSONB 경로
+            key = col.split("->>", 1)[1]
+            expr = "data->>%s"
+            if op == "eq":
+                conds.append(f"{expr} = %s"); params += [key, val]
+            else:
+                return None
+            continue
+        if not col.replace("_", "").isalnum():        # 예상 밖 컬럼명 → 폴백
+            return None
+        if op == "eq":
+            conds.append(f'"{col}" = %s'); params.append(val)
+        elif op == "ilike":
+            conds.append(f'"{col}" ILIKE %s'); params.append(str(val).replace("*", "%"))
+        elif op in ("gte", "lte"):
+            conds.append(f'"{col}" {">=" if op == "gte" else "<="} %s'); params.append(val)
+        elif op == "lt":
+            conds.append(f'"{col}" < %s'); params.append(val)
+        elif op == "is":
+            v = str(val).lower()
+            if v == "true":
+                conds.append(f'"{col}" IS TRUE')
+            elif v == "false":
+                conds.append(f'"{col}" IS FALSE')
+            elif v == "null":
+                conds.append(f'"{col}" IS NULL')
+            else:
+                return None
+        else:
+            return None
+    return (" AND ".join(conds) or "TRUE"), params
+
+
+def _gm_sql_order(order: str) -> str:
+    """'nb_count.desc.nullslast,bid_close.asc' → SQL ORDER BY. 변환 불가 항목은 건너뛴다."""
+    out = []
+    for part in (order or "").split(","):
+        p = part.strip().split(".")
+        if not p or not p[0] or not p[0].replace("_", "").isalnum():
+            continue
+        col = f'"{p[0]}"'
+        dirn = "DESC" if len(p) > 1 and p[1] == "desc" else "ASC"
+        nulls = ""
+        if len(p) > 2 and p[2] in ("nullslast", "nullsfirst"):
+            nulls = " NULLS LAST" if p[2] == "nullslast" else " NULLS FIRST"
+        out.append(f"{col} {dirn}{nulls}")
+    return ", ".join(out) or '"bid_close" ASC'
+
+
 @app.get("/gongmae")
 def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
                  prop: Optional[str] = "압류재산", dpsl_mtd: Optional[str] = None,
@@ -8609,7 +9571,7 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
         order = ",".join(dict.fromkeys([p for p in (_o1, _o2, "bid_close.asc") if p]))
         # 사전계산(warm_gongmae_grade.py) 컬럼(buy_grade·sise·profit·grade_reason·nb_count)도 select해
         # item에 병합. 목록이 행별 라이브 호출 없이 배지·시세·차익·유사거래건수를 즉시 렌더.
-        params = {"select": "data,bid_close,buy_grade,sise,profit,grade_reason,nb_count,apt_hoga,recent_trade_price,recent_trade_date",
+        params = {"select": "data,bid_close,buy_grade,sise,profit,grade_reason,nb_count,apt_hoga,recent_trade_price,recent_trade_date,bld_area,land_area",
                   "order": order, "offset": str(max(0, (page - 1) * rows)), "limit": str(rows)}
         # ③ and(스칼라) + or(지역/용도) 병합.
         #    PostgREST root or= 는 1개만 허용 → or 그룹이 2개↑(복수지역 + 용도복수, 또는 시도 + 용도)면
@@ -8648,12 +9610,42 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
         else:
             if and_parts:
                 params["and"] = "(" + ",".join(and_parts) + ")"
-        resp = auction_db._get("gongmae_items", params, count=True)
-        if resp.status_code >= 400:
-            raise RuntimeError(f"db {resp.status_code}")
-        data_rows = resp.json()
-        cr = resp.headers.get("content-range", "")
-        total = int(cr.split("/")[-1]) if "/" in cr and cr.split("/")[-1].isdigit() else len(data_rows)
+        #  🔴2026-10-07 주인님 승인: or 그룹(지역·용도 복수)이 없으면 psycopg 직결로 간다(100배).
+        #    변환 불가·실패면 아래 REST 경로로 그대로 떨어진다 — 결과는 같고 기능도 그대로다.
+        data_rows = None
+        total = None
+        if not or_groups:
+            _conv = _gm_sql_where(scalar_and)
+            if _conv is not None:
+                _where, _p = _conv
+                _cols = ("data, bid_close, buy_grade, sise, profit, grade_reason, nb_count, apt_hoga, "
+                         "recent_trade_price, recent_trade_date, bld_area, land_area")
+                _sql = (f"SELECT {_cols} FROM gongmae_items WHERE {_where} "
+                        f"ORDER BY {_gm_sql_order(order)} LIMIT %s OFFSET %s")
+                _rows = auction_db.query_pg(_sql, tuple(_p) + (rows, max(0, (page - 1) * rows)))
+                if _rows is not None:
+                    data_rows = _rows
+                    #  🔴총건수는 전체 스캔이라 첫 호출 7.38초(52,578건) — 목록 쿼리는 0.013초인데
+                    #   이것 하나 때문에 2초대가 나왔다. 조건별로 60초 캐시한다(페이지를 넘겨도 총건수는 불변).
+                    _cck = _where + "|" + repr(_p)
+                    _ch = _GM_COUNT_CACHE.get(_cck)
+                    if _ch and (_time.time() - _ch[0]) < 60:
+                        total = _ch[1]
+                    else:
+                        _cnt = auction_db.query_pg(
+                            f"SELECT count(*) AS c FROM gongmae_items WHERE {_where}", tuple(_p))
+                        total = (_cnt[0]["c"] if _cnt else len(_rows))
+                        _GM_COUNT_CACHE[_cck] = (_time.time(), total)
+                        if len(_GM_COUNT_CACHE) > 400:
+                            for _k in sorted(_GM_COUNT_CACHE, key=lambda k: _GM_COUNT_CACHE[k][0])[:150]:
+                                _GM_COUNT_CACHE.pop(_k, None)
+        if data_rows is None:                       # psycopg 미가용·변환불가 → 기존 REST 경로
+            resp = auction_db._get("gongmae_items", params, count=True)
+            if resp.status_code >= 400:
+                raise RuntimeError(f"db {resp.status_code}")
+            data_rows = resp.json()
+            cr = resp.headers.get("content-range", "")
+            total = int(cr.split("/")[-1]) if "/" in cr and cr.split("/")[-1].isdigit() else len(data_rows)
         items = []
         for r in data_rows:
             d = r.get("data")
@@ -8669,6 +9661,8 @@ def gongmae_list(page: int = 1, rows: int = Query(20, le=100),
             d["recent_trade_price"] = r.get("recent_trade_price")   # 최근 실거래가(추정시세 없을 때 fallback 기준·목록 시세칸 표시)
             d["recent_trade_date"] = r.get("recent_trade_date")     # 그 체결일(YYYY-MM-DD)
             d["reg"] = _reg_by_addr(d.get("address"))               # 규제 구분(주소 기준)
+            d["bld_area"] = r.get("bld_area")     # 전용면적(㎡) — gm_enrich 파생 컬럼(2026-10-06 주인님 지시)
+            d["land_area"] = r.get("land_area")   # 대지권(㎡)
             items.append(d)
         return {"items": items, "total": total, "page": page, "source": "db"}
     except Exception as e:
@@ -8721,6 +9715,35 @@ def gongmae_enrich(mng: str = Query(..., description="물건관리번호 cltrMng
 
 # ---------- 공매 물건상세: 경매기능 재사용(온디맨드·gm_* 캐시·경매코드 무수정) ----------
 _gm_nearby_cache: dict = {}
+_GM_NB_NEG_TTL = 7 * 86400   # 거래 0건 결과는 7일만 유효(영구 '없음' 고착 방지 — 2026-10-05)
+
+
+def _gm_nb_usable(d) -> bool:
+    """공매 유사거래 캐시를 쓸 수 있나. 거래가 있으면 영구 유효,
+    0건이면 7일 지난 것은 버리고 다시 계산한다(빈 rhpool 시절의 0건이 영구 고착됐던 사고)."""
+    if not (isinstance(d, dict) and d.get("available")):
+        return False
+    if d.get("trades"):
+        return True
+    ts = d.get("ts")
+    return bool(ts) and (_time.time() - float(ts)) < _GM_NB_NEG_TTL
+
+
+def _gm_grade_usable(d) -> bool:
+    """gm_grade 캐시를 쓸 수 있나.
+
+    🔴 2026-10-05: 시세도 없고 유사거래도 0인 결과는 **7일만** 유효하다. 유사거래 캐시가
+      빈 상태였던 시기에 계산된 '시세 없음'이 v>=6 조건만으로 영구 반환돼, 유사거래를
+      복구한 뒤에도 목록의 시세·유사거래 칩이 0으로 남았다(실측: 빌라류 4,428/5,529).
+      값이 하나라도 있으면 종전처럼 영구 캐시."""
+    if not isinstance(d, dict):
+        return False
+    if d.get("sise") or d.get("recent_price") or (d.get("nb_count") or 0) > 0:
+        return True
+    ts = d.get("ts")
+    return bool(ts) and (_time.time() - float(ts)) < _GM_NB_NEG_TTL
+
+
 
 
 def _gm_cur(mng: str, cdtn: Optional[str] = None):
@@ -8802,13 +9825,14 @@ def gongmae_nearby_trades(mng: str, cdtn: Optional[str] = None,
     if not isinstance(months, int):   # 내부에서 함수로 호출 시 Query 기본값 객체가 넘어옴 → 결과·캐시 오염(직렬화 500) 방지
         months = 12
     ck = "gm_nearby:" + mng
-    if ck in _gm_nearby_cache:
+    if _gm_nb_usable(_gm_nearby_cache.get(ck)):
         return _gm_attach_gongsi(_trim_to_radius(_gm_nearby_cache[ck]), mng, cdtn)
+    _gm_nearby_cache.pop(ck, None)
     try:
         db = auction_db.cache_get_many([ck]).get(ck)
     except Exception:
         db = None
-    if isinstance(db, dict) and db.get("available"):
+    if _gm_nb_usable(db):
         _gm_nearby_cache[ck] = db
         return _gm_attach_gongsi(_trim_to_radius(db), mng, cdtn)
     e, cur = _gm_cur(mng, cdtn)
@@ -8833,7 +9857,7 @@ def gongmae_nearby_trades(mng: str, cdtn: Optional[str] = None,
         return {"available": False, "reason": "법정동코드 변환 실패", "address": addr}
     picked = sorted(r["trades"], key=lambda t: t.get("deal_date", ""), reverse=True)[:500]
     result = {
-        "available": True, "v": 2, "address": addr, "addr_prefix": r["addr_prefix"],
+        "available": True, "v": 2, "ts": _time.time(), "address": addr, "addr_prefix": r["addr_prefix"],
         "sigungu_prefix": r["sigungu_prefix"], "addr_jibun": r["addr_jibun"],
         "prop_area": r["prop_area"], "prop_floor": r["prop_floor"],
         "prop_build_year": prop_build_year, "prop_gongsi": None, "months": months,
@@ -8963,6 +9987,8 @@ def gongmae_villa_expected_bid(mng: str, cdtn: Optional[str] = None, sid: Option
         pass
     r = eb.compute_villa(cur, ll, cases, est_price=est)
     r["v"] = _VEXPBID_V
+    import time as _tt
+    r["ts"] = _tt.time()
     if r.get("available"):
         try:
             auction_db.cache_save(ck, r)
@@ -9027,13 +10053,13 @@ def gongmae_apt_info(mng: str, cdtn: Optional[str] = None,
     ck = "gm_apt:" + mng
     try:
         hit = auction_db.cache_get_many([ck]).get(ck)
-        if isinstance(hit, dict) and hit.get("v", 0) >= APT_VER:
+        if _apt_cache_usable(hit):        # '없음'은 7일 지나면 다시 잰다(2026-10-05)
             return hit
     except Exception:
         pass
     e, cur = _gm_cur(mng, cdtn)
     if not cur:
-        return {"available": False, "reason": "물건 없음", "v": APT_VER}
+        return {"available": False, "reason": "물건 없음", "v": APT_VER, "ts": _time.time()}
     usage = cur.get("usage") or ""
     if "아파트" not in usage and "오피스텔" not in usage:
         return {"available": False, "reason": "아파트/오피스텔 물건이 아님", "usage": usage}
@@ -9067,7 +10093,7 @@ def gongmae_apt_info(mng: str, cdtn: Optional[str] = None,
         cd = cd or _brief_detail()
         out = {"available": False, "reason": "해당 시군구 아파트 실거래 없음",
                "lawd_cd": lawd, "address": address, "area": area,
-               "complex": nm or "", "complex_detail": cd, "v": APT_VER}
+               "complex": nm or "", "complex_detail": cd, "v": APT_VER, "ts": _time.time()}
         if cd:                                   # 단지정보라도 확보되면 캐시(실거래는 다음에 재시도되도록 available=False여도 저장)
             try:
                 auction_db.cache_save(ck, out)
@@ -9100,7 +10126,7 @@ def gongmae_apt_info(mng: str, cdtn: Optional[str] = None,
         "summary": summary, "trades": same[:100],
         "complex_trades_total": len(mt["trades"]),
         "area_matched": mt["area_matched"], "demand": demand, "est": est,
-        "months": months, "v": APT_VER,
+        "months": months, "v": APT_VER, "ts": _time.time(),
     }
     out["complex_detail"] = _complex_detail_for(out) or _brief_detail()
     if not out.get("complex"):
@@ -9318,7 +10344,7 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
     try:
         hit = auction_db.cache_get_many([ck]).get(ck)
         # v>=5: 추정시세 없을 때 최근 실거래가 fallback 반영(주인님 2026-07-08). v<5는 재계산.
-        if isinstance(hit, dict) and hit.get("v", 0) >= 6:
+        if isinstance(hit, dict) and hit.get("v", 0) >= 6 and _gm_grade_usable(hit):
             return {**hit, "_cache": "hit"}
     except Exception:
         pass
@@ -9437,6 +10463,7 @@ def gongmae_buy_grade(mng: str, cdtn: Optional[str] = None) -> dict:
                "sise": sise, "sise_src": "추정시세", "base": base, "base_src": base_src, "expected_bid": exp_bid,
                "cur_min": cur_min, "last_min": base, "profit": profit,
                "nb_count": nb_count, "v": 6}
+    out["ts"] = _time.time()   # '없음' 결과의 7일 TTL 판정용(_gm_grade_usable)
     try:
         auction_db.cache_save(ck, out)
     except Exception:
@@ -9579,13 +10606,16 @@ def auction_nearby_trades(item_key: str, months: int = Query(12, le=24), defer: 
     결과는 ①메모리 →②DB(api_cache 'nearby:') →③계산 후 DB저장 (무거운 지오코딩 1회만)."""
     if not isinstance(months, int):                # 예열이 직접 호출 시 Query 기본값 방어
         months = 12
-    if item_key in _nearby_cache:                  # ① 메모리(1km 슈퍼셋 저장 → 현재 반경으로 트림)
+    if _gm_nb_usable(_nearby_cache.get(item_key)):  # ① 메모리(1km 슈퍼셋 저장 → 현재 반경으로 트림)
         return _trim_to_radius(_nearby_cache[item_key])
+    _nearby_cache.pop(item_key, None)              # 🔴거래 0건 + 7일 경과 → 버리고 다시 계산(2026-10-05)
     try:                                            # ② DB
         db = auction_db.cache_get_many(["nearby:" + item_key]).get("nearby:" + item_key)
     except Exception:
         db = None
-    if isinstance(db, dict) and db.get("available") and db.get("v", 0) >= 2:
+    #  🔴2026-10-05: 경매도 공매와 같은 병이었다 — 거래 0건 결과를 TTL 없이 영구 저장해
+    #    `nearby:` 374개 중 236개(63.1%)가 0건으로 굳어 있었다. 0건은 7일만 유효로 본다.
+    if isinstance(db, dict) and db.get("available") and db.get("v", 0) >= 2 and _gm_nb_usable(db):
         # 캐시에 물건 공시가격이 비었으면(도로명/쿼터 등) 그때그때 보강 시도 → 추정시세 복구. 성공 시 캐시 갱신.
         pgg = db.get("prop_gongsi")
         if not (isinstance(pgg, dict) and pgg.get("price")):
@@ -9636,7 +10666,7 @@ def auction_nearby_trades(item_key: str, months: int = Query(12, le=24), defer: 
     prop_area, prop_floor = r["prop_area"], r["prop_floor"]
     picked = sorted(r["trades"], key=lambda t: t.get("deal_date", ""), reverse=True)[:500]
     result = {
-        "available": True, "v": 2, "address": addr, "addr_prefix": r["addr_prefix"],
+        "available": True, "v": 2, "ts": _time.time(), "address": addr, "addr_prefix": r["addr_prefix"],
         "sigungu_prefix": r["sigungu_prefix"], "addr_jibun": r["addr_jibun"],
         "prop_area": prop_area, "prop_floor": prop_floor, "prop_build_year": prop_build_year,
         "prop_gongsi": prop_gongsi, "months": months, "geo_ok": r.get("geo_ok", False),
@@ -10569,6 +11599,28 @@ _expbid_lock = threading.Lock()
 _EXPBID_V = 6    # v6: cases_used에 입찰인원(bid_count)·2등입찰가(sale_2nd) 추가
 
 
+_NEG_TTL = 7 * 86400     # '사례 없음' 판정의 유효기간 — 지나면 다시 잰다(새 매각사례가 생겼을 수 있다)
+
+
+def _expbid_cache_usable(c, ver) -> bool:
+    """이 캐시를 그대로 써도 되는가.
+
+    available=True  → 버전만 맞으면 계속 쓴다(값이 있으니 굳어도 해롭지 않다).
+    available=False → 쓰인 지 7일 안쪽일 때만 쓴다. ts 가 없거나(옛 캐시) 오래됐으면 다시 잰다.
+      🔴이 분기가 없어서 3개월 전 '없음'이 화면에 그대로 떴다(2026-10-02 실측 12,359건).
+    """
+    if not isinstance(c, dict) or c.get("v") != ver:
+        return False
+    if c.get("available"):
+        return True
+    ts = c.get("ts")
+    try:
+        import time as _tt
+        return bool(ts) and (_tt.time() - float(ts)) < _NEG_TTL
+    except Exception:
+        return False
+
+
 def _expbid_gate(d: dict, sid) -> dict:
     """참조 백데이터(cases_used)는 관리자만. 비관리자는 제거하고 사례수만 노출."""
     if not isinstance(d, dict) or d.get("cases_used") is None:
@@ -10595,7 +11647,7 @@ def auction_expected_bid(item_key: str, sid: Optional[str] = Cookie(None)) -> di
         c = auction_db.cache_get_many(["expbid:" + item_key]).get("expbid:" + item_key)
     except Exception:
         c = None
-    if isinstance(c, dict) and c.get("v") == _EXPBID_V:
+    if _expbid_cache_usable(c, _EXPBID_V):
         _expbid_mem[item_key] = c
         return _expbid_gate(c, sid)
     with _expbid_lock:
@@ -10617,15 +11669,19 @@ def _expbid_compute_bg(item_key: str):
         if "아파트" in (cur.get("usage") or ""):
             pre, bunji = eb.building_key(cur.get("address"))
             cases = []
+            _expbid_cases_failed = False                       # 조회 실패와 '사례 없음'을 구분(2026-10-02)
             if bunji:                                          # 동일 법정동+지번 매각사례(넓게 받아 파이썬서 건물 prefix 일치 확인)
                 try:
                     rr = auction_db._get("items", {
                         "select": "item_key,address,area_text,building_area,appraisal_price,sale_price,sale_rate,sell_date,result,bid_count,sale_2nd_price",
                         "usage_name": "ilike.*아파트*", "address": f"ilike.*{bunji}*",
                         "or": "(result.like.매각*,result.like.잔금납부*,result.like.배당종결*)", "sale_price": "gt.0", "limit": "1000"})
-                    cases = rr.json() if rr.status_code in (200, 206) else []
+                    if rr.status_code in (200, 206):
+                        cases = rr.json()
+                    else:
+                        cases, _expbid_cases_failed = [], True   # HTTP 실패 = 모름
                 except Exception:
-                    cases = []
+                    cases, _expbid_cases_failed = [], True       # 예외 = 모름('없음'으로 굳히지 않는다)
             est = None                                         # 추정시세(차익용) — 캐시 우선(계산 안 함)
             try:
                 ev = auction_apt_ests(item_key, compute=False)   # 차익은 화면 시세로 클라가 계산 → est 강제계산 불필요(빠르게)
@@ -10636,11 +11692,15 @@ def _expbid_compute_bg(item_key: str):
                 pass
             r = eb.compute(cur, cases, est_price=est)
             r["v"] = _EXPBID_V
+        import time as _tt
+        r["ts"] = _tt.time()            # '없음' 판정의 유효기간 판정용(7일)
         _expbid_mem[item_key] = r
-        try:
-            auction_db.cache_save("expbid:" + item_key, r)
-        except Exception:
-            pass
+        #  🔴후보 조회가 실패했으면(cases is None) '사례 없음'으로 굳히지 않는다 — 실패는 '모름'이지 '없음'이 아니다.
+        if not _expbid_cases_failed:
+            try:
+                auction_db.cache_save("expbid:" + item_key, r)
+            except Exception:
+                pass
     except Exception:
         pass
     finally:
@@ -10724,13 +11784,14 @@ def _prewarm_expbid(keys=None):
             if not k:
                 continue
             v = cc.get("expbid:" + k)
-            if isinstance(v, dict) and v.get("v") == _EXPBID_V:
+            if _expbid_cache_usable(v, _EXPBID_V):     # '없음'은 7일 지나면 다시 잰다(2026-10-02)
                 continue
             pre = eb._norm(eb.building_name(x.get("address")) or eb.building_key(x.get("address"))[0] or "")
             ev = ests.get(k) if isinstance(ests, dict) else None
             est = ev.get("price") if isinstance(ev, dict) else None
             res = eb.compute(x, cases_by.get(pre, []), est_price=est)
             res["v"] = _EXPBID_V
+            res["ts"] = _time.time()      # '없음' 판정의 유효기간용
             _expbid_mem[k] = res
             saves.append(("expbid:" + k, res))
             done += 1
@@ -10785,7 +11846,7 @@ def auction_villa_expected_bid(item_key: str, sid: Optional[str] = Cookie(None))
         c = auction_db.cache_get_many(["vexpbid:" + item_key]).get("vexpbid:" + item_key)
     except Exception:
         c = None
-    if isinstance(c, dict) and c.get("v") == _VEXPBID_V:
+    if _expbid_cache_usable(c, _VEXPBID_V):
         _vexpbid_mem[item_key] = c
         return _expbid_gate(c, sid)
     with _expbid_lock:
@@ -11139,6 +12200,8 @@ def _villa_expbid_compute_bg(item_key: str):
                     pass
                 r = eb.compute_villa(cur, ll, cases, est_price=est)
                 r["v"] = _VEXPBID_V
+        import time as _tt
+        r["ts"] = _tt.time()        # '사례 없음' 판정의 유효기간용(2026-10-02)
         _vexpbid_mem[item_key] = r
         try:
             auction_db.cache_save("vexpbid:" + item_key, r)
@@ -11229,7 +12292,7 @@ def _prewarm_villa_expbid(keys=None):
             if not k:
                 continue
             v = cc.get("vexpbid:" + k)
-            if isinstance(v, dict) and v.get("v") == _VEXPBID_V:
+            if _expbid_cache_usable(v, _VEXPBID_V):   # '없음'은 7일 지나면 다시 잰다(2026-10-02)
                 continue
             ll = _geo_cache.get(eb.geo_addr(x.get("address")))
             if not ll:
@@ -11308,6 +12371,8 @@ def _car_expbid_compute_bg(item_key: str):
                     pass
             r = ceb.compute(sp, cases, _dt.date.today().isoformat())
             r["v"] = _CAREXPBID_V
+        import time as _tt
+        r["ts"] = _tt.time()        # '사례 없음' 판정의 유효기간용(2026-10-02)
         _carexpbid_mem[item_key] = r
         try:
             auction_db.cache_save("carexpbid:" + item_key, r)
@@ -11331,7 +12396,7 @@ def auction_car_expected_bid(item_key: str, sid: Optional[str] = Cookie(None)) -
         c = auction_db.cache_get_many(["carexpbid:" + item_key]).get("carexpbid:" + item_key)
     except Exception:
         c = None
-    if isinstance(c, dict) and c.get("v") == _CAREXPBID_V:
+    if _expbid_cache_usable(c, _CAREXPBID_V):
         _carexpbid_mem[item_key] = c
         return _expbid_gate(c, sid)
     with _carexpbid_lock:
@@ -11420,7 +12485,7 @@ def _prewarm_car_expbid(keys=None):
         saves = []
         for k in kk:
             v = cc.get("carexpbid:" + k)
-            if isinstance(v, dict) and v.get("v") == _CAREXPBID_V:
+            if _expbid_cache_usable(v, _CAREXPBID_V):  # '없음'은 7일 지나면 다시 잰다(2026-10-02)
                 continue
             sp = tspecs.get(k)
             if not sp:
@@ -11762,6 +12827,9 @@ def _area_num(*vals) -> Optional[float]:
         s = str(v)
         # ⚠️"대지권 X㎡ / 전용 Y㎡" 형태 → '전용' 면적 우선. 첫 숫자(대지권)를 잡으면
         #   실거래 평형매칭 실패(area_matched=false) → 아파트 시세 없음의 주범.
+        #  2026-09-30: 천단위 콤마에서 숫자가 끊기지 않게 먼저 제거한다.
+        #   '5,991.00m2' 에서 기존 패턴은 '5' 만 집었다(area_excl=5.0 실측 · 진행물건 14건).
+        s = s.replace(",", "")
         m = re.search(r"전용\s*(\d+(?:\.\d+)?)", s)
         if m:
             return float(m.group(1))
@@ -11775,7 +12843,7 @@ def _area_num(*vals) -> Optional[float]:
 def auction_apt_info(item_key: str, months: int = Query(12, le=24)) -> dict:
     """아파트 경매물건: 같은 단지 실거래 + 단지 요약(단지명·건축년도·시세대). 온디맨드+캐시."""
     _mem = _apt_cache.get(item_key)
-    if isinstance(_mem, dict) and _mem.get("v", 0) >= APT_VER:
+    if _apt_cache_usable(_mem):           # '없음'은 7일 지나면 다시 잰다(2026-10-05)
         out = _mem
     else:
         db = None                                  # ① Supabase api_cache(apt:) 우선
@@ -12176,6 +13244,30 @@ def _kb_is_auction_ad(l: dict) -> bool:
     return "경매" in (l.get("feature") or "") or "경매" in (l.get("agent_name") or "")
 
 
+#  🔴2026-10-08: 지번까지 확인된 매칭의 최소 신뢰도. kb_crawler._score 가 지번 일치에 +1.0 을 준다
+#   (base 0.4~0.5 + 이름 0~0.5 + 지번 1.0). 종전엔 3,405건이 전부 1.0 만점이라 변별력이 없었다.
+_KB_SURE_CONF = 1.4
+
+
+def _kb_match_sure(item_key: str) -> bool:
+    """이 물건의 KB 단지 매칭이 **지번까지 확인된 것**인가 — 호가를 시세에 섞을지 판단한다.
+
+    군산 나운동 489 금호가 2022년 신축 '나운금호어울림센트럴'로 매칭돼 호가 2억 9,000만이
+    추정시세에 들어갔다. 근거가 이름 한 조각뿐인 매칭은 호가를 쓰지 않는다.
+    """
+    try:
+        rows = auction_db.query_pg(
+            "SELECT kb_match_conf FROM items WHERE item_key = %s", (item_key,))
+    except Exception:
+        return False
+    if not rows:
+        return False
+    try:
+        return float(rows[0].get("kb_match_conf") or 0) >= _KB_SURE_CONF
+    except Exception:
+        return False
+
+
 def _kb_band_min_price(cno: Optional[str], band: Optional[str], area) -> Optional[int]:
     """KB 매매 매물 중 층군(band=1~6층 등)+동일평형(전용±3㎡)의 '최저 호가'(원). 없으면 None. 경매 광고 매물 제외."""
     if not cno or not band:
@@ -12324,6 +13416,29 @@ def _brief_as_detail(item_key: str, name: str):
             "_src": {"kb": "KB 단지정보", "kapt": "국토부 공동주택"}.get(b.get("hh_src"), "건축물대장")}   # 세대수 출처대로 라벨
 
 
+_APT_NEG_TTL = 7 * 86400     # '실거래 없음' 판정의 유효기간(2026-10-05)
+
+
+def _apt_cache_usable(d, ver=None) -> bool:
+    """이 아파트 시세 캐시를 그대로 써도 되는가.
+
+    available=True  → 버전만 맞으면 쓴다(값이 있으니 굳어도 해롭지 않다).
+    available=False → 쓰인 지 7일 안쪽일 때만 쓴다. ts 가 없거나(옛 캐시) 오래됐으면 다시 잰다.
+      🔴이 분기가 없어서 국토부가 막힌 날 찍힌 '실거래 없음'이 몇 달째 떠 있었다(2026-10-05 실측).
+    """
+    import time as _tt
+    v = APT_VER if ver is None else ver
+    if not isinstance(d, dict) or d.get("v", 0) < v:
+        return False
+    if d.get("available"):
+        return True
+    ts = d.get("ts")
+    try:
+        return bool(ts) and (_tt.time() - float(ts)) < _APT_NEG_TTL
+    except Exception:
+        return False
+
+
 APT_VER = 9   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로 재계산(v8: 3개월 실거래 없으면 호가(유사층수 최저)-1000만원=추정시세, 호가도 없으면 산출불가=주인님 지정)
 #   v9(2026-09-18): match_apt 오매칭 수정(다른 동·시도/시군구 이름 단지 혼입, 읍면 지번매칭 불능) — v8 캐시는 옛 매칭이라 전부 재계산 대상.
 #   est_col·col_sync·/admin/apt_recompute가 모두 'v >= APT_VER'만 인정하므로 올리기만 하면 옛 결과가 자동으로 밀려난다.
@@ -12332,7 +13447,7 @@ APT_VER = 9   # apt 캐시 스키마 버전 — 올리면 옛 캐시는 stale로
 def _apt_info_compute(item_key: str, months: int) -> dict:
     d = auction_db.get_auction(item_key)
     if d is None:
-        return {"available": False, "reason": "물건 없음", "v": APT_VER}
+        return {"available": False, "reason": "물건 없음", "v": APT_VER, "ts": _time.time()}
     usage = d.get("usage") or ""
     if "아파트" not in usage and "오피스텔" not in usage:
         return {"available": False, "reason": "아파트/오피스텔 물건이 아님", "usage": usage}
@@ -12354,7 +13469,7 @@ def _apt_info_compute(item_key: str, months: int) -> dict:
         cd = cd or _brief_as_detail(item_key, nm)   # kapt 없으면 건축물대장 폴백
         return {"available": False, "reason": "해당 시군구 아파트 실거래 없음",
                 "lawd_cd": lawd, "address": address, "area": area,
-                "complex": nm or "", "complex_detail": cd, "v": APT_VER}
+                "complex": nm or "", "complex_detail": cd, "v": APT_VER, "ts": _time.time()}
     mt = match_apt(trades, address, area=area, area_pct=0.05)   # 같은 평형 ±5%(다른 평형 혼입 방지)
     # 시세·실거래는 '같은 평형'만 사용 — 없으면 빈 리스트(단지 다른 평형을 시세로 쓰지 않음 → '시세 없음')
     same = mt["same_area"] if mt["area_matched"] else []
@@ -12372,7 +13487,10 @@ def _apt_info_compute(item_key: str, months: int) -> dict:
     est = _estimate_price(same, auction_floor)
     _cno = _kb_complex_no_of(item_key, d)
     _band = _floor_band(auction_floor)                                   # 경매물건 층군(유사층수)
-    _B = _kb_band_min_price(_cno, _band, area) if _cno else None         # 그 층군 최저호가
+    #  🔴2026-10-08 주인님 승인: 지번까지 확인된 매칭일 때만 호가를 쓴다.
+    #    오매칭된 단지의 호가가 (실거래+호가)/2 로 들어가 차익을 거짓으로 만들던 것을 막는다.
+    _B = (_kb_band_min_price(_cno, _band, area)
+          if (_cno and _kb_match_sure(item_key)) else None)              # 그 층군 최저호가
     if est and est.get("price"):
         # ★KB 층군 최저호가 결합(주인님 지정 2026-08-08): B=경쟁매물 층군(1~6층) 최저호가.
         #  B<A(실거래) → 호가 B 백만원내림 / B≥A → (A+B)/2 백만원내림 / B없음 → A 백만원내림.
@@ -12410,7 +13528,7 @@ def _apt_info_compute(item_key: str, months: int) -> dict:
         "demand": demand,                    # 매수세(최근 6개월 거래빈도)
         "est": est,                          # 추정시세(3단계 필터 평균)
         "months": months,
-        "v": APT_VER,
+        "v": APT_VER, "ts": _time.time(),
     }
     # 상세 단지정보는 실거래 유무와 무관하게 시도(시세 없어도 단지정보는 표시)
     out["complex_detail"] = _complex_detail_for(out) or _brief_as_detail(

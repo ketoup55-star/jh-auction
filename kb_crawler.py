@@ -915,6 +915,8 @@ _BRAND_ALIASES = [("이편한세상", "e편한세상"), ("에스케이뷰", "SK�
 # 스코어링 정규화용 별칭 통일(경매표기↔KB표기). 검색뿐 아니라 이름점수에도 반영.
 _CANON_MAP = [("이편한세상", "e편한세상"), ("에스케이", "sk"), ("케이비", "kb"), ("엘에이치", "lh")]
 ACCEPT_THRESHOLD = 0.6
+#  지번까지 맞은 후보의 최소 점수(base 0.4~0.5 + 이름 0~0.5 + 지번 1.0). 이 선을 넘으면 더 찾지 않는다.
+_JIBUN_SURE = 1.4
 
 
 def _strip_jibun(rest: str) -> str:
@@ -1088,7 +1090,35 @@ def region_clearly_wrong(our_addr: str, kb_bub: str, name_kw: str = "", kb_name:
     return emd_known and not emd_same and not strong
 
 
-def _score(cand: dict, our_addr: str, name_kw: str) -> tuple[float, bool]:
+#  🔴2026-10-08 주인님 지적(군산 나운동 489 금호 → 나운금호어울림센트럴 오매칭).
+#   읍면동 바로 뒤의 번지만 뽑는다. '나운동 489 금호 104동' → '489' · '산곡동 124-1' → '124-1'
+#   · '당산동5가 40' → '40'. 도로명 주소는 번지가 없어 None → 종전 이름 점수로 간다.
+_JIBUN_RE = re.compile(r"(?:읍|면|동|리|가)\s+(\d+(?:-\d+)?)(?=\s|,|$)")
+
+
+def _jibun_of(addr: str) -> str | None:
+    """주소에서 지번(번지)만. KB 후보의 ARNO 와 대조하기 위한 것."""
+    m = _JIBUN_RE.search(re.sub(r"\s+", " ", addr or ""))
+    return m.group(1) if m else None
+
+
+def _hint_bonus(cand: dict, hints: dict | None) -> float:
+    """쓰지 않는다 — 0 을 돌려준다. (호출부 호환을 위해 남겨 둔 자리)
+
+    🔴2026-10-08 회귀 200건에서 **가점은 아무리 작아도 순위를 바꾼다**는 것이 드러나 전부 걷어냈다.
+      · 세대수·준공년도: 출처가 KB 자신이다. api/main.py 의 brief 는 K-apt 에서 세대수를 못 구하면
+        _kb_households() 로 **KB 값을 채우고**, items.households 는 그 brief 복사본이다.
+        되먹이면 오매칭이 스스로를 강화한다. 실제로 A03|2025|50168|1 이 지번도 없는데 힌트만으로
+        1단지(947세대)에서 13단지(162세대)로 뒤집혔다.
+      · 전용면적: KB 와 독립이지만 0.02 만 줘도 틀렸다. C01|2022|9318(인천 경인로 306, 도화동 올레오)이
+        1.00 동점에서 면적 0.02 로 갈려 올레오(104세대/2018) → 도화올레오빌(17세대/2013)로 나빠졌다.
+      남은 근거는 **지번(ARNO) 하나뿐**이다. 확실한 것 하나가 그럴듯한 여럿보다 낫다.
+    """
+    return 0.0
+
+
+def _score(cand: dict, our_addr: str, name_kw: str,
+           hints: dict | None = None) -> tuple[float, bool]:
     bub = cand.get("BUBADDR", "")          # 지역 검사는 KB 주소만(단지 이름 글자와 섞지 않음)
     sgg_ok, emd_ok = _region_match(our_addr, bub)
     nk, nm, tag = _canon(name_kw), _canon(cand.get("HSCM_NM", "")), _canon(cand.get("HSCM_TAG", ""))
@@ -1108,10 +1138,19 @@ def _score(cand: dict, our_addr: str, name_kw: str) -> tuple[float, bool]:
     if not region_ok:
         return name_score * 0.2, False
     base = 0.5 if emd_ok else 0.4    # 동까지 일치=0.5 / 시군구+고유단지명(동경계)=0.4
-    return round(base + name_score, 3), True
+    #  🔴지번 일치 = 같은 땅이므로 이름 유사도보다 강한 근거다. 1.0 동점 무더기를 이것으로 깬다.
+    #   (군산 나운동 '금호' 검색 후보 6개가 전부 1.0 이었고, 그중 ARNO=489 는 금호타운(1차) 하나뿐이었다)
+    #   불일치는 감점하지 않는다 — 한 단지가 여러 지번에 걸칠 수 있다.
+    jb = 0.0
+    _jo, _jk = _jibun_of(our_addr), str(cand.get("ARNO") or "").strip()
+    if _jo and _jk and _jo == _jk:
+        jb = 1.0
+    return round(base + name_score + jb + _hint_bonus(cand, hints), 3), True
 
 
-def match_address(address: str, n: int = 15) -> dict:
+def match_address(address: str, n: int = 15, hints: dict | None = None) -> dict:
+    """hints: {"area_excl": float} — 동점을 깨는 용도의 아주 작은 가점(0.02).
+    🔴세대수·준공년도는 받지 않는다 — 그 값의 출처가 KB 자신이라 되먹임이 된다(_hint_bonus 주석 참조)."""
     name = extract_complex_name(address)
     res = {"our_address": address, "extracted_name": name, "search_kw": None, "complex_no": None,
            "kb_name": None, "kb_bubaddr": None, "confidence": 0.0, "n_candidates": 0, "region_ok": False}
@@ -1129,16 +1168,22 @@ def match_address(address: str, n: int = 15) -> dict:
         cands = kb_search(kw, n)
         total += len(cands)
         for c in cands:
-            s, region_ok = _score(c, address, name)
+            s, region_ok = _score(c, address, name, hints)
             if s > best_score:
                 best, best_score, best_kw, best_region = c, s, kw, region_ok
-        if best_region and best_score >= ACCEPT_THRESHOLD:
+        #  지번까지 맞은 후보(≥1.5)를 찾았으면 더 검색하지 않는다. 그보다 나은 근거는 없다.
+        if best_region and best_score >= (_JIBUN_SURE if _jibun_of(address) else ACCEPT_THRESHOLD):
             break
     res.update(n_candidates=total, search_kw=best_kw, region_ok=best_region)
     if best and best_score >= ACCEPT_THRESHOLD and best_region:
+        _jo = _jibun_of(address)
+        _jk = str(best.get("ARNO") or "").strip()
         res.update(complex_no=best.get("COMPLEX_NO"), obj_idnfr=best.get("OBJ_IDNFR"),
                    kb_name=best.get("HSCM_NM"), kb_bubaddr=best.get("BUBADDR"),
-                   kb_households=best.get("THS_NUM"), confidence=round(best_score, 3), best_raw=best)
+                   kb_households=best.get("THS_NUM"), confidence=round(best_score, 3),
+                   kb_arno=_jk, our_jibun=_jo,
+                   #  🔴지번까지 확인된 매칭인가 — 호가를 시세에 섞을지 판단하는 근거(api/main.py)
+                   jibun_ok=bool(_jo and _jk and _jo == _jk), best_raw=best)
         log.debug("매칭성공 '%s'→'%s' conf=%.2f (검색어='%s')", name, best.get("HSCM_NM"),
                   best_score, best_kw)
     else:

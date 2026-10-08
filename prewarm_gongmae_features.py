@@ -21,11 +21,22 @@ FEAT_CK = {"apt_info": "gm_apt:", "competing_listings": "gm_competing:", "expect
            "villa_expected_bid": "gm_vexpbid:"}
 
 
+#  건물정보(준공·세대·승강기·층수)가 있는 건물 용도 — 토지·산업용지는 건축물대장이 없어 제외
+_BLDG_RE = r"아파트|오피스텔|다세대|연립|빌라|도시형|단독|다가구|상가|주택|근린|점포|사무|숙박|공장|창고|건물"
+
+
 def feats(u):
+    # 🔴2026-10-05 주인님 지시("세대수·승강기·준공연도 다 나오게"):
+    #   ① 아파트류에 building_brief 를 넣는다 — 종전엔 K-apt(apt_info.complex_detail)만 예열해서
+    #      K-apt 에 없는 단지(오피스텔·소규모)는 세대수·승강기가 영구 공란이었다.
+    #   ② 단독·다가구·상가주택·근린 등도 building_brief 를 예열한다 — 서버는 이미 산출한다
+    #      (소량검증 28건 중 27건=96.4%, 건당 2~3초). 종전엔 예열 대상 자체가 6용도뿐이었다.
     if re.search(r"아파트|오피스텔", u):
-        return ["apt_info", "competing_listings", "expected_bid"]
+        return ["apt_info", "competing_listings", "expected_bid", "building_brief"]
     if re.search(r"다세대|연립|빌라|도시형", u):
         return ["building_brief", "villa_est", "nearby_trades", "villa_expected_bid"]
+    if re.search(_BLDG_RE, u):
+        return ["building_brief"]
     return []
 
 
@@ -35,8 +46,10 @@ _W = int(_nums[0]) if _nums else 4
 
 c = psycopg.connect(os.environ["SUPABASE_DB_URL"], connect_timeout=25, autocommit=True, prepare_threshold=None)
 cur = c.cursor()
+#  🔴2026-10-05: 대상 용도를 건물 전체로 넓힌다(종전 6용도 → 건축물대장이 있는 건물 용도 전부).
+#    토지·임야·전답 등은 _BLDG_RE 에 걸리지 않아 feats()가 [] 를 돌려주므로 호출되지 않는다.
 cur.execute("""SELECT manage_no, data->>'pbct_cdtn_no', usage FROM gongmae_items
-  WHERE usage ~ '아파트|오피스텔|다세대|연립|빌라|도시형' ORDER BY id DESC""")
+  WHERE usage ~ %s ORDER BY id DESC""", (_BLDG_RE,))
 rows = cur.fetchall()
 
 # ★증분: 이미 캐시된 feature 키를 한 번에 로드 → 미캐시만 호출
