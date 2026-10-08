@@ -88,15 +88,59 @@ def parse_bldg_doc(text: str) -> dict:
     return out
 
 
+#  🔴2026-10-08: 감정평가서의 「사용승인일」은 **대상 물건 개요**에만 있는 게 아니다.
+#   인근 거래사례·평가사례 표에도 같은 열 제목이 있고, PDF 가 표를 세로로 흘리면서
+#   **거래시점/기준시점 날짜가 '사용승인일' 글자 바로 뒤**에 온다.
+#   첫 매치를 쓰면 그 최근 날짜를 준공으로 읽는다(실측: 1995년 아파트 → 2026).
+#   그래서 사례 표가 시작되기 전 구간에서만 찾는다.
+#  '사용승인' 바로 앞 문맥에 이런 말이 있으면 **사례 표**다(그 물건의 준공일이 아니다).
+#   ⚠️'기준시점'만으로 문서를 앞뒤로 자르면 안 된다 — 감정평가서 맨 앞 요약에도 나와서
+#     물건 개요까지 잘려 나간다(1차 수정에서 실제로 그렇게 깨졌다).
+#  ⚠️'출처'·'기호'는 **물건 개요에도** 쓰인다(실측: "5. 대상 물건의 개요 (출처 : 집합건축물대장 등)",
+#    "기호 전유면적(㎡) 공용면적(㎡)") → 필터에 넣으면 진짜 개요까지 건너뛴다. 뺀다.
+_APPR_CASE_RE = re.compile(r"거래사례|평가사례|비교사례|평가전례|거래시점|기준시점|"
+                           r"거래단가|평가단가|거래금액|평가금액|거래가액")
+#  'YYYY년 M월 D일' 한글 표기도 받는다(실측: "사용승인일자 1997년 10월 1일").
+_DATE_KO = r"(\d{4})\s*년\s*\d{1,2}\s*월"
+
+
+def _appr_year(text: str):
+    """감정평가서에서 **대상 물건의** 사용승인 연도만 뽑는다.
+
+    '사용승인' 이 나오는 자리를 모두 훑되, **앞 문맥이 사례 표면 건너뛴다.**
+    마지막 안전장치로, 문서에 적힌 가장 늦은 해(=감정 시점)와 같은 해는 버린다
+    — 경매 물건의 준공일이 감정 시점과 같은 해일 수는 거의 없고, 그게 이 오독의 모양이다.
+    """
+    if not text:
+        return None
+    years_all = [int(x) for x in re.findall(r"(?:19|20)\d{2}", text)]
+    newest = max(years_all) if years_all else None
+    fallback = None
+    for m in re.finditer(r"사용승인일?자?", text):
+        #  '사용승인일'은 표의 **열 제목**이라 값이 몇 줄 뒤에 온다(다른 열 제목이 끼어 ≈25자).
+        #   그래서 바로 뒤가 아니라 90자 안에서 첫 날짜를 찾는다.
+        tail = text[m.end():m.end() + 90]
+        mm = re.search(_DATE, tail) or re.search(_DATE_KO, tail)
+        if not mm:
+            continue
+        y = int(mm.group(1))
+        ctx = text[max(0, m.start() - 120):m.start()]
+        if _APPR_CASE_RE.search(ctx):
+            continue                      # 거래·평가 사례 표의 시점 → 버린다
+        if newest and y >= newest:
+            fallback = fallback or str(y)  # 감정 시점과 같은 해 → 일단 보류
+            continue
+        return str(y)
+    return fallback
+
+
 def parse_appraisal_bldg(text: str) -> dict:
     """감정평가서 텍스트 → {build_year, units, unit_label, elevator}.
     물건개요에 '사용승인 YYYY.MM.DD', 'N개호/N세대', 설비란에 '승강기설비'가 있음."""
     out: dict = {"build_year": None, "units": None, "unit_label": None, "elevator": None}
     if not text:
         return out
-    m = re.search(r"사용승인일?자?\s*[:：]?\s*" + _DATE, text)
-    if m:
-        out["build_year"] = m.group(1)
+    out["build_year"] = _appr_year(text)
     t = re.sub(r"\s+", "", text)
     # 세대수: 'N개호'(물건개요 총호수) 우선, 없으면 '총N세대'.
     #   ※ 바로 '1세대'/'구분건물N세대'는 물건 자체(전유)이므로 제외.
