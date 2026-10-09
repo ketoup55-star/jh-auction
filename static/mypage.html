@@ -400,6 +400,14 @@ function card(L){
   const mapQ=encodeURIComponent(L.address||"");
   const imp=+L.importance||0, memo=L.memo||"", folder=L.folder||"기타";
   const bid=L.bid_count?`입찰인원 ${L.bid_count}명<br>`:"";
+  //  🔴2026-10-09 주인님 지적: 재매각 물건에 **무효가 된 옛 낙찰가**가 "낙찰"로 떴다.
+  //   목록(auctions.html:1467)과 **같은 규칙**으로 맞춘다 — 데이터(sale_price)는 그대로 두고 표시만 가른다.
+  //   (재매각 물건의 sale_price 는 차익 기준으로 쓰는 의도된 값이라 지우면 안 된다)
+  const _res=L.result||"";
+  const isSold=/매각|잔금납부|배당종결/.test(_res) && !/재매각/.test(_res);
+  const hasWin=isSold && L.sale_price>0;          // 진짜 낙찰
+  const isPrevWin=!isSold && L.sale_price>0;      // 재매각/재진행 — 무효가 된 이전 낙찰
+  const winLabel=hasWin?"낙찰":"이전 낙찰";
   return `<div class="item" style="cursor:pointer" onclick="if(!event.target.closest('a,button,select,textarea,input'))window.open('/static/auction.html?item_key=${ik}','_blank')">
     <div class="ih">
       <span class="tt">[${L.court_name||"-"}] ${L.case_label||L.case_no||""}</span>
@@ -413,14 +421,14 @@ function card(L){
     <div class="ib">
       <div class="thumb">
         ${L.thumb_url?`<img src="${L.thumb_url}" onerror="this.style.visibility='hidden'">`:`<div style="width:150px;height:118px;background:var(--label);border-radius:6px;"></div>`}
-        <div class="ov">${bid}${L.status||""}${sellD.label?` <b style="color:${sellD.color};font-size:1.08em">${sellD.label}</b>`:""}<br>${L.sale_price?`낙찰 ${won(L.sale_price)}${L.appraisal_price?` (${Math.round(100*L.sale_price/L.appraisal_price)}%)`:""}`:`${won(L.min_price_raw,L.min_price)}${r!=null?` (${r}%)`:""}`}</div>
+        <div class="ov">${bid}${L.status||_res||""}${sellD.label?` <b style="color:${sellD.color};font-size:1.08em">${sellD.label}</b>`:""}<br>${(hasWin||isPrevWin)?`${winLabel} ${won(L.sale_price)}${L.appraisal_price?` (${Math.round(100*L.sale_price/L.appraisal_price)}%)`:""}`:`${won(L.min_price_raw,L.min_price)}${r!=null?` (${r}%)`:""}`}</div>
       </div>
       <table class="igrid">
         <tr><th>소재지</th><td colspan="5">${L.address||"-"}</td></tr>
-        <tr><th>물건용도</th><td>${L.usage||"-"}</td><th>최근결과</th><td>${L.status||"-"}</td><th>감정가</th><td>${won(L.appraisal_raw,L.appraisal_price)}</td></tr>
+        <tr><th>물건용도</th><td>${L.usage||"-"}</td><th>최근결과</th><td>${L.status||_res||"-"}</td><th>감정가</th><td>${won(L.appraisal_raw,L.appraisal_price)}</td></tr>
         <tr><th>매각기일</th><td>${sellD.date}</td><th>유찰횟수</th><td>${(L.fail_count||0)}회</td><th>최저가</th><td class="low">${r!=null?`(${r}%) `:""}${won(L.min_price_raw,L.min_price)}</td></tr>
-        ${L.sale_price?`<tr><th>낙찰정보</th><td colspan="5" class="soldrow">${[
-          `낙찰 <b>${won(L.sale_price)}</b>${L.sale_rate?` (${L.sale_rate})`:""}`,
+        ${(hasWin||isPrevWin)?`<tr><th>${winLabel}정보</th><td colspan="5" class="soldrow">${[
+          `${winLabel} <b>${won(L.sale_price)}</b>${L.sale_rate?` (${L.sale_rate})`:""}${isPrevWin?` <span style="color:#6b7280;font-weight:600">· 대금 미납으로 재매각</span>`:""}`,
           L.bid_count!=null?`입찰 ${L.bid_count}명`:"",
           L.winner_name?`낙찰자 <b>${L.winner_name}</b>`:"",
           L.sale_2nd_price?`2등 ${won(L.sale_2nd_price)}`:""
