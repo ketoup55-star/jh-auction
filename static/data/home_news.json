@@ -1,87 +1,33 @@
 {
  "items": [
   {
-   "keyword": "아파트 경매",
-   "title": "[싫거주]①빌라는 주임사로, 아파트는 경매 '구멍' - 비즈워치",
-   "link": "https://news.bizwatch.co.kr/article/real_estate/2026/10/01/0001",
-   "image": "https://cdn.bizwatch.co.kr/news/photo/2026/09/18/00e43db4eb71b7a4fb43367fcb3b8ee1.jpg",
-   "source": "비즈워치",
-   "published": "2026-10-11T17:17:02+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "국감 2주 차, 부동산·중수청·한미동맹 놓고 여야 격돌 예고 - 메트로신문",
-   "link": "https://www.metroseoul.co.kr/article/20261011500208",
-   "image": "https://cdn.emetro.co.kr/data2/content/image/2026/10/11/.cache/512/20261011500209.jpg",
-   "source": "메트로신문",
-   "published": "2026-10-11T14:39:23+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "[브릿지 칼럼] 우왕좌왕하는 부동산 정책들 - 브릿지경제",
-   "link": "https://www.viva100.com/article/20261011500053",
-   "image": "https://stqnq5ux4599.edge.naverncp.com/data2//content/image/2026/10/10/.cache/512/20261010500086.png?v=20261011174020",
-   "source": "브릿지경제",
-   "published": "2026-10-11T13:24:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "부동산 정책",
-   "title": "李대통령, 부동산 정책 비판에 적극 해명…“조만간 주택 공급 정상화” - 세계일보",
-   "link": "https://www.segye.com/newsView/20261011508072",
-   "image": "https://www.segye.com/content/image/2026/10/11/20261011508732.jpg",
-   "source": "세계일보",
-   "published": "2026-10-11T13:00:33+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "이 대통령, '분양 주택 대출 우려' 글에 \"당초 약정대로 가능\" - MBC 뉴스",
-   "link": "https://imnews.imbc.com/news/2026/politics/article/6857058_36911.html",
-   "image": "https://image.imnews.imbc.com/news/2026/politics/article/__icsFiles/afieldfile/2026/10/11/lyj_261011_12_1.jpg",
-   "source": "MBC 뉴스",
-   "published": "2026-10-11T12:21:42+09:00",
+   "keyword": "집값",
+   "title": "강남서 외곽으로 번진 온기…서울 집값 '전고점 회복' 확산 - 한국경제",
+   "link": "https://www.hankyung.com/article/2026101251506",
+   "image": "https://img.hankyung.com/photo/202610/AD.45996156.1.jpg",
+   "source": "한국경제",
+   "published": "2026-10-12T08:57:42+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "강남 다시 오르고 강북은 뜨겁고…서울 집값 평탄화인가 키맞추기인가 [주말 Q&A] - 더스쿠프",
-   "link": "https://www.thescoop.co.kr/news/articleView.html?idxno=311880",
-   "image": "https://cdn.thescoop.co.kr/news/thumbnail/202610/311880_229707_834_v150.jpg",
-   "source": "더스쿠프",
-   "published": "2026-10-11T11:20:55+09:00",
+   "title": "'1.5%→3%' 널뛰기 대출규제에 은행 149차례 빗장…집값 상승 억제효과도 ‘희박’ [2026 국감-금융위②] - 한국금융신문",
+   "link": "https://www.fntimes.com/html/view.php?ud=2026101121044130055e6e69892f_18",
+   "image": "https://cfnimage.commutil.kr/phpwas/restmb_allidxmake.php?pp=002&idx=999&simg=202610112108080028105e6e69892f1211621966.jpg&nmt=18",
+   "source": "한국금융신문",
+   "published": "2026-10-12T08:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "10·15대책 1년…\"서울 집값 오르고, 공급은 제자리\" - 연합뉴스TV",
-   "link": "https://www.yonhapnewstv.co.kr/news/AKR20261011095856JBH",
-   "image": "https://media.yonhapnewstv.co.kr/article/AKR/20261011/AKR20261011095856JBH_01_i.jpg",
-   "source": "연합뉴스TV",
-   "published": "2026-10-11T09:58:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "대출규제",
-   "title": "대출·금리·세제 여파에...서울 아파트 거래 '찬바람' - YTN",
-   "link": "https://www.ytn.co.kr/_ln/0102_202610110628187284",
-   "image": "https://image.ytn.co.kr/general/jpg/2026/1011/202610110628187284_t.jpg",
-   "source": "YTN",
-   "published": "2026-10-11T06:28:00+09:00",
-   "has_time": true
-  },
-  {
-   "keyword": "아파트 경매",
-   "title": "실거래보다 1억 낮은 진주시 아파트…소액 투자자 추천 경매 5선 - 땅집고",
-   "link": "https://realty.chosun.com/m/article.amp.html?contid=2026100900417",
-   "image": "https://image.chosun.com/sitedata/thumbnail/202610/09/2026100900414_0_thumb.jpg",
-   "source": "땅집고",
-   "published": "2026-10-11T06:00:00+09:00",
+   "title": "서울 아파트 계약 해제율 2배 넘게 상승…‘집값 띄우기’ 검증 요구 - 경북매일",
+   "link": "https://www.kbmaeil.com/article/20261012500024",
+   "image": "https://umq1gm7a8386.edge.naverncp.com/data2/content/image/2026/10/12/.cache/512/20261012500022.jpg",
+   "source": "경북매일",
+   "published": "2026-10-12T06:52:00+09:00",
    "has_time": true
   }
  ],
- "count": 9,
- "date": "2026-10-11"
+ "count": 3,
+ "date": "2026-10-12"
 }
