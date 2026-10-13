@@ -1,33 +1,42 @@
 {
  "items": [
   {
-   "keyword": "집값",
-   "title": "강남서 외곽으로 번진 온기…서울 집값 '전고점 회복' 확산 - 한국경제",
-   "link": "https://www.hankyung.com/article/2026101251506",
-   "image": "https://img.hankyung.com/photo/202610/AD.45996156.1.jpg",
-   "source": "한국경제",
-   "published": "2026-10-12T08:57:42+09:00",
+   "keyword": "부동산 세금",
+   "title": "강민국 의원, 유명무실한 국세청 ‘부동산 탈세 신고센터’ 운영 실효성 의문 제기 - 브릿지경제",
+   "link": "https://www.viva100.com/article/20261013500082",
+   "image": "https://stqnq5ux4599.edge.naverncp.com/data2//content/image/2026/10/13/.cache/512/20261013500064.jpg?v=20261013093014",
+   "source": "브릿지경제",
+   "published": "2026-10-13T08:42:00+09:00",
+   "has_time": true
+  },
+  {
+   "keyword": "부동산 세금",
+   "title": "부동산 탈세 제보 1568건 쏟아졌는데…세금 얼마나 걷었나보니 [Pick코노미] - 서울경제",
+   "link": "https://www.sedaily.com/article/20100699",
+   "image": "https://wimg.sedaily.com/news/cms/2026/10/12/news-p.v1.20260809.81bc698b93ce41a99f4c62d842ae61c7_Z1.jpg",
+   "source": "서울경제",
+   "published": "2026-10-13T06:00:09+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "'1.5%→3%' 널뛰기 대출규제에 은행 149차례 빗장…집값 상승 억제효과도 ‘희박’ [2026 국감-금융위②] - 한국금융신문",
-   "link": "https://www.fntimes.com/html/view.php?ud=2026101121044130055e6e69892f_18",
-   "image": "https://cfnimage.commutil.kr/phpwas/restmb_allidxmake.php?pp=002&idx=999&simg=202610112108080028105e6e69892f1211621966.jpg&nmt=18",
-   "source": "한국금융신문",
-   "published": "2026-10-12T08:00:00+09:00",
+   "title": "LH 이성훈 사장 “집값 급락 가능성” 언급 논란 - 세계일보",
+   "link": "https://www.segye.com/newsView/20261012523505",
+   "image": "https://www.segye.com/content/image/2026/10/12/20261012525484.jpg",
+   "source": "세계일보",
+   "published": "2026-10-13T06:00:00+09:00",
    "has_time": true
   },
   {
    "keyword": "집값",
-   "title": "서울 아파트 계약 해제율 2배 넘게 상승…‘집값 띄우기’ 검증 요구 - 경북매일",
-   "link": "https://www.kbmaeil.com/article/20261012500024",
-   "image": "https://umq1gm7a8386.edge.naverncp.com/data2/content/image/2026/10/12/.cache/512/20261012500022.jpg",
-   "source": "경북매일",
-   "published": "2026-10-12T06:52:00+09:00",
+   "title": "10·15 대책 1년, 서울 집값 10.4% 상승…전셋값도 10% 가까이 올라 - 뉴스1",
+   "link": "https://www.news1.kr/realestate/general/6317445",
+   "image": "https://i3n.news1.kr/system/photos/2024/12/3/7017091/high.jpg",
+   "source": "뉴스1",
+   "published": "2026-10-13T05:10:00+09:00",
    "has_time": true
   }
  ],
- "count": 3,
- "date": "2026-10-12"
+ "count": 4,
+ "date": "2026-10-13"
 }
